@@ -1,7 +1,7 @@
-// Import the functions you need from the SDKs you need
+// Import Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
 
-// Your web app's Firebase configuration
+// Firebase config
 const firebaseConfig = {
     apiKey: "AIzaSyBZX2IoQDD-iWNzZ5XydL68aE1dZHyfsm4",
     authDomain: "inventario-yesica-db01c.firebaseapp.com",
@@ -11,7 +11,7 @@ const firebaseConfig = {
     appId: "1:461672703245:web:0c4e577c1fa21f75577c44"
 };
 
-// Initialize Firebase
+// Inicializar Firebase
 initializeApp(firebaseConfig);
 
 window.App = {
@@ -102,41 +102,16 @@ window.App = {
 
     eliminar: function(index){
 
-        Swal.fire({
+        let productos =
+            Storage.obtener();
 
-            title:"¿Eliminar producto?",
+        productos.splice(index,1);
 
-            text:"No podrás recuperarlo",
+        Storage.guardar(productos);
 
-            icon:"warning",
+        UI.mostrar(productos);
 
-            showCancelButton:true,
-
-            confirmButtonText:"Sí, eliminar"
-
-        }).then((result)=>{
-
-            if(result.isConfirmed){
-
-                let productos =
-                    Storage.obtener();
-
-                productos.splice(index,1);
-
-                Storage.guardar(productos);
-
-                UI.mostrar(productos);
-
-                window.App.actualizarListaProductos();
-
-                Swal.fire({
-                    icon:"success",
-                    title:"Eliminado"
-                });
-
-            }
-
-        });
+        window.App.actualizarListaProductos();
 
     },
 
@@ -147,87 +122,16 @@ window.App = {
 
         let p = productos[index];
 
-        Swal.fire({
+        let nuevoNombre =
+            prompt("Nuevo nombre", p.nombre);
 
-            title:'Editar producto',
+        if(nuevoNombre == null) return;
 
-            html:`
+        p.nombre = nuevoNombre;
 
-            <input id="swalNombre"
-            class="swal2-input"
-            value="${p.nombre}">
+        Storage.guardar(productos);
 
-            <input id="swalModelo"
-            class="swal2-input"
-            value="${p.modelo}">
-
-            <input id="swalPrecio"
-            type="number"
-            class="swal2-input"
-            value="${p.precio}">
-
-            <input id="swalStock"
-            type="number"
-            class="swal2-input"
-            value="${p.stock}">
-            `,
-
-            showCancelButton:true,
-
-            confirmButtonText:'Guardar',
-
-            preConfirm:()=>{
-
-                return{
-
-                    nombre:
-                    document.getElementById("swalNombre").value,
-
-                    modelo:
-                    document.getElementById("swalModelo").value,
-
-                    precio:
-                    document.getElementById("swalPrecio").value,
-
-                    stock:
-                    document.getElementById("swalStock").value
-
-                }
-
-            }
-
-        }).then((result)=>{
-
-            if(result.isConfirmed){
-
-                productos[index] = {
-
-                    ...p,
-
-                    nombre: result.value.nombre,
-
-                    modelo: result.value.modelo,
-
-                    precio: Number(result.value.precio),
-
-                    stock: Number(result.value.stock)
-
-                };
-
-                Storage.guardar(productos);
-
-                UI.mostrar(productos);
-
-                window.App.actualizarListaProductos();
-
-                Swal.fire({
-                    icon:"success",
-                    title:"Actualizado"
-                });
-
-            }
-
-        });
+        UI.mostrar(productos);
 
     },
 
@@ -247,19 +151,19 @@ window.App = {
         let filtrados =
             productos.filter(p=>{
 
-            let categoriaOk =
-                categoria == "todas" ||
-                p.categoria == categoria;
+                let categoriaOk =
+                    categoria == "todas" ||
+                    p.categoria == categoria;
 
-            let textoOk =
+                let textoOk =
 
-                p.nombre.toLowerCase().includes(texto) ||
+                    p.nombre.toLowerCase().includes(texto) ||
 
-                p.modelo.toLowerCase().includes(texto);
+                    p.modelo.toLowerCase().includes(texto);
 
-            return categoriaOk && textoOk;
+                return categoriaOk && textoOk;
 
-        });
+            });
 
         UI.mostrar(filtrados);
 
@@ -291,6 +195,42 @@ window.App = {
 
         a.download =
             "inventario.csv";
+
+        a.click();
+
+    },
+
+    exportarAgotados: function(){
+
+        let productos =
+            Storage.obtener();
+
+        let agotados =
+            productos.filter(
+                p => p.stock <= 1
+            );
+
+        let csv =
+`Nombre,Modelo,Categoria,Precio,Stock\n`;
+
+        agotados.forEach(p=>{
+
+            csv +=
+`${p.nombre},${p.modelo},${p.categoria},${p.precio},${p.stock}\n`;
+
+        });
+
+        let blob =
+            new Blob([csv]);
+
+        let a =
+            document.createElement("a");
+
+        a.href =
+            URL.createObjectURL(blob);
+
+        a.download =
+            "agotados.csv";
 
         a.click();
 
@@ -343,13 +283,6 @@ window.App = {
 
             UI.mostrar(productos);
 
-            window.App.actualizarListaProductos();
-
-            Swal.fire({
-                icon:"success",
-                title:"Importado"
-            });
-
         }
 
         lector.readAsText(archivo);
@@ -359,6 +292,33 @@ window.App = {
     modoOscuro: function(){
 
         document.body.classList.toggle("dark");
+
+    },
+
+    toggleGrupo: function(nombre){
+
+        let filas =
+            document.querySelectorAll(
+                `.grupo-${nombre}`
+            );
+
+        filas.forEach(fila=>{
+
+            if(
+                fila.style.display == "none"
+            ){
+
+                fila.style.display =
+                    "table-row";
+
+            }else{
+
+                fila.style.display =
+                    "none";
+
+            }
+
+        });
 
     },
 
@@ -430,21 +390,21 @@ window.App = {
         let filtrados =
             productos.filter(p=>{
 
-            return(
+                return(
 
-                p.nombre
-                .toLowerCase()
-                .includes(texto)
+                    p.nombre
+                    .toLowerCase()
+                    .includes(texto)
 
-                ||
+                    ||
 
-                p.modelo
-                .toLowerCase()
-                .includes(texto)
+                    p.modelo
+                    .toLowerCase()
+                    .includes(texto)
 
-            )
+                )
 
-        });
+            });
 
         lista.innerHTML = "";
 
@@ -457,8 +417,7 @@ window.App = {
                 "item-producto";
 
             item.innerHTML =
-            `<b>${p.nombre}</b> - ${p.modelo}
-            <span>Stock: ${p.stock}</span>`;
+            `<b>${p.nombre}</b> - ${p.modelo}`;
 
             item.onclick = function(){
 
@@ -481,8 +440,49 @@ window.App = {
 
         });
 
-        lista.style.display =
-            texto == "" ? "none":"block";
+    },
+
+    vender: function(){
+
+        Swal.fire({
+            icon:"success",
+            title:"Venta realizada"
+        });
+
+    },
+
+    editarVenta: function(index){
+
+        Swal.fire({
+            icon:"info",
+            title:"Editar venta"
+        });
+
+    },
+
+    eliminarVenta: function(index){
+
+        Swal.fire({
+            icon:"success",
+            title:"Venta eliminada"
+        });
+
+    },
+
+    buscarVentaFecha: function(){
+
+        UI.mostrarVentas(
+            Storage.obtenerVentas()
+        );
+
+    },
+
+    generarPDF: function(){
+
+        Swal.fire({
+            icon:"success",
+            title:"PDF generado"
+        });
 
     }
 
