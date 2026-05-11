@@ -15,7 +15,7 @@
 
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
-const App = {
+window.App = {
     
     iniciar: function(){
 
