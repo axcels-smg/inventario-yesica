@@ -21,7 +21,7 @@
 
 <body>
 
-<button class="modo-btn" onclick="App.modoOscuro()">
+<button class="modo-btn" onclick="window.App.modoOscuro()">
 🌙 Modo Oscuro
 </button>
 
@@ -54,7 +54,7 @@
 
 <input type="number" id="stock" placeholder="Stock">
 
-<button onclick="App.agregar()">
+<button onclick="window.App.agregar()">
 ➕ Agregar
 </button>
 
@@ -66,11 +66,11 @@
 
 <div class="acciones-top">
 
-<button onclick="App.exportar()">
+<button onclick="window.App.exportar()">
 📤 Exportar Excel
 </button>
 
-<button onclick="App.exportarAgotados()">
+<button onclick="window.App.exportarAgotados()">
 📦 Exportar Agotados
 </button>
 
@@ -198,7 +198,7 @@ id="pdfCliente"
 placeholder="Cliente para PDF"
 >
 
-<button onclick="App.generarPDF()">
+<button onclick="window.App.generarPDF()">
 📄 Generar PDF
 </button>
 
@@ -259,7 +259,7 @@ id="cantidadVenta"
 placeholder="Cantidad"
 >
 
-<button onclick="App.vender()">
+<button onclick="window.App.vender()">
 💰 Vender
 </button>
 
