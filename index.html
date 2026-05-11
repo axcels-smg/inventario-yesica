@@ -81,7 +81,7 @@
 <input
 type="file"
 accept=".csv"
-onchange="App.importar(event)"
+onchange="window.App.importar(event)"
 hidden>
 
 </label>
@@ -96,7 +96,7 @@ hidden>
 
 <select
 id="filtroCategoria"
-onchange="App.filtrar()"
+onchange="window.App.filtrar()"
 >
 
 <option value="todas">Todas</option>
@@ -121,7 +121,7 @@ Placa de carga
 type="text"
 id="buscar"
 placeholder="Buscar..."
-onkeyup="App.filtrar()"
+onkeyup="window.App.filtrar()"
 >
 
 </div>
@@ -169,14 +169,14 @@ $<span id="total">0</span>
 <input
 type="date"
 id="buscarFecha"
-onchange="App.buscarVentaFecha()"
+onchange="window.App.buscarVentaFecha()"
 >
 
 <input
 type="text"
 id="buscarVentaNombre"
 placeholder="Buscar cliente"
-onkeyup="App.buscarVentaFecha()"
+onkeyup="window.App.buscarVentaFecha()"
 >
 
 </div>
@@ -216,7 +216,10 @@ id="cliente"
 placeholder="Cliente"
 >
 
-<select id="buscarVentaCategoria">
+<select
+id="buscarVentaCategoria"
+onchange="window.App.buscarVentaFecha()"
+>
 
 <option value="">Categoría</option>
 
@@ -242,7 +245,7 @@ Placa de carga
 type="text"
 id="productoVenta"
 placeholder="Buscar producto o modelo..."
-onkeyup="App.buscarProductoVenta()"
+onkeyup="window.App.buscarProductoVenta()"
 autocomplete="off"
 >
 
