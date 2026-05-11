@@ -1,135 +1,128 @@
-// =========================
-// ui.js COMPLETO
-// =========================
-
 const UI = {
 
-mostrar: function(productos){
+    mostrar: function(productos){
 
-    let tabla =
-        document.getElementById("tabla");
+        let tabla =
+            document.getElementById("tabla");
 
-    tabla.innerHTML = "";
+        tabla.innerHTML = "";
 
-    let total = 0;
+        let total = 0;
 
-    let grupos = {};
+        let grupos = {};
 
-    // AGRUPAR POR NOMBRE + CATEGORIA
-    productos.forEach((p,index)=>{
+        productos.forEach((p,index)=>{
 
-        total += p.precio * p.stock;
+            total += p.precio * p.stock;
 
-        let clave =
-            `${p.nombre}-${p.categoria}`;
+            let clave =
+                `${p.nombre}-${p.categoria}`;
 
-        if(!grupos[clave]){
+            if(!grupos[clave]){
 
-            grupos[clave] = [];
+                grupos[clave] = [];
 
-        }
+            }
 
-        grupos[clave].push({
-            ...p,
-            index:index
+            grupos[clave].push({
+                ...p,
+                index:index
+            });
+
         });
 
-    });
+        Object.keys(grupos).forEach(clave=>{
 
-    // CREAR TABLA
-    Object.keys(grupos).forEach(clave=>{
+            let lista = grupos[clave];
 
-        let lista = grupos[clave];
+            let nombre =
+                lista[0].nombre;
 
-        let nombre =
-            lista[0].nombre;
+            let categoria =
+                lista[0].categoria;
 
-        let categoria =
-            lista[0].categoria;
-
-        // CLASE SEGURA
-        let clase =
-            clave.replace(/\s+/g,'-');
-
-        tabla.innerHTML += `
-
-        <tr class="fila-grupo"
-        onclick="App.toggleGrupo('${clase}')">
-
-            <td colspan="6"
-            style="
-            background:#1976f2;
-            color:white;
-            font-weight:bold;
-            cursor:pointer;
-            ">
-
-            ▶ ${nombre} ${categoria}
-            (${lista.length} modelos)
-
-            </td>
-
-        </tr>
-
-        `;
-
-        lista.forEach(p=>{
+            let clase =
+                clave.replace(/\s+/g,'-');
 
             tabla.innerHTML += `
 
-            <tr
-            class="grupo-${clase}"
-            style="display:none;"
-            >
+            <tr class="fila-grupo"
+            onclick="window.App.toggleGrupo('${clase}')">
 
-            <td>${p.nombre}</td>
+                <td colspan="6"
+                style="
+                background:#1976f2;
+                color:white;
+                font-weight:bold;
+                cursor:pointer;
+                ">
 
-            <td>${p.modelo}</td>
+                ▶ ${nombre} ${categoria}
+                (${lista.length} modelos)
 
-            <td>${p.categoria}</td>
-
-            <td>$${p.precio}</td>
-
-            <td class="${
-                p.stock <= 1
-                ? 'stock-bajo'
-                : ''
-            }">
-
-            ${
-                p.stock <= 1
-                ? '⚠️ '
-                : ''
-            }
-
-            ${p.stock}
-
-            </td>
-
-            <td>
-
-            <button onclick="App.editar(${p.index})">
-            ✏️
-            </button>
-
-            <button onclick="App.eliminar(${p.index})">
-            ❌
-            </button>
-
-            </td>
+                </td>
 
             </tr>
 
             `;
 
+            lista.forEach(p=>{
+
+                tabla.innerHTML += `
+
+                <tr
+                class="grupo-${clase}"
+                style="display:none;"
+                >
+
+                <td>${p.nombre}</td>
+
+                <td>${p.modelo}</td>
+
+                <td>${p.categoria}</td>
+
+                <td>$${p.precio}</td>
+
+                <td class="${
+                    p.stock <= 1
+                    ? 'stock-bajo'
+                    : ''
+                }">
+
+                ${
+                    p.stock <= 1
+                    ? '⚠️ '
+                    : ''
+                }
+
+                ${p.stock}
+
+                </td>
+
+                <td>
+
+                <button onclick="window.App.editar(${p.index})">
+                ✏️
+                </button>
+
+                <button onclick="window.App.eliminar(${p.index})">
+                ❌
+                </button>
+
+                </td>
+
+                </tr>
+
+                `;
+
+            });
+
         });
 
-    });
+        document.getElementById("total")
+        .innerText = total;
 
-    document.getElementById("total")
-    .innerText = total;
-
-},
+    },
 
     mostrarVentas: function(ventas){
 
@@ -160,11 +153,11 @@ mostrar: function(productos){
 
             <td>
 
-            <button onclick="App.editarVenta(${index})">
+            <button onclick="window.App.editarVenta(${index})">
             ✏️
             </button>
 
-            <button onclick="App.eliminarVenta(${index})">
+            <button onclick="window.App.eliminarVenta(${index})">
             ❌
             </button>
 
@@ -178,4 +171,4 @@ mostrar: function(productos){
 
     }
 
-}
+};
