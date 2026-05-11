@@ -489,3 +489,5 @@ window.App = {
 };
 
 window.App.iniciar();
+
+// version nueva celular
