@@ -1,0 +1,272 @@
+/* ========================= */
+/* styles.css COMPLETO */
+/* ========================= */
+
+body{
+
+    font-family: Arial;
+    background: #f4f4f4;
+    padding: 20px;
+
+}
+
+.container{
+
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+
+}
+
+.formulario,
+.buscador,
+.ventas-form{
+
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+
+}
+
+input,
+select,
+button{
+
+    padding: 12px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+
+}
+
+button{
+
+    background: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+
+}
+
+table{
+
+    width: 100%;
+    border-collapse: collapse;
+
+}
+
+th{
+
+    background: #007bff;
+    color: white;
+    padding: 10px;
+
+}
+
+td{
+
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: center;
+
+}
+
+.stock-bajo{
+
+    color: red;
+    font-weight: bold;
+
+}
+
+.btn-importar{
+
+    background: #28a745;
+    color: white;
+    padding: 12px;
+    border-radius: 5px;
+    cursor: pointer;
+
+}
+
+.btn-importar input{
+
+    display: none;
+
+}
+
+.dark{
+
+    background: #111;
+    color: white;
+
+}
+
+.dark .container{
+
+    background: #1c1c1c;
+
+}
+
+.dark input,
+.dark select{
+
+    background: #222;
+    color: white;
+    border: 1px solid #555;
+
+}
+
+.dark td{
+
+    border: 1px solid #444;
+
+}
+
+.busqueda-venta{
+
+    position: relative;
+    width: 300px;
+
+}
+
+.lista-productos{
+
+    position: absolute;
+
+    width: 100%;
+
+    background: white;
+
+    border: 1px solid #ccc;
+
+    max-height: 250px;
+
+    overflow-y: auto;
+
+    display: none;
+
+    z-index: 1000;
+
+}
+
+.item-producto{
+
+    padding: 10px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+
+}
+
+.item-producto:hover{
+
+    background: #f1f1f1;
+
+}
+
+/* =========================
+ACCIONES SUPERIORES
+========================= */
+
+.acciones-top{
+
+    display:flex;
+
+    gap:15px;
+
+    margin-top:20px;
+
+    margin-bottom:20px;
+
+    flex-wrap:wrap;
+
+    align-items:center;
+
+}
+
+/* BOTONES */
+
+.acciones-top button{
+
+    border:none;
+
+    padding:12px 20px;
+
+    border-radius:12px;
+
+    font-weight:bold;
+
+    cursor:pointer;
+
+    transition:0.3s;
+
+    font-size:15px;
+
+    box-shadow:0 4px 10px rgba(0,0,0,0.15);
+
+}
+
+/* EXPORTAR */
+
+.acciones-top button:nth-child(1){
+
+    background:#1976f2;
+
+    color:white;
+
+}
+
+/* AGOTADOS */
+
+.acciones-top button:nth-child(2){
+
+    background:#ff9800;
+
+    color:white;
+
+}
+
+/* HOVER */
+
+.acciones-top button:hover{
+
+    transform:translateY(-3px);
+
+    opacity:0.92;
+
+}
+
+/* IMPORTAR */
+
+.btn-importar{
+
+    background:#2eaf45;
+
+    color:white;
+
+    padding:12px 20px;
+
+    border-radius:12px;
+
+    cursor:pointer;
+
+    font-weight:bold;
+
+    transition:0.3s;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    box-shadow:0 4px 10px rgba(0,0,0,0.15);
+
+}
+
+.btn-importar:hover{
+
+    transform:translateY(-3px);
+
+    opacity:0.92;
+
+}

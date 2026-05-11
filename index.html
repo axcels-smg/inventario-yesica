@@ -1,0 +1,311 @@
+<!-- ========================= -->
+<!-- index.html COMPLETO -->
+<!-- ========================= -->
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Inventario</title>
+
+<link rel="stylesheet" href="css/styles.css">
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+</head>
+
+<body>
+
+<button class="modo-btn" onclick="App.modoOscuro()">
+🌙 Modo Oscuro
+</button>
+
+<h2>📦 Sistema de Inventario</h2>
+
+<div class="container">
+
+<!-- ========================= -->
+<!-- FORMULARIO -->
+<!-- ========================= -->
+
+<div class="formulario">
+
+<input type="text" id="nombre" placeholder="Nombre">
+
+<input type="text" id="modelo" placeholder="Modelo">
+
+<select id="categoria">
+
+<option>Pantallas</option>
+<option>Glass</option>
+<option>Placa de carga</option>
+<option>Parlantes</option>
+<option>Botones</option>
+<option>Bateria</option>
+
+</select>
+
+<input type="number" id="precio" placeholder="Precio">
+
+<input type="number" id="stock" placeholder="Stock">
+
+<button onclick="App.agregar()">
+➕ Agregar
+</button>
+
+</div>
+
+<!-- ========================= -->
+<!-- BOTONES -->
+<!-- ========================= -->
+
+<div class="acciones-top">
+
+<button onclick="App.exportar()">
+📤 Exportar Excel
+</button>
+
+<button onclick="App.exportarAgotados()">
+📦 Exportar Agotados
+</button>
+
+<label class="btn-importar">
+
+📂 Importar Excel
+
+<input
+type="file"
+accept=".csv"
+onchange="App.importar(event)"
+hidden>
+
+</label>
+
+</div>
+
+<!-- ========================= -->
+<!-- BUSCADOR -->
+<!-- ========================= -->
+
+<div class="buscador">
+
+<select
+id="filtroCategoria"
+onchange="App.filtrar()"
+>
+
+<option value="todas">Todas</option>
+
+<option value="Pantallas">Pantallas</option>
+
+<option value="Glass">Glass</option>
+
+<option value="Placa de carga">
+Placa de carga
+</option>
+
+<option value="Parlantes">Parlantes</option>
+
+<option value="Botones">Botones</option>
+
+<option value="Bateria">Bateria</option>
+
+</select>
+
+<input
+type="text"
+id="buscar"
+placeholder="Buscar..."
+onkeyup="App.filtrar()"
+>
+
+</div>
+
+<!-- ========================= -->
+<!-- TABLA INVENTARIO -->
+<!-- ========================= -->
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Nombre</th>
+<th>Modelo</th>
+<th>Categoría</th>
+<th>Precio</th>
+<th>Stock</th>
+<th>Acción</th>
+
+</tr>
+
+</thead>
+
+<tbody id="tabla"></tbody>
+
+</table>
+
+<h3>
+💰 Total inventario:
+$<span id="total">0</span>
+</h3>
+
+<hr>
+
+<!-- ========================= -->
+<!-- VENTAS -->
+<!-- ========================= -->
+
+<h2>🧾 Ventas</h2>
+
+<div class="buscador">
+
+<input
+type="date"
+id="buscarFecha"
+onchange="App.buscarVentaFecha()"
+>
+
+<input
+type="text"
+id="buscarVentaNombre"
+placeholder="Buscar cliente"
+onkeyup="App.buscarVentaFecha()"
+>
+
+</div>
+
+<!-- ========================= -->
+<!-- PDF -->
+<!-- ========================= -->
+
+<div class="buscador">
+
+<input
+type="date"
+id="pdfFecha"
+>
+
+<input
+type="text"
+id="pdfCliente"
+placeholder="Cliente para PDF"
+>
+
+<button onclick="App.generarPDF()">
+📄 Generar PDF
+</button>
+
+</div>
+
+<!-- ========================= -->
+<!-- FORM VENTAS -->
+<!-- ========================= -->
+
+<div class="ventas-form">
+
+<input
+type="text"
+id="cliente"
+placeholder="Cliente"
+>
+
+<select id="buscarVentaCategoria">
+
+<option value="">Categoría</option>
+
+<option value="Pantallas">Pantallas</option>
+
+<option value="Glass">Glass</option>
+
+<option value="Placa de carga">
+Placa de carga
+</option>
+
+<option value="Parlantes">Parlantes</option>
+
+<option value="Botones">Botones</option>
+
+<option value="Bateria">Bateria</option>
+
+</select>
+
+<div class="busqueda-venta">
+
+<input
+type="text"
+id="productoVenta"
+placeholder="Buscar producto o modelo..."
+onkeyup="App.buscarProductoVenta()"
+autocomplete="off"
+>
+
+<div
+id="listaProductos"
+class="lista-productos"
+></div>
+
+</div>
+
+<input
+type="number"
+id="cantidadVenta"
+placeholder="Cantidad"
+>
+
+<button onclick="App.vender()">
+💰 Vender
+</button>
+
+</div>
+
+<!-- ========================= -->
+<!-- TABLA VENTAS -->
+<!-- ========================= -->
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Cliente</th>
+
+<th>Producto</th>
+
+<th>Categoría</th>
+
+<th>Cantidad</th>
+
+<th>Total</th>
+
+<th>Fecha</th>
+
+<th>Hora</th>
+
+<th>Acción</th>
+
+</tr>
+
+</thead>
+
+<tbody id="tablaVentas"></tbody>
+
+</table>
+
+</div>
+
+<script src="js/storage.js"></script>
+
+<script src="js/ui.js"></script>
+
+<script type="module" src="js/app.js"></script>
+
+</body>
+</html>
