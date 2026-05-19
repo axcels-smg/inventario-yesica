@@ -1,0 +1,38 @@
+function Modal({
+  isOpen,
+  onClose,
+  children,
+}) {
+
+  if (!isOpen) return null
+
+  return (
+
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+
+        {/* BOTON CERRAR */}
+        <div className="flex justify-end mb-4">
+
+          <button
+            onClick={onClose}
+            className="text-slate-500 hover:text-red-500 text-2xl"
+          >
+            ×
+          </button>
+
+        </div>
+
+        {/* CONTENIDO */}
+        <div>
+          {children}
+        </div>
+
+      </div>
+
+    </div>
+  )
+}
+
+export default Modal
