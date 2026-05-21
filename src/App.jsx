@@ -1,8 +1,4 @@
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-} from "react-router-dom"
+import { BrowserRouter, Routes, Route } from "react-router-dom"
 
 import Dashboard from "./pages/Dashboard"
 import Productos from "./pages/Productos"
@@ -14,59 +10,34 @@ import HistorialVentas from "./pages/HistorialVentas"
 import MainLayout from "./layout/MainLayout"
 
 function App() {
-
   return (
-
     <BrowserRouter>
-
       <Routes>
 
-        {/* LAYOUT */}
-        <Route
-          path="/"
-          element={<MainLayout />}
-        >
-
+        {/* LAYOUT PRINCIPAL */}
+        <Route path="/" element={<MainLayout />}>
+          
           {/* DASHBOARD */}
-          <Route
-            index
-            element={<Dashboard />}
-          />
+          <Route index element={<Dashboard />} />
 
           {/* PRODUCTOS */}
-          <Route
-            path="productos"
-            element={<Productos />}
-          />
+          <Route path="productos" element={<Productos />} />
 
           {/* VENTAS */}
-          <Route
-            path="ventas"
-            element={<Ventas />}
-          />
+          <Route path="ventas" element={<Ventas />} />
 
           {/* CLIENTES */}
-          <Route
-            path="clientes"
-            element={<Clientes />}
-          />
+          <Route path="clientes" element={<Clientes />} />
 
           {/* REPORTES */}
-          <Route
-            path="reportes"
-            element={<Reportes />}
-          />
+          <Route path="reportes" element={<Reportes />} />
 
           {/* HISTORIAL */}
-          <Route
-            path="historial"
-            element={<HistorialVentas />}
-          />
+          <Route path="historial" element={<HistorialVentas />} />
 
         </Route>
 
       </Routes>
-
     </BrowserRouter>
   )
 }

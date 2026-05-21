@@ -25,32 +25,19 @@ import { db } from "../firebase"
 
 function Dashboard() {
 
-  const [productos,
-    setProductos] =
-    useState([])
-
-  const [ventas,
-    setVentas] =
-    useState([])
+  const [productos, setProductos] = useState([])
+  const [ventas, setVentas] = useState([])
 
   useEffect(() => {
-
     cargarProductos()
     cargarVentas()
-
   }, [])
 
   async function cargarProductos() {
-
-    const querySnapshot =
-      await getDocs(
-        collection(db, "productos")
-      )
+    const querySnapshot = await getDocs(collection(db, "productos"))
 
     const lista = []
-
     querySnapshot.forEach((doc) => {
-
       lista.push({
         id: doc.id,
         ...doc.data(),
@@ -61,16 +48,10 @@ function Dashboard() {
   }
 
   async function cargarVentas() {
-
-    const querySnapshot =
-      await getDocs(
-        collection(db, "ventas")
-      )
+    const querySnapshot = await getDocs(collection(db, "ventas"))
 
     const lista = []
-
     querySnapshot.forEach((doc) => {
-
       lista.push({
         id: doc.id,
         ...doc.data(),
@@ -81,345 +62,131 @@ function Dashboard() {
   }
 
   // KPIs
-  const totalProductos =
-    productos.length
+  const totalProductos = productos.length
+  const totalVentas = ventas.length
 
-  const totalVentas =
-    ventas.length
+  const ingresosTotales = ventas.reduce(
+    (acc, venta) => acc + Number(venta.total),
+    0
+  )
 
-  const ingresosTotales =
-    ventas.reduce(
-      (acc, venta) =>
-        acc + Number(venta.total),
-      0
-    )
+  const hoy = new Date().toLocaleDateString()
 
-  const hoy =
-    new Date().toLocaleDateString()
+  const ventasHoy = ventas.filter((venta) => {
+    if (!venta.fecha) return false
+    return venta.fecha.includes(hoy)
+  }).length
 
-  const ventasHoy =
-    ventas.filter((venta) => {
-
-      if (!venta.fecha)
-        return false
-
-      return venta.fecha.includes(hoy)
-
-    }).length
-
-  const dataGrafico =
-    ventas.map((venta, index) => ({
-
-      nombre:
-        `Venta ${index + 1}`,
-
-      total:
-        Number(venta.total),
-
-    }))
+  const dataGrafico = ventas.map((venta, index) => ({
+    nombre: `Venta ${index + 1}`,
+    total: Number(venta.total),
+  }))
 
   return (
+    <div className="text-slate-900 dark:text-white transition-all duration-300">
 
-    <div
-      className="
-        text-slate-900
-        dark:text-white
-        transition-all
-        duration-300
-      "
-    >
-
-      {/* TITULO */}
+      {/* HEADER */}
       <div className="mb-10">
-
-        <h1
-          className="
-            text-5xl
-            font-black
-          "
-        >
+        <h1 className="text-5xl font-black">
           Dashboard
         </h1>
 
-        <p
-          className="
-            text-slate-500
-            dark:text-slate-400
-            mt-3
-            text-lg
-          "
-        >
+        <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
           Resumen general del sistema
         </p>
-
       </div>
 
       {/* CARDS */}
-      <div
-        className="
-          grid
-          grid-cols-4
-          gap-6
-          mb-10
-        "
-      >
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
 
         {/* PRODUCTOS */}
-        <div
-          className="
-            bg-white
-            dark:bg-slate-900
-            rounded-3xl
-            p-6
-            shadow-lg
-          "
-        >
-
-          <div
-            className="
-              flex
-              justify-between
-              items-center
-            "
-          >
-
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
+          <div className="flex justify-between items-center">
             <div>
-
-              <p
-                className="
-                  text-slate-500
-                  dark:text-slate-400
-                "
-              >
+              <p className="text-slate-500 dark:text-slate-400">
                 Productos
               </p>
 
-              <h2
-                className="
-                  text-5xl
-                  font-black
-                  mt-3
-                "
-              >
+              <h2 className="text-4xl font-black mt-2">
                 {totalProductos}
               </h2>
-
             </div>
 
-            <Package
-              size={45}
-              className="
-                text-blue-500
-              "
-            />
-
+            <Package size={40} className="text-blue-500" />
           </div>
-
         </div>
 
         {/* VENTAS */}
-        <div
-          className="
-            bg-white
-            dark:bg-slate-900
-            rounded-3xl
-            p-6
-            shadow-lg
-          "
-        >
-
-          <div
-            className="
-              flex
-              justify-between
-              items-center
-            "
-          >
-
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
+          <div className="flex justify-between items-center">
             <div>
-
-              <p
-                className="
-                  text-slate-500
-                  dark:text-slate-400
-                "
-              >
+              <p className="text-slate-500 dark:text-slate-400">
                 Ventas
               </p>
 
-              <h2
-                className="
-                  text-5xl
-                  font-black
-                  mt-3
-                "
-              >
+              <h2 className="text-4xl font-black mt-2">
                 {totalVentas}
               </h2>
-
             </div>
 
-            <ShoppingCart
-              size={45}
-              className="
-                text-green-500
-              "
-            />
-
+            <ShoppingCart size={40} className="text-green-500" />
           </div>
-
         </div>
 
         {/* INGRESOS */}
-        <div
-          className="
-            bg-white
-            dark:bg-slate-900
-            rounded-3xl
-            p-6
-            shadow-lg
-          "
-        >
-
-          <div
-            className="
-              flex
-              justify-between
-              items-center
-            "
-          >
-
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
+          <div className="flex justify-between items-center">
             <div>
-
-              <p
-                className="
-                  text-slate-500
-                  dark:text-slate-400
-                "
-              >
+              <p className="text-slate-500 dark:text-slate-400">
                 Ingresos
               </p>
 
-              <h2
-                className="
-                  text-5xl
-                  font-black
-                  mt-3
-                "
-              >
+              <h2 className="text-4xl font-black mt-2">
                 S/ {ingresosTotales}
               </h2>
-
             </div>
 
-            <DollarSign
-              size={45}
-              className="
-                text-yellow-500
-              "
-            />
-
+            <DollarSign size={40} className="text-yellow-500" />
           </div>
-
         </div>
 
         {/* VENTAS HOY */}
-        <div
-          className="
-            bg-white
-            dark:bg-slate-900
-            rounded-3xl
-            p-6
-            shadow-lg
-          "
-        >
-
-          <div
-            className="
-              flex
-              justify-between
-              items-center
-            "
-          >
-
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
+          <div className="flex justify-between items-center">
             <div>
-
-              <p
-                className="
-                  text-slate-500
-                  dark:text-slate-400
-                "
-              >
+              <p className="text-slate-500 dark:text-slate-400">
                 Ventas Hoy
               </p>
 
-              <h2
-                className="
-                  text-5xl
-                  font-black
-                  mt-3
-                "
-              >
+              <h2 className="text-4xl font-black mt-2">
                 {ventasHoy}
               </h2>
-
             </div>
 
-            <TrendingUp
-              size={45}
-              className="
-                text-purple-500
-              "
-            />
-
+            <TrendingUp size={40} className="text-purple-500" />
           </div>
-
         </div>
 
       </div>
 
       {/* GRAFICO */}
-      <div
-        className="
-          bg-white
-          dark:bg-slate-900
-          rounded-3xl
-          p-8
-          shadow-lg
-        "
-      >
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
 
-        <h2
-          className="
-            text-3xl
-            font-bold
-            mb-8
-          "
-        >
+        <h2 className="text-2xl font-bold mb-6">
           Ventas
         </h2>
 
         <div className="h-[400px]">
-
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
-          >
+          <ResponsiveContainer width="100%" height="100%">
 
             <BarChart data={dataGrafico}>
-
               <XAxis dataKey="nombre" />
-
               <YAxis />
-
               <Tooltip />
-
               <Bar dataKey="total" />
-
             </BarChart>
 
           </ResponsiveContainer>
-
         </div>
 
       </div>

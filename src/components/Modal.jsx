@@ -1,36 +1,28 @@
-function Modal({
-  isOpen,
-  onClose,
-  children,
-}) {
-
+function Modal({ isOpen, onClose, children }) {
   if (!isOpen) return null
 
   return (
-
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
-
-        {/* BOTON CERRAR */}
+    <div
+      onClick={onClose}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-lg shadow-2xl transition-all duration-200"
+      >
+        {/* BOTÓN CERRAR */}
         <div className="flex justify-end mb-4">
-
           <button
             onClick={onClose}
-            className="text-slate-500 hover:text-red-500 text-2xl"
+            className="text-slate-500 hover:text-red-500 text-2xl font-bold"
           >
             ×
           </button>
-
         </div>
 
         {/* CONTENIDO */}
-        <div>
-          {children}
-        </div>
-
+        <div>{children}</div>
       </div>
-
     </div>
   )
 }
