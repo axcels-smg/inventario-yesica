@@ -4,7 +4,7 @@ import { useState } from "react"
 import Sidebar from "../components/Sidebar"
 
 function MainLayout() {
-  const [menuMovilAbierto, setMenuMovilAbierto] = useState(false)
+  const [menuAbierto, setMenuAbierto] = useState(false)
 
   return (
     <div
@@ -17,24 +17,9 @@ function MainLayout() {
         duration-300
       "
     >
-      {/* SIDEBAR */}
-      <aside
-        className="
-          hidden
-          md:flex
-          md:w-72
-          fixed
-          h-full
-          z-50
-        "
-      >
-        <Sidebar />
-      </aside>
-
-      {/* MENU MOVIL */}
+      {/* BARRA SUPERIOR */}
       <header
         className="
-          md:hidden
           fixed
           top-0
           left-0
@@ -55,7 +40,7 @@ function MainLayout() {
       >
         <button
           type="button"
-          onClick={() => setMenuMovilAbierto(true)}
+          onClick={() => setMenuAbierto(true)}
           className="
             w-11
             h-11
@@ -81,19 +66,19 @@ function MainLayout() {
         </div>
       </header>
 
-      {menuMovilAbierto && (
-        <div className="md:hidden fixed inset-0 z-50">
+      {menuAbierto && (
+        <div className="fixed inset-0 z-50">
           <button
             type="button"
             className="absolute inset-0 bg-black/50 w-full h-full"
-            onClick={() => setMenuMovilAbierto(false)}
+            onClick={() => setMenuAbierto(false)}
             aria-label="Cerrar menu"
           />
 
           <div className="relative w-[300px] max-w-[85vw] h-full">
             <button
               type="button"
-              onClick={() => setMenuMovilAbierto(false)}
+              onClick={() => setMenuAbierto(false)}
               className="
                 absolute
                 top-4
@@ -113,7 +98,7 @@ function MainLayout() {
               <X size={22} />
             </button>
 
-            <Sidebar onNavigate={() => setMenuMovilAbierto(false)} />
+            <Sidebar onNavigate={() => setMenuAbierto(false)} />
           </div>
         </div>
       )}
@@ -122,7 +107,6 @@ function MainLayout() {
       <div
         className="
           flex-1
-          md:ml-72
           flex
           flex-col
           min-h-screen
@@ -137,7 +121,9 @@ function MainLayout() {
             flex-1
             p-4
             pt-20
-            md:p-8
+            md:px-8
+            md:pb-8
+            md:pt-24
             overflow-y-auto
           "
         >
