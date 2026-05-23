@@ -10,7 +10,7 @@ import {
 import { NavLink } from "react-router-dom"
 import ThemeButton from "./ThemeButton"
 
-function Sidebar() {
+function Sidebar({ onNavigate }) {
 
   const links = [
     {
@@ -84,6 +84,7 @@ function Sidebar() {
           <NavLink
             key={link.path}
             to={link.path}
+            onClick={onNavigate}
             className={({ isActive }) =>
               `
                 flex
