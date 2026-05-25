@@ -10,7 +10,7 @@ import { db } from "../firebase"
 import jsPDF from "jspdf"
 
 import { FileDown, Receipt } from "lucide-react"
-import { formatearFecha } from "../utils/fechas"
+import { formatearFecha, obtenerTiempoFecha } from "../utils/fechas"
 
 function HistorialVentas() {
 
@@ -32,6 +32,11 @@ function HistorialVentas() {
           ...doc.data(),
         })
       })
+
+      listaVentas.sort((a, b) =>
+        obtenerTiempoFecha(b.fecha || b.fechaTexto) -
+        obtenerTiempoFecha(a.fecha || a.fechaTexto)
+      )
 
       setVentas(listaVentas)
 

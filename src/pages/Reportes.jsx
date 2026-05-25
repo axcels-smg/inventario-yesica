@@ -25,6 +25,7 @@ import {
   AlertTriangle,
   Users,
 } from "lucide-react"
+import { obtenerTiempoFecha } from "../utils/fechas"
 
 function Reportes() {
 
@@ -43,6 +44,11 @@ function Reportes() {
     querySnapshot.forEach((doc) => {
       lista.push({ id: doc.id, ...doc.data() })
     })
+
+    lista.sort((a, b) =>
+      obtenerTiempoFecha(b.fecha || b.fechaTexto) -
+      obtenerTiempoFecha(a.fecha || a.fechaTexto)
+    )
 
     setVentas(lista)
   }
@@ -64,9 +70,9 @@ function Reportes() {
     0
   )
 
-  const productosStockBajo = productos.filter(
-    (p) => Number(p.stock) <= 5
-  )
+  const productosStockBajo = productos
+    .filter((p) => Number(p.stock) <= 5)
+    .sort((a, b) => Number(a.stock) - Number(b.stock))
 
   // CLIENTES FRECUENTES
   const clientesMap = {}
@@ -81,12 +87,12 @@ function Reportes() {
     clientesMap[cliente]++
   })
 
-  const clientesFrecuentes = Object.entries(clientesMap).map(
-    ([cliente, cantidad]) => ({
+  const clientesFrecuentes = Object.entries(clientesMap)
+    .map(([cliente, cantidad]) => ({
       cliente,
       cantidad,
-    })
-  )
+    }))
+    .sort((a, b) => b.cantidad - a.cantidad)
 
   // PRODUCTOS VENDIDOS
   const productosMap = {}
@@ -103,12 +109,12 @@ function Reportes() {
     })
   })
 
-  const productosVendidos = Object.entries(productosMap).map(
-    ([nombre, cantidad]) => ({
+  const productosVendidos = Object.entries(productosMap)
+    .map(([nombre, cantidad]) => ({
       nombre,
       cantidad,
-    })
-  )
+    }))
+    .sort((a, b) => b.cantidad - a.cantidad)
 
   const colores = ["#2563eb", "#16a34a", "#dc2626", "#ca8a04", "#9333ea"]
 

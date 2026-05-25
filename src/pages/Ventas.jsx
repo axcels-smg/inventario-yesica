@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import Swal from "sweetalert2"
+import { Minus, PackageSearch, Plus, Trash2 } from "lucide-react"
 
 import {
   collection,
@@ -18,6 +19,7 @@ function Ventas() {
 
   const [clienteSeleccionado, setClienteSeleccionado] = useState("")
   const [carrito, setCarrito] = useState([])
+  const [busquedaProducto, setBusquedaProducto] = useState("")
   const [vendiendo, setVendiendo] = useState(false)
 
   useEffect(() => {
@@ -25,7 +27,6 @@ function Ventas() {
     cargarClientes()
   }, [])
 
-  // PRODUCTOS
   async function cargarProductos() {
     try {
       const querySnapshot = await getDocs(collection(db, "productos"))
@@ -50,7 +51,6 @@ function Ventas() {
     }
   }
 
-  // CLIENTES
   async function cargarClientes() {
     try {
       const querySnapshot = await getDocs(collection(db, "clientes"))
@@ -64,6 +64,10 @@ function Ventas() {
         })
       })
 
+      lista.sort((a, b) =>
+        String(a.nombre || "").localeCompare(String(b.nombre || ""))
+      )
+
       setClientes(lista)
 
     } catch (error) {
@@ -75,10 +79,15 @@ function Ventas() {
     }
   }
 
-  // AGREGAR AL CARRITO
-  function agregarAlCarrito(producto) {
+  function obtenerStockProducto(id) {
+    const producto = productos.find((p) => p.id === id)
+    return Number(producto?.stock || 0)
+  }
 
-    if (Number(producto.stock) <= 0) {
+  function agregarAlCarrito(producto) {
+    const stockProducto = Number(producto.stock)
+
+    if (stockProducto <= 0) {
       Swal.fire({
         icon: "error",
         title: "Sin stock",
@@ -89,51 +98,103 @@ function Ventas() {
     const existe = carrito.find((item) => item.id === producto.id)
 
     if (existe) {
+      aumentarCantidad(producto.id)
+      return
+    }
 
-      const nuevo = carrito.map((item) => {
+    setCarrito([
+      ...carrito,
+      { ...producto, cantidad: 1 },
+    ])
+  }
 
-        if (item.id === producto.id) {
+  function aumentarCantidad(id) {
+    const stockProducto = obtenerStockProducto(id)
 
-          if (item.cantidad >= Number(producto.stock)) {
-            Swal.fire({
-              icon: "warning",
-              title: "Stock máximo alcanzado",
-            })
-            return item
-          }
+    setCarrito((items) =>
+      items.map((item) => {
+        if (item.id !== id) return item
+
+        if (item.cantidad >= stockProducto) {
+          Swal.fire({
+            icon: "warning",
+            title: "Stock máximo alcanzado",
+          })
+          return item
+        }
+
+        return {
+          ...item,
+          cantidad: item.cantidad + 1,
+        }
+      })
+    )
+  }
+
+  function disminuirCantidad(id) {
+    setCarrito((items) =>
+      items
+        .map((item) => {
+          if (item.id !== id) return item
 
           return {
             ...item,
-            cantidad: item.cantidad + 1,
+            cantidad: item.cantidad - 1,
+          }
+        })
+        .filter((item) => item.cantidad > 0)
+    )
+  }
+
+  function cambiarCantidad(id, valor) {
+    if (!/^\d*$/.test(valor)) return
+
+    const cantidad = Number(valor)
+    const stockProducto = obtenerStockProducto(id)
+
+    setCarrito((items) =>
+      items.map((item) => {
+        if (item.id !== id) return item
+
+        if (valor === "") {
+          return {
+            ...item,
+            cantidad: "",
           }
         }
 
-        return item
+        return {
+          ...item,
+          cantidad: Math.min(cantidad, stockProducto),
+        }
       })
-
-      setCarrito(nuevo)
-
-    } else {
-
-      setCarrito([
-        ...carrito,
-        { ...producto, cantidad: 1 },
-      ])
-    }
+    )
   }
 
-  // ELIMINAR
+  function normalizarCantidad(id) {
+    setCarrito((items) =>
+      items
+        .map((item) => {
+          if (item.id !== id) return item
+
+          return {
+            ...item,
+            cantidad: Number(item.cantidad) || 1,
+          }
+        })
+        .filter((item) => item.cantidad > 0)
+    )
+  }
+
   function eliminarDelCarrito(id) {
     setCarrito(carrito.filter((i) => i.id !== id))
   }
 
-  // TOTAL
   const total = carrito.reduce(
-    (acc, item) => acc + Number(item.precio) * item.cantidad,
+    (acc, item) => acc + Number(item.precio) * Number(item.cantidad || 0),
     0
   )
 
-  // FINALIZAR VENTA
   async function finalizarVenta() {
 
     if (!clienteSeleccionado) {
@@ -150,6 +211,29 @@ function Ventas() {
       })
     }
 
+    const carritoValido = carrito.every((item) =>
+      Number.isInteger(Number(item.cantidad)) && Number(item.cantidad) > 0
+    )
+
+    if (!carritoValido) {
+      return Swal.fire({
+        icon: "warning",
+        title: "Revisa las cantidades",
+      })
+    }
+
+    const confirmacion = await Swal.fire({
+      title: "¿Finalizar venta?",
+      text: `Total S/ ${total}`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Finalizar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#16a34a",
+    })
+
+    if (!confirmacion.isConfirmed) return
+
     try {
       setVendiendo(true)
 
@@ -157,10 +241,15 @@ function Ventas() {
         (c) => c.id === clienteSeleccionado
       )
 
+      const productosVenta = carrito.map((item) => ({
+        ...item,
+        cantidad: Number(item.cantidad),
+      }))
+
       await runTransaction(db, async (transaction) => {
         const productosActuales = []
 
-        for (const item of carrito) {
+        for (const item of productosVenta) {
           const productoRef = doc(db, "productos", item.id)
           const productoSnap = await transaction.get(productoRef)
 
@@ -198,14 +287,13 @@ function Ventas() {
           cliente: clienteData?.nombre || "",
           clienteId: clienteData?.id || "",
           telefono: clienteData?.telefono || "",
-          productos: carrito,
+          productos: productosVenta,
           total,
           fecha: serverTimestamp(),
           fechaTexto: new Date().toLocaleString("es-PE"),
         })
       })
 
-      // RESET
       setCarrito([])
       setClienteSeleccionado("")
       cargarProductos()
@@ -229,10 +317,27 @@ function Ventas() {
     }
   }
 
+  const terminosProducto = busquedaProducto
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  const productosFiltrados = productos.filter((producto) => {
+    const textoProducto = `
+      ${producto.marca || ""}
+      ${producto.modelo || ""}
+      ${producto.categoria || ""}
+    `.toLowerCase()
+
+    return terminosProducto.every((termino) =>
+      textoProducto.includes(termino)
+    )
+  })
+
   return (
     <div className="space-y-8">
 
-      {/* HEADER */}
       <div>
         <h1 className="text-5xl font-black text-slate-800 dark:text-white">
           Ventas
@@ -245,19 +350,40 @@ function Ventas() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
-        {/* PRODUCTOS */}
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6">
 
-          <h2 className="text-3xl font-bold mb-6 dark:text-white">
-            Productos
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <h2 className="text-3xl font-bold dark:text-white">
+              Productos
+            </h2>
+
+            <div className="relative">
+              <PackageSearch
+                className="absolute left-4 top-4 text-slate-400"
+                size={20}
+              />
+
+              <input
+                value={busquedaProducto}
+                onChange={(e) => setBusquedaProducto(e.target.value)}
+                placeholder="Buscar producto..."
+                className="w-full sm:w-[260px] pl-12 pr-4 py-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              />
+            </div>
+          </div>
 
           <div className="flex flex-col gap-4">
 
-            {productos.map((p) => (
+            {productosFiltrados.length === 0 && (
+              <p className="text-slate-500 text-center">
+                No hay productos para mostrar
+              </p>
+            )}
+
+            {productosFiltrados.map((p) => (
               <div
                 key={p.id}
-                className="border rounded-2xl p-5 flex justify-between"
+                className="border dark:border-slate-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:justify-between gap-4"
               >
 
                 <div>
@@ -269,9 +395,9 @@ function Ventas() {
                     {p.categoria}
                   </p>
 
-                  <p className="text-sm">{p.modelo}</p>
+                  <p className="text-sm dark:text-slate-300">{p.modelo}</p>
 
-                  <p className="font-bold mt-2">
+                  <p className="font-bold mt-2 dark:text-white">
                     S/ {p.precio}
                   </p>
 
@@ -283,7 +409,7 @@ function Ventas() {
                 <button
                   onClick={() => agregarAlCarrito(p)}
                   disabled={Number(p.stock) <= 0}
-                  className={`px-4 py-2 rounded-xl text-white ${
+                  className={`px-4 py-3 rounded-xl text-white self-start sm:self-center ${
                     Number(p.stock) <= 0
                       ? "bg-slate-400"
                       : "bg-blue-600 hover:bg-blue-700"
@@ -299,18 +425,16 @@ function Ventas() {
 
         </div>
 
-        {/* CARRITO */}
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6">
 
           <h2 className="text-3xl font-bold mb-6 dark:text-white">
             Carrito
           </h2>
 
-          {/* CLIENTE */}
           <select
             value={clienteSeleccionado}
             onChange={(e) => setClienteSeleccionado(e.target.value)}
-            className="w-full p-4 rounded-2xl mb-6"
+            className="w-full p-4 rounded-2xl mb-6 border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           >
             <option value="">Selecciona cliente</option>
 
@@ -321,36 +445,75 @@ function Ventas() {
             ))}
           </select>
 
-          {/* ITEMS */}
           <div className="flex flex-col gap-4">
 
-            {carrito.map((item) => (
-              <div key={item.id} className="border p-4 rounded-2xl flex justify-between">
+            {carrito.length === 0 && (
+              <p className="text-slate-500 text-center">
+                Agrega productos para iniciar una venta
+              </p>
+            )}
 
-                <div>
-                  <p className="font-bold">{item.marca}</p>
-                  <p>Cantidad: {item.cantidad}</p>
-                  <p>
-                    Subtotal: S/ {item.precio * item.cantidad}
-                  </p>
+            {carrito.map((item) => (
+              <div key={item.id} className="border dark:border-slate-700 p-4 rounded-2xl flex flex-col gap-4">
+
+                <div className="flex justify-between gap-4">
+                  <div>
+                    <p className="font-bold dark:text-white">{item.marca}</p>
+                    <p className="text-sm text-slate-500">{item.modelo}</p>
+                    <p className="text-sm text-slate-500">
+                      Stock: {obtenerStockProducto(item.id)}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => eliminarDelCarrito(item.id)}
+                    className="bg-red-500 text-white w-11 h-11 rounded-xl flex items-center justify-center"
+                    aria-label="Eliminar producto"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
 
-                <button
-                  onClick={() => eliminarDelCarrito(item.id)}
-                  className="bg-red-500 text-white px-4 py-2 rounded-xl"
-                >
-                  Eliminar
-                </button>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => disminuirCantidad(item.id)}
+                      className="bg-slate-200 dark:bg-slate-800 dark:text-white w-10 h-10 rounded-xl flex items-center justify-center"
+                      aria-label="Restar cantidad"
+                    >
+                      <Minus size={18} />
+                    </button>
+
+                    <input
+                      value={item.cantidad}
+                      onChange={(e) => cambiarCantidad(item.id, e.target.value)}
+                      onBlur={() => normalizarCantidad(item.id)}
+                      inputMode="numeric"
+                      className="w-20 text-center p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    />
+
+                    <button
+                      onClick={() => aumentarCantidad(item.id)}
+                      className="bg-slate-200 dark:bg-slate-800 dark:text-white w-10 h-10 rounded-xl flex items-center justify-center"
+                      aria-label="Sumar cantidad"
+                    >
+                      <Plus size={18} />
+                    </button>
+                  </div>
+
+                  <p className="font-bold dark:text-white">
+                    Subtotal: S/ {Number(item.precio) * Number(item.cantidad || 0)}
+                  </p>
+                </div>
 
               </div>
             ))}
 
           </div>
 
-          {/* TOTAL */}
-          <div className="mt-6 border-t pt-4">
+          <div className="mt-6 border-t dark:border-slate-700 pt-4">
 
-            <h2 className="text-3xl font-black">
+            <h2 className="text-3xl font-black dark:text-white">
               Total: S/ {total}
             </h2>
 
@@ -358,7 +521,7 @@ function Ventas() {
               onClick={finalizarVenta}
               disabled={vendiendo}
               className={`w-full mt-4 text-white py-4 rounded-2xl ${
-                vendiendo ? "bg-slate-400" : "bg-green-600"
+                vendiendo ? "bg-slate-400" : "bg-green-600 hover:bg-green-700"
               }`}
             >
               {vendiendo ? "Procesando..." : "Finalizar Venta"}
