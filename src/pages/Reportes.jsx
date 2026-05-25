@@ -26,6 +26,7 @@ import {
   Users,
 } from "lucide-react"
 import { obtenerTiempoFecha } from "../utils/fechas"
+import { filtrarVentasActivas } from "../utils/ventas"
 
 function Reportes() {
 
@@ -64,8 +65,10 @@ function Reportes() {
     setProductos(lista)
   }
 
-  // KPIs
-  const ingresosTotales = ventas.reduce(
+  const ventasActivas = filtrarVentasActivas(ventas)
+
+  // KPIs (solo ventas no anuladas)
+  const ingresosTotales = ventasActivas.reduce(
     (acc, venta) => acc + Number(venta.total),
     0
   )
@@ -77,7 +80,7 @@ function Reportes() {
   // CLIENTES FRECUENTES
   const clientesMap = {}
 
-  ventas.forEach((venta) => {
+  ventasActivas.forEach((venta) => {
     const cliente = venta.cliente || "Sin nombre"
 
     if (!clientesMap[cliente]) {
@@ -97,7 +100,7 @@ function Reportes() {
   // PRODUCTOS VENDIDOS
   const productosMap = {}
 
-  ventas.forEach((venta) => {
+  ventasActivas.forEach((venta) => {
     venta.productos?.forEach((producto) => {
       const nombre = producto.marca || producto.nombre || "Producto"
 
@@ -138,7 +141,7 @@ function Reportes() {
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border dark:border-slate-800">
           <FileText className="text-blue-500" size={38} />
           <p className="text-slate-500 mt-4">Ventas</p>
-          <h2 className="text-4xl font-black dark:text-white">{ventas.length}</h2>
+          <h2 className="text-4xl font-black dark:text-white">{ventasActivas.length}</h2>
         </div>
 
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border dark:border-slate-800">

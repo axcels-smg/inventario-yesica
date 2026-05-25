@@ -6,6 +6,7 @@ import {
   Pencil,
   Trash2,
   PackageSearch,
+  PackagePlus,
 } from "lucide-react"
 
 import { db } from "../firebase"
@@ -17,6 +18,7 @@ import {
   deleteDoc,
   updateDoc,
   doc,
+  runTransaction,
 } from "firebase/firestore"
 
 function Productos() {
@@ -38,6 +40,10 @@ function Productos() {
   const [editandoId, setEditandoId] = useState(null)
 
   const [modalAbierto, setModalAbierto] = useState(false)
+  const [modalReponerAbierto, setModalReponerAbierto] = useState(false)
+  const [productoReponer, setProductoReponer] = useState(null)
+  const [cantidadReponer, setCantidadReponer] = useState("")
+  const [reponiendo, setReponiendo] = useState(false)
 
   useEffect(() => {
     obtenerProductos()
@@ -87,6 +93,86 @@ function Productos() {
   function cambiarStock(valor) {
     if (/^\d*$/.test(valor)) {
       setStock(valor)
+    }
+  }
+
+  function cambiarCantidadReponer(valor) {
+    if (/^\d*$/.test(valor)) {
+      setCantidadReponer(valor)
+    }
+  }
+
+  function abrirReponer(producto) {
+    setProductoReponer(producto)
+    setCantidadReponer("")
+    setModalReponerAbierto(true)
+  }
+
+  function cerrarReponer() {
+    setModalReponerAbierto(false)
+    setProductoReponer(null)
+    setCantidadReponer("")
+  }
+
+  async function confirmarReponer(e) {
+    e.preventDefault()
+
+    if (!productoReponer) return
+
+    const cantidad = Number(cantidadReponer)
+
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "Cantidad inválida",
+        text: "Ingresa un número entero mayor a 0",
+      })
+      return
+    }
+
+    try {
+      setReponiendo(true)
+
+      await runTransaction(db, async (transaction) => {
+        const productoRef = doc(db, "productos", productoReponer.id)
+        const productoSnap = await transaction.get(productoRef)
+
+        if (!productoSnap.exists()) {
+          throw new Error("El producto ya no existe")
+        }
+
+        const stockActual = Number(productoSnap.data().stock)
+
+        if (!Number.isFinite(stockActual) || stockActual < 0) {
+          throw new Error("Stock inválido en el producto")
+        }
+
+        transaction.update(productoRef, {
+          stock: stockActual + cantidad,
+        })
+      })
+
+      Swal.fire({
+        icon: "success",
+        title: "Stock repuesto",
+        text: `+${cantidad} unidades. Nuevo stock: ${Number(productoReponer.stock) + cantidad}`,
+        timer: 2000,
+        showConfirmButton: false,
+      })
+
+      cerrarReponer()
+      obtenerProductos()
+
+    } catch (error) {
+      console.log(error)
+
+      Swal.fire({
+        icon: "error",
+        title: "Error al reponer",
+        text: error.message,
+      })
+    } finally {
+      setReponiendo(false)
     }
   }
 
@@ -244,7 +330,7 @@ function Productos() {
             Productos
           </h1>
           <p className="text-slate-500 mt-2">
-            Gestiona tu inventario
+            Gestiona tu inventario y repón stock cuando llegue mercadería
           </p>
         </div>
 
@@ -339,8 +425,19 @@ function Productos() {
                 <td className="p-4 flex gap-2">
 
                   <button
+                    onClick={() => abrirReponer(p)}
+                    className="bg-green-600 text-white p-2 rounded-xl hover:bg-green-700"
+                    title="Reponer stock"
+                    aria-label="Reponer stock"
+                  >
+                    <PackagePlus size={18} />
+                  </button>
+
+                  <button
                     onClick={() => editarProducto(p)}
                     className="bg-yellow-500 text-white p-2 rounded-xl"
+                    title="Editar"
+                    aria-label="Editar producto"
                   >
                     <Pencil size={18} />
                   </button>
@@ -348,6 +445,8 @@ function Productos() {
                   <button
                     onClick={() => eliminarProducto(p.id)}
                     className="bg-red-500 text-white p-2 rounded-xl"
+                    title="Eliminar"
+                    aria-label="Eliminar producto"
                   >
                     <Trash2 size={18} />
                   </button>
@@ -392,6 +491,44 @@ function Productos() {
 
           <button className="bg-blue-600 text-white py-3 rounded-xl">
             Guardar
+          </button>
+
+        </form>
+
+      </Modal>
+
+      <Modal isOpen={modalReponerAbierto} onClose={cerrarReponer}>
+
+        <h2 className="text-2xl font-bold mb-2 dark:text-white">
+          Reponer stock
+        </h2>
+
+        {productoReponer && (
+          <p className="text-slate-500 dark:text-slate-400 mb-4">
+            {productoReponer.marca} — {productoReponer.modelo}
+            <br />
+            Stock actual: <strong>{productoReponer.stock}</strong>
+          </p>
+        )}
+
+        <form onSubmit={confirmarReponer} className="flex flex-col gap-3">
+
+          <input
+            value={cantidadReponer}
+            onChange={(e) => cambiarCantidadReponer(e.target.value)}
+            placeholder="Cantidad a sumar"
+            inputMode="numeric"
+            type="text"
+            className="p-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+
+          <button
+            disabled={reponiendo}
+            className={`py-3 rounded-xl text-white font-bold ${
+              reponiendo ? "bg-slate-400" : "bg-green-600 hover:bg-green-700"
+            }`}
+          >
+            {reponiendo ? "Guardando..." : "Confirmar reposición"}
           </button>
 
         </form>

@@ -23,6 +23,7 @@ import {
 
 import { db } from "../firebase"
 import { esFechaDeHoy } from "../utils/fechas"
+import { filtrarVentasActivas } from "../utils/ventas"
 
 function Dashboard() {
 
@@ -62,20 +63,22 @@ function Dashboard() {
     setVentas(lista)
   }
 
-  // KPIs
-  const totalProductos = productos.length
-  const totalVentas = ventas.length
+  const ventasActivas = filtrarVentasActivas(ventas)
 
-  const ingresosTotales = ventas.reduce(
+  // KPIs (solo ventas no anuladas)
+  const totalProductos = productos.length
+  const totalVentas = ventasActivas.length
+
+  const ingresosTotales = ventasActivas.reduce(
     (acc, venta) => acc + Number(venta.total),
     0
   )
 
-  const ventasHoy = ventas.filter((venta) => {
+  const ventasHoy = ventasActivas.filter((venta) => {
     return esFechaDeHoy(venta.fecha || venta.fechaTexto)
   }).length
 
-  const dataGrafico = ventas.map((venta, index) => ({
+  const dataGrafico = ventasActivas.map((venta, index) => ({
     nombre: `Venta ${index + 1}`,
     total: Number(venta.total),
   }))
