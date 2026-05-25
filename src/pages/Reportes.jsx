@@ -36,6 +36,7 @@ import {
   guardarTelefonoWhatsApp,
 } from "../utils/whatsapp"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
+import AlertasStockAcumulativas from "../components/AlertasStockAcumulativas"
 
 function Reportes() {
   const [ventas, setVentas] = useState([])
@@ -291,6 +292,9 @@ function Reportes() {
           </div>
         </div>
       )}
+
+      {/* ALERTAS ACUMULATIVAS POR DÍA */}
+      <AlertasStockAcumulativas />
 
       {/* TABLA VENTAS FILTRADAS */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 overflow-x-auto">

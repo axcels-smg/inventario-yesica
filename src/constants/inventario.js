@@ -1,4 +1,4 @@
-export const STOCK_BAJO_UMBRAL = 5
+export const STOCK_BAJO_UMBRAL = 2
 
 export const TIPOS_MOVIMIENTO = {
   VENTA: "venta",

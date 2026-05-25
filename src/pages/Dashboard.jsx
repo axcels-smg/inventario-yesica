@@ -24,6 +24,7 @@ import { agruparVentasPorDia, obtenerRangoPreset } from "../utils/reportesFiltro
 import { filtrarProductosStockBajo } from "../utils/stock"
 import StockAlertBanner from "../components/StockAlertBanner"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
+import { registrarAlertaDiaria, existeAlertaHoy } from "../utils/alertasStock"
 
 function Dashboard() {
   const [productos, setProductos] = useState([])
@@ -33,6 +34,19 @@ function Dashboard() {
     cargarProductos()
     cargarVentas()
   }, [])
+
+  useEffect(() => {
+    async function registrarAlertaSiNecesario() {
+      if (productos.length === 0) return
+
+      const yaExiste = await existeAlertaHoy()
+      if (!yaExiste) {
+        await registrarAlertaDiaria(productos)
+      }
+    }
+
+    registrarAlertaSiNecesario()
+  }, [productos])
 
   async function cargarProductos() {
     const querySnapshot = await getDocs(collection(db, "productos"))
