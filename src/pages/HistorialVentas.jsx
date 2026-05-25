@@ -4,6 +4,7 @@ import {
   collection,
   doc,
   getDocs,
+  deleteDoc,
   runTransaction,
   serverTimestamp,
 } from "firebase/firestore"
@@ -13,13 +14,46 @@ import { db } from "../firebase"
 import jsPDF from "jspdf"
 import Swal from "sweetalert2"
 
-import { FileDown, Receipt, Ban } from "lucide-react"
+import { FileDown, Receipt, Ban, Trash2 } from "lucide-react"
 import { formatearFecha, obtenerTiempoFecha } from "../utils/fechas"
+
+async function restaurarStockEnTransaccion(transaction, productosVenta) {
+  if (!productosVenta?.length) return
+
+  for (const item of productosVenta) {
+    if (!item.id) {
+      throw new Error("Un producto de la venta no tiene identificador")
+    }
+
+    const cantidad = Number(item.cantidad)
+
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      throw new Error(`Cantidad inválida para ${item.marca || "producto"}`)
+    }
+
+    const productoRef = doc(db, "productos", item.id)
+    const productoSnap = await transaction.get(productoRef)
+
+    if (!productoSnap.exists()) {
+      throw new Error(`El producto ${item.marca || item.id} ya no existe`)
+    }
+
+    const stockActual = Number(productoSnap.data().stock)
+
+    if (!Number.isFinite(stockActual)) {
+      throw new Error(`Stock inválido para ${item.marca || "producto"}`)
+    }
+
+    transaction.update(productoRef, {
+      stock: stockActual + cantidad,
+    })
+  }
+}
 
 function HistorialVentas() {
 
   const [ventas, setVentas] = useState([])
-  const [anulandoId, setAnulandoId] = useState(null)
+  const [procesandoId, setProcesandoId] = useState(null)
 
   useEffect(() => {
     cargarVentas()
@@ -75,20 +109,20 @@ function HistorialVentas() {
     const confirmacion = await Swal.fire({
       title: "¿Anular esta venta?",
       html: `
-        <p>Se devolverá el stock de todos los productos.</p>
+        <p>Se devolverá el stock. La venta seguirá en el historial como anulada.</p>
         <p class="mt-2 font-bold">Total: S/ ${venta.total}</p>
       `,
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Anular venta",
+      confirmButtonText: "Anular",
       cancelButtonText: "Cancelar",
-      confirmButtonColor: "#ef4444",
+      confirmButtonColor: "#ea580c",
     })
 
     if (!confirmacion.isConfirmed) return
 
     try {
-      setAnulandoId(venta.id)
+      setProcesandoId(venta.id)
 
       await runTransaction(db, async (transaction) => {
         const ventaRef = doc(db, "ventas", venta.id)
@@ -110,34 +144,7 @@ function HistorialVentas() {
           throw new Error("La venta no tiene productos")
         }
 
-        for (const item of productosVenta) {
-          if (!item.id) {
-            throw new Error("Un producto de la venta no tiene identificador")
-          }
-
-          const cantidad = Number(item.cantidad)
-
-          if (!Number.isInteger(cantidad) || cantidad <= 0) {
-            throw new Error(`Cantidad inválida para ${item.marca || "producto"}`)
-          }
-
-          const productoRef = doc(db, "productos", item.id)
-          const productoSnap = await transaction.get(productoRef)
-
-          if (!productoSnap.exists()) {
-            throw new Error(`El producto ${item.marca || item.id} ya no existe`)
-          }
-
-          const stockActual = Number(productoSnap.data().stock)
-
-          if (!Number.isFinite(stockActual)) {
-            throw new Error(`Stock inválido para ${item.marca || "producto"}`)
-          }
-
-          transaction.update(productoRef, {
-            stock: stockActual + cantidad,
-          })
-        }
+        await restaurarStockEnTransaccion(transaction, productosVenta)
 
         transaction.update(ventaRef, {
           anulada: true,
@@ -165,7 +172,51 @@ function HistorialVentas() {
         text: error.message,
       })
     } finally {
-      setAnulandoId(null)
+      setProcesandoId(null)
+    }
+  }
+
+  async function eliminarVenta(venta) {
+    const confirmacion = await Swal.fire({
+      title: "¿Eliminar esta venta?",
+      html: `
+        <p>Se borrará de forma permanente y ya no se verá en el historial.</p>
+        <p class="mt-2 text-red-600 font-bold">No devuelve stock. No se puede deshacer.</p>
+        <p class="mt-2">Total: S/ ${venta.total}</p>
+      `,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#ef4444",
+    })
+
+    if (!confirmacion.isConfirmed) return
+
+    try {
+      setProcesandoId(venta.id)
+
+      await deleteDoc(doc(db, "ventas", venta.id))
+
+      setVentas((lista) => lista.filter((v) => v.id !== venta.id))
+
+      Swal.fire({
+        icon: "success",
+        title: "Venta eliminada",
+        timer: 1500,
+        showConfirmButton: false,
+      })
+
+    } catch (error) {
+      console.log(error)
+
+      Swal.fire({
+        icon: "error",
+        title: "Error al eliminar",
+        text: error.message,
+      })
+    } finally {
+      setProcesandoId(null)
     }
   }
 
@@ -242,7 +293,8 @@ function HistorialVentas() {
         </h1>
 
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
-          Registro completo de ventas. Puedes anular una venta para devolver el stock.
+          <strong>Anular</strong> devuelve el stock y deja la venta marcada.
+          <strong> Eliminar</strong> la borra para siempre.
         </p>
       </div>
 
@@ -322,17 +374,30 @@ function HistorialVentas() {
                   {!venta.anulada && (
                     <button
                       onClick={() => anularVenta(venta)}
-                      disabled={anulandoId === venta.id}
+                      disabled={procesandoId === venta.id}
                       className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-white transition ${
-                        anulandoId === venta.id
+                        procesandoId === venta.id
                           ? "bg-slate-400"
-                          : "bg-red-600 hover:bg-red-700"
+                          : "bg-orange-600 hover:bg-orange-700"
                       }`}
                     >
                       <Ban size={18} />
-                      {anulandoId === venta.id ? "Anulando..." : "Anular venta"}
+                      Anular
                     </button>
                   )}
+
+                  <button
+                    onClick={() => eliminarVenta(venta)}
+                    disabled={procesandoId === venta.id}
+                    className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-white transition ${
+                      procesandoId === venta.id
+                        ? "bg-slate-400"
+                        : "bg-red-600 hover:bg-red-700"
+                    }`}
+                  >
+                    <Trash2 size={18} />
+                    Eliminar
+                  </button>
                 </div>
 
               </div>
