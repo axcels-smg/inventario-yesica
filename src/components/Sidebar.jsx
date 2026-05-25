@@ -63,10 +63,12 @@ function Sidebar({ onNavigate }) {
     <div
       className="
         w-[300px]
-        min-h-screen
+        h-full
         flex
         flex-col
         p-6
+        pt-14
+        lg:pt-6
         text-white
         bg-gradient-to-b
         from-slate-950
@@ -74,26 +76,22 @@ function Sidebar({ onNavigate }) {
         to-slate-900
         border-r
         border-slate-800
-        overflow-y-auto
       "
     >
 
-      {/* LOGO */}
-      <div className="mb-10">
-        <h1 className="text-4xl font-black leading-tight">
+      <div className="shrink-0 mb-6">
+        <h1 className="text-3xl lg:text-4xl font-black leading-tight">
           <span className="text-blue-500">Inventario</span>
           <br />
           Yesica
         </h1>
 
-        <p className="text-slate-400 mt-3 text-sm tracking-wide">
+        <p className="text-slate-400 mt-2 text-sm tracking-wide">
           Sistema de gestión profesional
         </p>
       </div>
 
-      {/* MENU */}
-      <nav className="flex flex-col gap-3">
-
+      <nav className="flex-1 overflow-y-auto flex flex-col gap-2 min-h-0 pr-1 -mr-1">
         {links.map((link) => (
           <NavLink
             key={link.path}
@@ -105,13 +103,14 @@ function Sidebar({ onNavigate }) {
                 items-center
                 gap-4
                 px-5
-                py-4
+                py-3
                 rounded-2xl
                 text-base
                 font-medium
                 transition-all
                 duration-200
                 group
+                shrink-0
 
                 ${
                   isActive
@@ -119,69 +118,39 @@ function Sidebar({ onNavigate }) {
                       bg-blue-600
                       shadow-lg
                       shadow-blue-500/20
-                      scale-[1.02]
                     `
                     : `
                       hover:bg-slate-800/60
-                      hover:translate-x-1
                     `
                 }
               `
             }
           >
-            <span
-              className="
-                text-slate-300
-                group-hover:text-white
-                transition
-              "
-            >
+            <span className="text-slate-300 group-hover:text-white transition shrink-0">
               {link.icon}
             </span>
 
             <span className="flex-1">{link.name}</span>
+
             {link.path === "/reportes" && stockBajoCantidad > 0 && (
-              <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[22px] text-center">
+              <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[22px] text-center shrink-0">
                 {stockBajoCantidad > 99 ? "99+" : stockBajoCantidad}
               </span>
             )}
           </NavLink>
         ))}
-
       </nav>
 
-      {/* FOOTER */}
-      <div className="mt-auto pt-6">
-
-        {/* THEME BUTTON */}
-        <div className="mb-6">
+      <div className="shrink-0 pt-4 mt-2 border-t border-slate-800">
+        <div className="mb-4">
           <ThemeButton />
         </div>
 
-        {/* CARD INFO */}
-        <div
-          className="
-            bg-slate-900/60
-            border
-            border-slate-800
-            rounded-2xl
-            p-4
-            backdrop-blur
-          "
-        >
-          <p className="text-slate-400 text-sm">
-            Inventario Yesica
-          </p>
-
-          <h3 className="text-2xl font-bold mt-1 text-white">
-            Versión PRO
-          </h3>
-
-          <p className="text-slate-500 text-xs mt-2">
-            Sistema SaaS en desarrollo
-          </p>
+        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
+          <p className="text-slate-400 text-sm">Inventario Yesica</p>
+          <h3 className="text-xl font-bold mt-1 text-white">Versión PRO</h3>
+          <p className="text-slate-500 text-xs mt-1">8 módulos activos</p>
         </div>
-
       </div>
     </div>
   )
