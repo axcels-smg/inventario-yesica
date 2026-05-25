@@ -19,7 +19,7 @@ export function enlaceWhatsAppStockBajo(productos, telefono) {
     )
     .join("\n")
 
-  const texto = `⚠️ *Alerta stock bajo* — Inventario Yesica\n\n${lista}\n\nReponer inventario pronto.`
+  const texto = `⚠️ *Alerta stock bajo* — Inventario G.R.L.\n\n${lista}\n\nReponer inventario pronto.`
 
   if (!numero) {
     return `https://wa.me/?text=${encodeURIComponent(texto)}`
@@ -29,7 +29,7 @@ export function enlaceWhatsAppStockBajo(productos, telefono) {
 }
 
 export function enlaceEmailStockBajo(productos, correo = "") {
-  const asunto = encodeURIComponent("Alerta stock bajo - Inventario Yesica")
+  const asunto = encodeURIComponent("Alerta stock bajo - Inventario G.R.L.")
   const cuerpo = encodeURIComponent(
     `Productos con stock bajo:\n\n${productos
       .map((p) => `• ${p.marca} ${p.modelo}: ${p.stock}`)

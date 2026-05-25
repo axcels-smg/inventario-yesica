@@ -70,7 +70,7 @@ function MainLayout() {
                 Inventario
               </p>
               <h1 className="text-lg font-black text-slate-900 dark:text-white">
-                Yesica
+                G.R.L.
               </h1>
             </div>
           </div>

@@ -118,7 +118,7 @@ function Sidebar({ onNavigate }) {
         <h1 className="text-3xl lg:text-4xl font-black leading-tight">
           <span className="text-blue-500">Inventario</span>
           <br />
-          Yesica
+          G.R.L.
         </h1>
 
         <p className="text-slate-400 mt-2 text-sm tracking-wide">
@@ -242,7 +242,7 @@ function Sidebar({ onNavigate }) {
         </div>
 
         <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
-          <p className="text-slate-400 text-sm">Inventario Yesica</p>
+          <p className="text-slate-400 text-sm">Inventario G.R.L.</p>
           <h3 className="text-xl font-bold mt-1 text-white">Versión PRO</h3>
           <p className="text-slate-500 text-xs mt-1">9 módulos activos</p>
         </div>

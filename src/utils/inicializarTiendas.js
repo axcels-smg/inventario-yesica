@@ -9,7 +9,7 @@ export async function inicializarTiendas() {
       direccion: "Av. Principal 123, Lima",
       ruc: "20600000001",
       telefono: "+51 999 888 777",
-      email: "central@inventarioyesica.com",
+      email: "central@inventariogrl.com",
       activo: true,
     },
     {
@@ -18,7 +18,7 @@ export async function inicializarTiendas() {
       direccion: "Jr. Los Olivos 456, Lima",
       ruc: "20600000002",
       telefono: "+51 999 777 666",
-      email: "norte@inventarioyesica.com",
+      email: "norte@inventariogrl.com",
       activo: true,
     },
     {
@@ -27,7 +27,7 @@ export async function inicializarTiendas() {
       direccion: "Av. Sur 789, Lima",
       ruc: "20600000003",
       telefono: "+51 999 666 555",
-      email: "sur@inventarioyesica.com",
+      email: "sur@inventariogrl.com",
       activo: true,
     },
   ]
