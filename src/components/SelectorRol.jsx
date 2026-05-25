@@ -44,8 +44,8 @@ function SelectorRol() {
           className="fixed bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl shadow-2xl z-[99999]"
           style={{
             top: buttonRect.bottom + 8,
-            left: buttonRect.left,
-            width: Math.max(250, buttonRect.width),
+            left: Math.max(8, Math.min(buttonRect.left, window.innerWidth - 260)),
+            width: '250px',
           }}
         >
           {Object.values(ROLES_USUARIO).map((rol) => (
