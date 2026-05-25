@@ -78,14 +78,50 @@ function Productos() {
     setStock("")
   }
 
+  function cambiarPrecio(valor) {
+    if (/^\d*\.?\d*$/.test(valor)) {
+      setPrecio(valor)
+    }
+  }
+
+  function cambiarStock(valor) {
+    if (/^\d*$/.test(valor)) {
+      setStock(valor)
+    }
+  }
+
   // GUARDAR / EDITAR
   async function agregarProducto(e) {
     e.preventDefault()
 
-    if (!marca || !categoria || !modelo || !precio || !stock) {
+    const marcaLimpia = marca.trim()
+    const categoriaLimpia = categoria.trim()
+    const modeloLimpio = modelo.trim()
+    const precioNumero = Number(precio)
+    const stockNumero = Number(stock)
+
+    if (!marcaLimpia || !categoriaLimpia || !modeloLimpio || precio === "" || stock === "") {
       Swal.fire({
         icon: "warning",
         title: "Campos incompletos",
+      })
+      return
+    }
+
+    if (Number.isNaN(precioNumero) || precioNumero < 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "Precio invalido",
+        text: "El precio solo puede contener numeros",
+      })
+      return
+    }
+
+    if (!Number.isInteger(stockNumero) || stockNumero < 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "Stock invalido",
+        text: "El stock solo puede contener numeros enteros",
       })
       return
     }
@@ -95,11 +131,11 @@ function Productos() {
       if (editandoId) {
 
         await updateDoc(doc(db, "productos", editandoId), {
-          marca,
-          categoria,
-          modelo,
-          precio,
-          stock,
+          marca: marcaLimpia,
+          categoria: categoriaLimpia,
+          modelo: modeloLimpio,
+          precio: precioNumero,
+          stock: stockNumero,
         })
 
         Swal.fire({
@@ -112,11 +148,11 @@ function Productos() {
       } else {
 
         await addDoc(collection(db, "productos"), {
-          marca,
-          categoria,
-          modelo,
-          precio,
-          stock,
+          marca: marcaLimpia,
+          categoria: categoriaLimpia,
+          modelo: modeloLimpio,
+          precio: precioNumero,
+          stock: stockNumero,
         })
 
         Swal.fire({
@@ -182,11 +218,20 @@ function Productos() {
   }
 
   // FILTRO
-  const productosFiltrados = productos.filter((p) =>
-    `${p.marca} ${p.modelo} ${p.categoria}`
+  const terminosBusqueda = busqueda
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  const productosFiltrados = productos.filter((p) => {
+    const textoProducto = `${p.marca || ""} ${p.modelo || ""} ${p.categoria || ""}`
       .toLowerCase()
-      .includes(busqueda.toLowerCase())
-  )
+
+    return terminosBusqueda.every((termino) =>
+      textoProducto.includes(termino)
+    )
+  })
 
   return (
     <div className="space-y-8">
@@ -330,8 +375,20 @@ function Productos() {
           <input value={marca} onChange={(e) => setMarca(e.target.value)} placeholder="Marca" />
           <input value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Categoría" />
           <input value={modelo} onChange={(e) => setModelo(e.target.value)} placeholder="Modelo" />
-          <input value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="Precio" />
-          <input value={stock} onChange={(e) => setStock(e.target.value)} placeholder="Stock" />
+          <input
+            value={precio}
+            onChange={(e) => cambiarPrecio(e.target.value)}
+            placeholder="Precio"
+            inputMode="decimal"
+            type="text"
+          />
+          <input
+            value={stock}
+            onChange={(e) => cambiarStock(e.target.value)}
+            placeholder="Stock"
+            inputMode="numeric"
+            type="text"
+          />
 
           <button className="bg-blue-600 text-white py-3 rounded-xl">
             Guardar
