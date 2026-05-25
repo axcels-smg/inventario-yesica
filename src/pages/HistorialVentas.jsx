@@ -18,7 +18,7 @@ import { FileDown, Receipt, Ban, Trash2, Printer } from "lucide-react"
 import { formatearFecha, obtenerTiempoFecha } from "../utils/fechas"
 import { formatearNumeroBoleta } from "../utils/boleta"
 import { registrarMovimiento } from "../utils/movimientos"
-import { TIPOS_MOVIMIENTO } from "../constants/inventario"
+import { TIPOS_MOVIMIENTO, DATOS_NEGOCIO } from "../constants/inventario"
 import { imprimirBoleta } from "../utils/impresion"
 
 function HistorialVentas() {
@@ -249,68 +249,155 @@ function HistorialVentas() {
     }
 
     const pdf = new jsPDF()
-
-    let y = 20
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const margin = 20
+    let y = margin
 
     const numeroBoleta =
       venta.numeroBoleta != null
         ? formatearNumeroBoleta(venta.numeroBoleta)
         : ""
 
-    pdf.setFontSize(20)
-    pdf.text(venta.anulada ? "BOLETA ANULADA" : "BOLETA DE VENTA", 20, y)
+    // Encabezado del negocio
+    pdf.setFontSize(22)
+    pdf.setFont("helvetica", "bold")
+    pdf.text(DATOS_NEGOCIO.nombre, pageWidth / 2, y, { align: "center" })
+    y += 10
 
+    pdf.setFontSize(10)
+    pdf.setFont("helvetica", "normal")
+    pdf.text(DATOS_NEGOCIO.direccion, pageWidth / 2, y, { align: "center" })
+    y += 6
+
+    pdf.text(`Tel: ${DATOS_NEGOCIO.telefono}`, pageWidth / 2, y, { align: "center" })
+    y += 6
+
+    pdf.setFont("helvetica", "bold")
+    pdf.text(`RUC: ${DATOS_NEGOCIO.ruc}`, pageWidth / 2, y, { align: "center" })
     y += 12
+
+    // Línea separadora
+    pdf.setDrawColor(0)
+    pdf.setLineWidth(0.5)
+    pdf.line(margin, y, pageWidth - margin, y)
+    y += 12
+
+    // Título de boleta
+    pdf.setFontSize(18)
+    pdf.setFont("helvetica", "bold")
+    pdf.text(venta.anulada ? "BOLETA ANULADA" : "BOLETA DE VENTA", pageWidth / 2, y, { align: "center" })
+    y += 10
 
     if (numeroBoleta) {
       pdf.setFontSize(14)
-      pdf.text(`N° ${numeroBoleta}`, 20, y)
-      y += 10
-    }
-
-    pdf.setFontSize(12)
-    pdf.text(`Cliente: ${venta.cliente}`, 20, y)
-    y += 8
-
-    pdf.text(`Teléfono: ${venta.telefono}`, 20, y)
-    y += 8
-
-    pdf.text(`Fecha: ${formatearFecha(venta.fecha || venta.fechaTexto)}`, 20, y)
-    y += 8
-
-    if (venta.anulada) {
-      pdf.text(
-        `Anulada: ${formatearFecha(venta.fechaAnulacion || venta.fechaAnulacionTexto)}`,
-        20,
-        y
-      )
+      pdf.text(`N° ${numeroBoleta}`, pageWidth / 2, y, { align: "center" })
       y += 8
     }
 
-    y += 4
+    pdf.setFontSize(11)
+    pdf.setFont("helvetica", "normal")
+    pdf.text(`Fecha: ${formatearFecha(venta.fecha || venta.fechaTexto)}`, pageWidth / 2, y, { align: "center" })
+    y += 12
 
+    // Información del cliente
+    pdf.setDrawColor(200)
+    pdf.setLineWidth(0.3)
+    pdf.roundedRect(margin, y, pageWidth - 2 * margin, 25, 3, 3, "S")
+    y += 8
+
+    pdf.setFontSize(11)
+    pdf.setFont("helvetica", "bold")
+    pdf.text("CLIENTE:", margin + 5, y)
+    y += 6
+
+    pdf.setFont("helvetica", "normal")
+    pdf.text(venta.cliente || "Consumidor Final", margin + 5, y)
+    y += 6
+
+    if (venta.telefono) {
+      pdf.text(`Teléfono: ${venta.telefono}`, margin + 5, y)
+      y += 6
+    }
+
+    if (venta.anulada) {
+      pdf.setFont("helvetica", "bold")
+      pdf.setTextColor(255, 0, 0)
+      pdf.text(`ANULADA: ${formatearFecha(venta.fechaAnulacion || venta.fechaAnulacionTexto)}`, margin + 5, y)
+      pdf.setTextColor(0, 0, 0)
+      y += 8
+    }
+
+    y += 8
+
+    // Tabla de productos
     pdf.setFontSize(14)
-    pdf.text("PRODUCTOS", 20, y)
+    pdf.setFont("helvetica", "bold")
+    pdf.text("DETALLE DE PRODUCTOS", margin, y)
     y += 10
 
+    // Encabezado de tabla
+    pdf.setFillColor(240, 240, 240)
+    pdf.rect(margin, y, pageWidth - 2 * margin, 8, "F")
+    y += 6
+
+    pdf.setFontSize(10)
+    pdf.setFont("helvetica", "bold")
+    pdf.text("PRODUCTO", margin + 5, y)
+    pdf.text("CANT.", margin + 100, y)
+    pdf.text("SUBTOTAL", margin + 140, y)
+    y += 8
+
+    // Filas de productos
+    pdf.setFont("helvetica", "normal")
     venta.productos.forEach((producto) => {
       const subtotal = Number(producto.precio) * producto.cantidad
+      const nombreProducto = `${producto.marca || producto.nombre} ${producto.modelo || ""}`.trim()
 
-      pdf.setFontSize(11)
-
-      pdf.text(`${producto.marca || producto.nombre}`, 20, y)
-      pdf.text(`Cant: ${producto.cantidad}`, 100, y)
-      pdf.text(`S/ ${subtotal}`, 150, y)
-
+      pdf.text(nombreProducto.substring(0, 35), margin + 5, y)
+      pdf.text(String(producto.cantidad), margin + 105, y)
+      pdf.text(`S/ ${subtotal.toFixed(2)}`, margin + 140, y)
       y += 8
     })
 
     y += 10
 
-    pdf.setFontSize(16)
-    pdf.text(`TOTAL: S/ ${venta.total}`, 20, y)
+    // Total
+    pdf.setDrawColor(0)
+    pdf.setLineWidth(0.5)
+    pdf.line(margin, y, pageWidth - margin, y)
+    y += 10
 
-    pdf.save(`venta-${venta.id}.pdf`)
+    pdf.setFontSize(20)
+    pdf.setFont("helvetica", "bold")
+    pdf.text(`TOTAL: S/ ${Number(venta.total).toFixed(2)}`, pageWidth - margin, y, { align: "right" })
+    y += 15
+
+    // Pie de página
+    pdf.setFontSize(9)
+    pdf.setFont("helvetica", "normal")
+    pdf.text(DATOS_NEGOCIO.nombre, pageWidth / 2, y, { align: "center" })
+    y += 5
+
+    pdf.text(DATOS_NEGOCIO.direccion, pageWidth / 2, y, { align: "center" })
+    y += 5
+
+    pdf.text(`RUC: ${DATOS_NEGOCIO.ruc}`, pageWidth / 2, y, { align: "center" })
+    y += 5
+
+    pdf.text(`Tel: ${DATOS_NEGOCIO.telefono}`, pageWidth / 2, y, { align: "center" })
+    y += 5
+
+    pdf.text(DATOS_NEGOCIO.email, pageWidth / 2, y, { align: "center" })
+    y += 8
+
+    pdf.setFont("helvetica", "bold")
+    pdf.text("¡Gracias por su compra!", pageWidth / 2, y, { align: "center" })
+    y += 5
+
+    pdf.setFont("helvetica", "normal")
+    pdf.text(DATOS_NEGOCIO.sitioWeb, pageWidth / 2, y, { align: "center" })
+
+    pdf.save(`boleta-${numeroBoleta || venta.id.slice(0, 6)}.pdf`)
   }
 
   return (
