@@ -5,6 +5,7 @@ import { History } from "lucide-react"
 import { db } from "../firebase"
 import { obtenerTiempoFecha } from "../utils/fechas"
 import { ETIQUETAS_MOVIMIENTO } from "../constants/inventario"
+import { useTienda } from "../context/TiendaContext"
 
 const COLORES_TIPO = {
   venta: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
@@ -12,25 +13,35 @@ const COLORES_TIPO = {
   reposicion: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
   edicion_stock: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300",
   importacion: "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300",
+  transferencia_salida: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  transferencia_entrada: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300",
 }
 
 function Movimientos() {
+  const { tiendaActual } = useTienda()
   const [movimientos, setMovimientos] = useState([])
   const [filtroTipo, setFiltroTipo] = useState("")
   const [cargando, setCargando] = useState(true)
 
   useEffect(() => {
-    cargarMovimientos()
-  }, [])
+    if (tiendaActual) {
+      cargarMovimientos()
+    }
+  }, [tiendaActual])
 
   async function cargarMovimientos() {
+    if (!tiendaActual) return
+
     try {
       setCargando(true)
       const snap = await getDocs(collection(db, "movimientos"))
       const lista = []
 
       snap.forEach((docu) => {
-        lista.push({ id: docu.id, ...docu.data() })
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          lista.push({ id: docu.id, ...data })
+        }
       })
 
       lista.sort(
@@ -90,19 +101,19 @@ function Movimientos() {
           <table className="w-full min-w-[800px]">
             <thead className="bg-slate-100 dark:bg-slate-800">
               <tr>
-                <th className="p-4 text-left">Fecha</th>
-                <th className="p-4 text-left">Tipo</th>
-                <th className="p-4 text-left">Producto</th>
-                <th className="p-4 text-left">Cantidad</th>
-                <th className="p-4 text-left">Stock</th>
-                <th className="p-4 text-left">Boleta / Cliente</th>
-                <th className="p-4 text-left">Detalle</th>
+                <th className="p-4 text-left dark:text-white">Fecha</th>
+                <th className="p-4 text-left dark:text-white">Tipo</th>
+                <th className="p-4 text-left dark:text-white">Producto</th>
+                <th className="p-4 text-left dark:text-white">Cantidad</th>
+                <th className="p-4 text-left dark:text-white">Stock</th>
+                <th className="p-4 text-left dark:text-white">Boleta / Cliente</th>
+                <th className="p-4 text-left dark:text-white">Detalle</th>
               </tr>
             </thead>
             <tbody>
               {cargando && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                  <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
                     Cargando...
                   </td>
                 </tr>
@@ -110,7 +121,7 @@ function Movimientos() {
 
               {!cargando && listaFiltrada.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                  <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
                     No hay movimientos registrados
                   </td>
                 </tr>
@@ -133,17 +144,17 @@ function Movimientos() {
                   <td className="p-4 font-medium dark:text-white">
                     {m.productoNombre || "—"}
                   </td>
-                  <td className="p-4">{m.cantidad ?? "—"}</td>
-                  <td className="p-4 text-sm">
+                  <td className="p-4 dark:text-white">{m.cantidad ?? "—"}</td>
+                  <td className="p-4 text-sm dark:text-white">
                     {m.stockAntes != null && m.stockDespues != null
                       ? `${m.stockAntes} → ${m.stockDespues}`
                       : "—"}
                   </td>
-                  <td className="p-4 text-sm">
+                  <td className="p-4 text-sm dark:text-white">
                     {m.numeroBoleta && <div>Boleta #{m.numeroBoleta}</div>}
                     {m.cliente && <div>{m.cliente}</div>}
                   </td>
-                  <td className="p-4 text-sm text-slate-500 max-w-[200px]">
+                  <td className="p-4 text-sm text-slate-500 dark:text-slate-400 max-w-[200px]">
                     {m.detalle || "—"}
                   </td>
                 </tr>

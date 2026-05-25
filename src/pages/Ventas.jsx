@@ -14,6 +14,8 @@ import { db } from "../firebase"
 import { obtenerSiguienteNumeroBoleta, formatearNumeroBoleta } from "../utils/boleta"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
+import { useTienda } from "../context/TiendaContext"
+import { useRol } from "../context/RolContext"
 
 import {
   filtrarProductos,
@@ -23,6 +25,8 @@ import {
 } from "../utils/productos"
 
 function Ventas() {
+  const { tiendaActual } = useTienda()
+  const { puedeAnularVentas } = useRol()
 
   const [productos, setProductos] = useState([])
   const [clientes, setClientes] = useState([])
@@ -36,11 +40,15 @@ function Ventas() {
   const [vendiendo, setVendiendo] = useState(false)
 
   useEffect(() => {
-    cargarProductos()
-    cargarClientes()
-  }, [])
+    if (tiendaActual) {
+      cargarProductos()
+      cargarClientes()
+    }
+  }, [tiendaActual])
 
   async function cargarProductos() {
+    if (!tiendaActual) return
+
     try {
       setCargandoProductos(true)
 
@@ -49,10 +57,13 @@ function Ventas() {
       const lista = []
 
       querySnapshot.forEach((docu) => {
-        lista.push({
-          id: docu.id,
-          ...docu.data(),
-        })
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          lista.push({
+            id: docu.id,
+            ...data,
+          })
+        }
       })
 
       setProductos(lista)
@@ -69,16 +80,21 @@ function Ventas() {
   }
 
   async function cargarClientes() {
+    if (!tiendaActual) return
+
     try {
       const querySnapshot = await getDocs(collection(db, "clientes"))
 
       const lista = []
 
       querySnapshot.forEach((docu) => {
-        lista.push({
-          id: docu.id,
-          ...docu.data(),
-        })
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          lista.push({
+            id: docu.id,
+            ...data,
+          })
+        }
       })
 
       lista.sort((a, b) =>
@@ -319,6 +335,7 @@ function Ventas() {
           numeroBoleta,
           fecha: serverTimestamp(),
           fechaTexto: new Date().toLocaleString("es-PE"),
+          tiendaId: tiendaActual.id,
         })
       })
 
@@ -330,6 +347,7 @@ function Ventas() {
           numeroBoleta: formatearNumeroBoleta(numeroBoleta),
           cliente: clienteData?.nombre || "",
           detalle: `Venta boleta #${formatearNumeroBoleta(numeroBoleta)}`,
+          tiendaId: tiendaActual.id,
         })
       }
 
@@ -437,7 +455,7 @@ function Ventas() {
             </div>
 
             {busquedaLista && totalCoincidencias > 0 && (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 Mostrando {productosMostrar.length} de {totalCoincidencias} resultados
                 {hayMasResultados && " (refina la búsqueda para ver más exacto)"}
               </p>
@@ -447,23 +465,23 @@ function Ventas() {
           <div className="flex flex-col gap-4 max-h-[520px] overflow-y-auto">
 
             {cargandoProductos && (
-              <p className="text-slate-500 text-center py-8">
+              <p className="text-slate-500 dark:text-slate-400 text-center py-8">
                 Cargando catálogo...
               </p>
             )}
 
             {!cargandoProductos && !busquedaLista && (
-              <div className="text-center py-10 text-slate-500 border border-dashed dark:border-slate-700 rounded-2xl">
+              <div className="text-center py-10 text-slate-500 dark:text-slate-400 border border-dashed dark:border-slate-700 rounded-2xl">
                 <PackageSearch className="mx-auto mb-3 opacity-40" size={40} />
-                <p className="font-medium">Escribe para buscar un producto</p>
-                <p className="text-sm mt-1">
+                <p className="font-medium dark:text-white">Escribe para buscar un producto</p>
+                <p className="text-sm mt-1 dark:text-slate-300">
                   Mínimo {MIN_CARACTERES_BUSQUEDA} caracteres
                 </p>
               </div>
             )}
 
             {!cargandoProductos && busquedaLista && productosMostrar.length === 0 && (
-              <p className="text-slate-500 text-center py-8">
+              <p className="text-slate-500 dark:text-slate-400 text-center py-8">
                 No se encontraron productos
               </p>
             )}
@@ -485,7 +503,7 @@ function Ventas() {
                     {p.marca}
                   </h3>
 
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     {p.categoria}
                   </p>
 
@@ -495,7 +513,7 @@ function Ventas() {
                     S/ {p.precio}
                   </p>
 
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-slate-400 dark:text-slate-500">
                     Stock: {p.stock}
                   </p>
                 </div>
@@ -542,7 +560,7 @@ function Ventas() {
           <div className="flex flex-col gap-4">
 
             {carrito.length === 0 && (
-              <p className="text-slate-500 text-center">
+              <p className="text-slate-500 dark:text-slate-400 text-center">
                 Agrega productos para iniciar una venta
               </p>
             )}
@@ -553,11 +571,11 @@ function Ventas() {
                 <div className="flex justify-between gap-4">
                   <div>
                     <p className="font-bold dark:text-white">{item.marca}</p>
-                    <p className="text-sm text-slate-500">{item.modelo}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{item.modelo}</p>
                     {item.codigo && (
-                      <p className="text-xs text-slate-400 font-mono">{item.codigo}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">{item.codigo}</p>
                     )}
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
                       Stock: {obtenerStockProducto(item.id)}
                     </p>
                   </div>

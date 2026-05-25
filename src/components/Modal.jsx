@@ -14,7 +14,7 @@ function Modal({ isOpen, onClose, children }) {
         <div className="flex justify-end mb-4">
           <button
             onClick={onClose}
-            className="text-slate-500 hover:text-red-500 text-2xl font-bold"
+            className="text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 text-2xl font-bold"
           >
             ×
           </button>

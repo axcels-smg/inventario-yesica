@@ -28,8 +28,12 @@ import {
 } from "../utils/productos"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
+import { useTienda } from "../context/TiendaContext"
+import { useRol } from "../context/RolContext"
 
 function Productos() {
+  const { tiendaActual } = useTienda()
+  const { puedeEditarProductos, puedeEliminarProductos, puedeCrearProductos } = useRol()
 
   // PRODUCTOS
   const [productos, setProductos] = useState([])
@@ -59,11 +63,15 @@ function Productos() {
   const [reponiendo, setReponiendo] = useState(false)
 
   useEffect(() => {
-    obtenerProductos()
-  }, [])
+    if (tiendaActual) {
+      obtenerProductos()
+    }
+  }, [tiendaActual])
 
   // OBTENER
   async function obtenerProductos() {
+    if (!tiendaActual) return
+
     try {
       setCargando(true)
       const querySnapshot = await getDocs(collection(db, "productos"))
@@ -71,10 +79,13 @@ function Productos() {
       const lista = []
 
       querySnapshot.forEach((docu) => {
-        lista.push({
-          id: docu.id,
-          ...docu.data(),
-        })
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          lista.push({
+            id: docu.id,
+            ...data,
+          })
+        }
       })
 
       setProductos(lista)
@@ -181,6 +192,7 @@ function Productos() {
         stockAntes: Number(productoReponer.stock),
         stockDespues: Number(productoReponer.stock) + cantidad,
         detalle: `Reposición +${cantidad} unidades`,
+        tiendaId: tiendaActual.id,
       })
 
       Swal.fire({
@@ -268,6 +280,7 @@ function Productos() {
             stockAntes: stockAnterior,
             stockDespues: stockNumero,
             detalle: "Edición manual de stock",
+            tiendaId: tiendaActual.id,
           })
         }
 
@@ -287,6 +300,7 @@ function Productos() {
           codigo: codigoLimpio,
           precio: precioNumero,
           stock: stockNumero,
+          tiendaId: tiendaActual.id,
         })
 
         Swal.fire({
@@ -404,7 +418,7 @@ function Productos() {
           <h1 className="text-5xl font-black text-slate-800 dark:text-white">
             Productos
           </h1>
-          <p className="text-slate-500 mt-2">
+          <p className="text-slate-500 dark:text-slate-400 mt-2">
             {productos.length} productos en catálogo — {PRODUCTOS_POR_PAGINA} por página
           </p>
         </div>
@@ -452,13 +466,13 @@ function Productos() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
         <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl">
-          <p>Total</p>
-          <h2 className="text-3xl font-black">{productos.length}</h2>
+          <p className="text-slate-500 dark:text-slate-400">Total</p>
+          <h2 className="text-3xl font-black dark:text-white">{productos.length}</h2>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl">
-          <p>Stock total</p>
-          <h2 className="text-3xl font-black">
+          <p className="text-slate-500 dark:text-slate-400">Stock total</p>
+          <h2 className="text-3xl font-black dark:text-white">
             {productos.reduce((a, b) => a + Number(b.stock), 0)}
           </h2>
         </div>
@@ -488,7 +502,7 @@ function Productos() {
       <div className="bg-white dark:bg-slate-900 rounded-3xl overflow-hidden">
 
         {productosFiltrados.length > 0 && (
-          <p className="p-4 text-sm text-slate-500 border-b dark:border-slate-800">
+          <p className="p-4 text-sm text-slate-500 dark:text-slate-400 border-b dark:border-slate-800">
             Mostrando {indiceDesde}–{indiceHasta} de {productosFiltrados.length}
             {productosFiltrados.length !== productos.length &&
               ` (filtrado de ${productos.length})`}
@@ -499,13 +513,13 @@ function Productos() {
 
           <thead className="bg-slate-100 dark:bg-slate-800">
             <tr>
-              <th className="p-4 text-left">Código</th>
-              <th className="p-4 text-left">Marca</th>
-              <th className="p-4 text-left">Categoría</th>
-              <th className="p-4 text-left">Modelo</th>
-              <th className="p-4 text-left">Precio</th>
-              <th className="p-4 text-left">Stock</th>
-              <th className="p-4 text-left">Acciones</th>
+              <th className="p-4 text-left dark:text-white">Código</th>
+              <th className="p-4 text-left dark:text-white">Marca</th>
+              <th className="p-4 text-left dark:text-white">Categoría</th>
+              <th className="p-4 text-left dark:text-white">Modelo</th>
+              <th className="p-4 text-left dark:text-white">Precio</th>
+              <th className="p-4 text-left dark:text-white">Stock</th>
+              <th className="p-4 text-left dark:text-white">Acciones</th>
             </tr>
           </thead>
 
@@ -513,7 +527,7 @@ function Productos() {
 
             {cargando && (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-slate-500">
+                <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
                   Cargando productos...
                 </td>
               </tr>
@@ -521,7 +535,7 @@ function Productos() {
 
             {!cargando && productosPagina.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-slate-500">
+                <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
                   No hay productos para mostrar
                 </td>
               </tr>
@@ -534,19 +548,19 @@ function Productos() {
                   {p.codigo || "—"}
                 </td>
 
-                <td className="p-4 font-bold">{p.marca}</td>
+                <td className="p-4 font-bold dark:text-white">{p.marca}</td>
 
                 <td className="p-4">
-                  <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm">
+                  <span className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm">
                     {p.categoria}
                   </span>
                 </td>
 
-                <td className="p-4">{p.modelo}</td>
+                <td className="p-4 dark:text-white">{p.modelo}</td>
 
-                <td className="p-4 font-bold">S/ {p.precio}</td>
+                <td className="p-4 font-bold dark:text-white">S/ {p.precio}</td>
 
-                <td className="p-4">{p.stock}</td>
+                <td className="p-4 dark:text-white">{p.stock}</td>
 
                 <td className="p-4 flex gap-2">
 
@@ -559,23 +573,27 @@ function Productos() {
                     <PackagePlus size={18} />
                   </button>
 
-                  <button
-                    onClick={() => editarProducto(p)}
-                    className="bg-yellow-500 text-white p-2 rounded-xl"
-                    title="Editar"
-                    aria-label="Editar producto"
-                  >
-                    <Pencil size={18} />
-                  </button>
+                  {puedeEditarProductos() && (
+                    <button
+                      onClick={() => editarProducto(p)}
+                      className="bg-yellow-500 text-white p-2 rounded-xl"
+                      title="Editar"
+                      aria-label="Editar producto"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => eliminarProducto(p.id)}
-                    className="bg-red-500 text-white p-2 rounded-xl"
-                    title="Eliminar"
-                    aria-label="Eliminar producto"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  {puedeEliminarProductos() && (
+                    <button
+                      onClick={() => eliminarProducto(p.id)}
+                      className="bg-red-500 text-white p-2 rounded-xl"
+                      title="Eliminar"
+                      aria-label="Eliminar producto"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
 
                 </td>
 
@@ -619,7 +637,7 @@ function Productos() {
       {/* MODAL */}
       <Modal isOpen={modalAbierto} onClose={() => setModalAbierto(false)}>
 
-        <h2 className="text-2xl font-bold mb-4">
+        <h2 className="text-2xl font-bold mb-4 dark:text-white">
           {editandoId ? "Editar" : "Nuevo"}
         </h2>
 
@@ -666,9 +684,11 @@ function Productos() {
             className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
 
-          <button className="bg-blue-600 text-white py-3 rounded-xl">
-            Guardar
-          </button>
+          {puedeCrearProductos() && (
+            <button className="bg-blue-600 text-white py-3 rounded-xl">
+              Guardar
+            </button>
+          )}
 
         </form>
 

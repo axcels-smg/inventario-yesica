@@ -37,8 +37,10 @@ import {
 } from "../utils/whatsapp"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import AlertasStockAcumulativas from "../components/AlertasStockAcumulativas"
+import { useTienda } from "../context/TiendaContext"
 
 function Reportes() {
+  const { tiendaActual } = useTienda()
   const [ventas, setVentas] = useState([])
   const [productos, setProductos] = useState([])
   const [clientes, setClientes] = useState([])
@@ -51,13 +53,17 @@ function Reportes() {
   )
 
   useEffect(() => {
-    cargarDatos()
+    if (tiendaActual) {
+      cargarDatos()
+    }
     const { fechaDesde: d, fechaHasta: h } = obtenerRangoPreset("mes")
     setFechaDesde(d)
     setFechaHasta(h)
-  }, [])
+  }, [tiendaActual])
 
   async function cargarDatos() {
+    if (!tiendaActual) return
+
     const [snapVentas, snapProductos, snapClientes] = await Promise.all([
       getDocs(collection(db, "ventas")),
       getDocs(collection(db, "productos")),
@@ -65,17 +71,28 @@ function Reportes() {
     ])
 
     const listaVentas = []
-    snapVentas.forEach((d) => listaVentas.push({ id: d.id, ...d.data() }))
+    snapVentas.forEach((d) => {
+      const data = d.data()
+      if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+        listaVentas.push({ id: d.id, ...data })
+      }
+    })
 
     const listaProductos = []
-    snapProductos.forEach((d) =>
-      listaProductos.push({ id: d.id, ...d.data() })
-    )
+    snapProductos.forEach((d) => {
+      const data = d.data()
+      if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+        listaProductos.push({ id: d.id, ...data })
+      }
+    })
 
     const listaClientes = []
-    snapClientes.forEach((d) =>
-      listaClientes.push({ id: d.id, ...d.data() })
-    )
+    snapClientes.forEach((d) => {
+      const data = d.data()
+      if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+        listaClientes.push({ id: d.id, ...data })
+      }
+    })
     listaClientes.sort((a, b) =>
       String(a.nombre || "").localeCompare(String(b.nombre || ""))
     )
@@ -176,7 +193,7 @@ function Reportes() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="text-sm text-slate-500 block mb-1">Desde</label>
+            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Desde</label>
             <input
               type="date"
               value={fechaDesde}
@@ -185,7 +202,7 @@ function Reportes() {
             />
           </div>
           <div>
-            <label className="text-sm text-slate-500 block mb-1">Hasta</label>
+            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Hasta</label>
             <input
               type="date"
               value={fechaHasta}
@@ -194,7 +211,7 @@ function Reportes() {
             />
           </div>
           <div>
-            <label className="text-sm text-slate-500 block mb-1">Cliente</label>
+            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Cliente</label>
             <select
               value={clienteId}
               onChange={(e) => setClienteId(e.target.value)}
@@ -223,27 +240,27 @@ function Reportes() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
           <FileText className="text-blue-500" size={38} />
-          <p className="text-slate-500 mt-4">Ventas (filtro)</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-4">Ventas (filtro)</p>
           <h2 className="text-4xl font-black dark:text-white">
             {ventasFiltradas.length}
           </h2>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
           <DollarSign className="text-green-500" size={38} />
-          <p className="text-slate-500 mt-4">Ingresos (filtro)</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-4">Ingresos (filtro)</p>
           <h2 className="text-4xl font-black dark:text-white">
             S/ {ingresosFiltrados}
           </h2>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
           <AlertTriangle className="text-red-500" size={38} />
-          <p className="text-slate-500 mt-4">Stock bajo (≤{STOCK_BAJO_UMBRAL})</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-4">Stock bajo (≤{STOCK_BAJO_UMBRAL})</p>
           <h2 className="text-4xl font-black dark:text-white">
             {productosStockBajo.length}
           </h2>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
-          <p className="text-slate-500 mt-2">Clientes en filtro</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-2">Clientes en filtro</p>
           <h2 className="text-4xl font-black dark:text-white">
             {new Set(ventasFiltradas.map((v) => v.cliente)).size}
           </h2>

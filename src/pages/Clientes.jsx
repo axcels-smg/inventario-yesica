@@ -13,8 +13,12 @@ import {
   updateDoc,
 } from "firebase/firestore"
 import { obtenerTiempoFecha } from "../utils/fechas"
+import { useTienda } from "../context/TiendaContext"
+import { useRol } from "../context/RolContext"
 
 function Clientes() {
+  const { tiendaActual } = useTienda()
+  const { puedeEditarClientes, puedeEliminarClientes, puedeCrearClientes } = useRol()
 
   const [clientes, setClientes] = useState([])
 
@@ -26,20 +30,27 @@ function Clientes() {
   const [editandoId, setEditandoId] = useState(null)
 
   useEffect(() => {
-    cargarClientes()
-  }, [])
+    if (tiendaActual) {
+      cargarClientes()
+    }
+  }, [tiendaActual])
 
   async function cargarClientes() {
+    if (!tiendaActual) return
+
     try {
       const querySnapshot = await getDocs(collection(db, "clientes"))
 
       const lista = []
 
       querySnapshot.forEach((docu) => {
-        lista.push({
-          id: docu.id,
-          ...docu.data(),
-        })
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          lista.push({
+            id: docu.id,
+            ...data,
+          })
+        }
       })
 
       lista.sort((a, b) =>
@@ -103,6 +114,7 @@ function Clientes() {
           direccion: direccionLimpia,
           fecha: serverTimestamp(),
           fechaTexto: new Date().toLocaleString("es-PE"),
+          tiendaId: tiendaActual.id,
         })
       }
 
@@ -225,15 +237,17 @@ function Clientes() {
               className="p-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
 
-            <button className="bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition">
-              {editandoId ? "Actualizar Cliente" : "Guardar Cliente"}
-            </button>
+            {puedeCrearClientes() && (
+              <button className="bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition">
+                {editandoId ? "Actualizar Cliente" : "Guardar Cliente"}
+              </button>
+            )}
 
             {editandoId && (
               <button
                 type="button"
                 onClick={limpiarFormulario}
-                className="flex items-center justify-center gap-2 bg-slate-200 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-300 transition"
+                className="flex items-center justify-center gap-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-white py-4 rounded-2xl font-bold hover:bg-slate-300 dark:hover:bg-slate-700 transition"
               >
                 <X size={18} />
                 Cancelar edición
@@ -266,7 +280,7 @@ function Clientes() {
           <div className="flex flex-col gap-4">
 
             {clientesFiltrados.length === 0 && (
-              <p className="text-slate-500 text-center">
+              <p className="text-slate-500 dark:text-slate-400 text-center">
                 No hay clientes para mostrar
               </p>
             )}
@@ -282,27 +296,31 @@ function Clientes() {
                     {cliente.nombre}
                   </h3>
 
-                  <p className="text-slate-500">{cliente.telefono}</p>
-                  <p className="text-slate-500">{cliente.correo}</p>
-                  <p className="text-slate-400 text-sm">{cliente.direccion}</p>
+                  <p className="text-slate-500 dark:text-slate-400">{cliente.telefono}</p>
+                  <p className="text-slate-500 dark:text-slate-400">{cliente.correo}</p>
+                  <p className="text-slate-400 dark:text-slate-500 text-sm">{cliente.direccion}</p>
                 </div>
 
                 <div className="flex gap-2 self-end sm:self-auto">
-                  <button
-                    onClick={() => editarCliente(cliente)}
-                    className="flex items-center gap-2 bg-yellow-500 text-white px-4 py-3 rounded-2xl hover:bg-yellow-600 transition"
-                  >
-                    <Pencil size={18} />
-                    Editar
-                  </button>
+                  {puedeEditarClientes() && (
+                    <button
+                      onClick={() => editarCliente(cliente)}
+                      className="flex items-center gap-2 bg-yellow-500 text-white px-4 py-3 rounded-2xl hover:bg-yellow-600 transition"
+                    >
+                      <Pencil size={18} />
+                      Editar
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => eliminarCliente(cliente.id)}
-                    className="flex items-center gap-2 bg-red-500 text-white px-4 py-3 rounded-2xl hover:bg-red-600 transition"
-                  >
-                    <Trash2 size={18} />
-                    Eliminar
-                  </button>
+                  {puedeEliminarClientes() && (
+                    <button
+                      onClick={() => eliminarCliente(cliente.id)}
+                      className="flex items-center gap-2 bg-red-500 text-white px-4 py-3 rounded-2xl hover:bg-red-600 transition"
+                    >
+                      <Trash2 size={18} />
+                      Eliminar
+                    </button>
+                  )}
                 </div>
 
               </div>

@@ -20,27 +20,38 @@ import { formatearNumeroBoleta } from "../utils/boleta"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO, DATOS_NEGOCIO } from "../constants/inventario"
 import { imprimirBoleta } from "../utils/impresion"
+import { useTienda } from "../context/TiendaContext"
+import { useRol } from "../context/RolContext"
 
 function HistorialVentas() {
+  const { tiendaActual } = useTienda()
+  const { puedeAnularVentas, puedeEliminarVentas } = useRol()
 
   const [ventas, setVentas] = useState([])
   const [procesandoId, setProcesandoId] = useState(null)
 
   useEffect(() => {
-    cargarVentas()
-  }, [])
+    if (tiendaActual) {
+      cargarVentas()
+    }
+  }, [tiendaActual])
 
   async function cargarVentas() {
+    if (!tiendaActual) return
+
     try {
       const querySnapshot = await getDocs(collection(db, "ventas"))
 
       const listaVentas = []
 
       querySnapshot.forEach((docu) => {
-        listaVentas.push({
-          id: docu.id,
-          ...docu.data(),
-        })
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          listaVentas.push({
+            id: docu.id,
+            ...data,
+          })
+        }
       })
 
       listaVentas.sort((a, b) =>
@@ -168,6 +179,7 @@ function HistorialVentas() {
           numeroBoleta: metaAnulacion.numeroBoleta,
           cliente: metaAnulacion.cliente,
           detalle: `Anulación boleta #${metaAnulacion.numeroBoleta || venta.id.slice(0, 6)}`,
+          tiendaId: tiendaActual.id,
         })
       }
 
@@ -415,7 +427,7 @@ function HistorialVentas() {
       </div>
 
       {ventas.length === 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border dark:border-slate-800 p-10 text-center text-slate-500">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border dark:border-slate-800 p-10 text-center text-slate-500 dark:text-slate-400">
           No hay ventas registradas
         </div>
       )}
@@ -438,7 +450,7 @@ function HistorialVentas() {
 
                 <div className="flex flex-wrap items-center gap-2 text-slate-700 dark:text-white">
                   <Receipt size={20} />
-                  <h2 className="text-2xl font-bold">
+                  <h2 className="text-2xl font-bold dark:text-white">
                     {venta.numeroBoleta != null
                       ? `Boleta #${formatearNumeroBoleta(venta.numeroBoleta)}`
                       : `Venta #${venta.id.slice(0, 6)}`}
@@ -455,7 +467,7 @@ function HistorialVentas() {
                 </p>
 
                 {venta.anulada && (
-                  <p className="text-red-500 text-sm">
+                  <p className="text-red-500 dark:text-red-400 text-sm">
                     Anulada: {formatearFecha(venta.fechaAnulacion || venta.fechaAnulacionTexto)}
                   </p>
                 )}
@@ -464,7 +476,7 @@ function HistorialVentas() {
                   Cliente: {venta.cliente}
                 </p>
 
-                <p className="text-slate-500">
+                <p className="text-slate-500 dark:text-slate-400">
                   Tel: {venta.telefono}
                 </p>
 
@@ -497,7 +509,7 @@ function HistorialVentas() {
                     PDF
                   </button>
 
-                  {!venta.anulada && (
+                  {!venta.anulada && puedeAnularVentas() && (
                     <button
                       onClick={() => anularVenta(venta)}
                       disabled={procesandoId === venta.id}
@@ -512,18 +524,20 @@ function HistorialVentas() {
                     </button>
                   )}
 
-                  <button
-                    onClick={() => eliminarVenta(venta)}
-                    disabled={procesandoId === venta.id}
-                    className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-white transition ${
-                      procesandoId === venta.id
-                        ? "bg-slate-400"
-                        : "bg-red-600 hover:bg-red-700"
-                    }`}
-                  >
-                    <Trash2 size={18} />
-                    Eliminar
-                  </button>
+                  {puedeEliminarVentas() && (
+                    <button
+                      onClick={() => eliminarVenta(venta)}
+                      disabled={procesandoId === venta.id}
+                      className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-white transition ${
+                        procesandoId === venta.id
+                          ? "bg-slate-400"
+                          : "bg-red-600 hover:bg-red-700"
+                      }`}
+                    >
+                      <Trash2 size={18} />
+                      Eliminar
+                    </button>
+                  )}
                 </div>
 
               </div>
@@ -542,7 +556,7 @@ function HistorialVentas() {
                       {producto.marca || producto.nombre}
                     </h4>
 
-                    <p className="text-slate-500 text-sm">
+                    <p className="text-slate-500 dark:text-slate-400 text-sm">
                       Cantidad: {producto.cantidad}
                     </p>
                   </div>

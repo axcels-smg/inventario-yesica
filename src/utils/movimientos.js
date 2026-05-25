@@ -12,6 +12,7 @@ export async function registrarMovimiento({
   numeroBoleta = "",
   cliente = "",
   detalle = "",
+  tiendaId = "",
 }) {
   await addDoc(collection(db, "movimientos"), {
     tipo,
@@ -24,6 +25,7 @@ export async function registrarMovimiento({
     numeroBoleta: numeroBoleta ? String(numeroBoleta) : "",
     cliente,
     detalle,
+    tiendaId,
     fecha: serverTimestamp(),
     fechaTexto: new Date().toLocaleString("es-PE"),
   })

@@ -11,8 +11,10 @@ import {
 } from "../utils/excel"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
+import { useTienda } from "../context/TiendaContext"
 
 function InventarioExcel() {
+  const { tiendaActual } = useTienda()
   const inputRef = useRef(null)
   const [importando, setImportando] = useState(false)
   const [vistaPrevia, setVistaPrevia] = useState([])
@@ -103,6 +105,7 @@ function InventarioExcel() {
         tipo: TIPOS_MOVIMIENTO.IMPORTACION,
         detalle: `Importados ${importados} productos desde Excel`,
         cantidad: importados,
+        tiendaId: tiendaActual.id,
       })
 
       Swal.fire({
