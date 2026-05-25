@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import Modal from "../components/Modal"
 import Swal from "sweetalert2"
 
@@ -21,6 +21,12 @@ import {
   runTransaction,
 } from "firebase/firestore"
 
+import {
+  filtrarProductos,
+  obtenerValoresUnicos,
+  PRODUCTOS_POR_PAGINA,
+} from "../utils/productos"
+
 function Productos() {
 
   // PRODUCTOS
@@ -30,11 +36,16 @@ function Productos() {
   const [marca, setMarca] = useState("")
   const [categoria, setCategoria] = useState("")
   const [modelo, setModelo] = useState("")
+  const [codigo, setCodigo] = useState("")
   const [precio, setPrecio] = useState("")
   const [stock, setStock] = useState("")
 
-  // BUSQUEDA
+  // BUSQUEDA Y FILTROS
   const [busqueda, setBusqueda] = useState("")
+  const [filtroMarca, setFiltroMarca] = useState("")
+  const [filtroCategoria, setFiltroCategoria] = useState("")
+  const [paginaActual, setPaginaActual] = useState(1)
+  const [cargando, setCargando] = useState(true)
 
   // EDITAR
   const [editandoId, setEditandoId] = useState(null)
@@ -52,6 +63,7 @@ function Productos() {
   // OBTENER
   async function obtenerProductos() {
     try {
+      setCargando(true)
       const querySnapshot = await getDocs(collection(db, "productos"))
 
       const lista = []
@@ -72,14 +84,21 @@ function Productos() {
         icon: "error",
         title: "Error cargando productos",
       })
+    } finally {
+      setCargando(false)
     }
   }
+
+  useEffect(() => {
+    setPaginaActual(1)
+  }, [busqueda, filtroMarca, filtroCategoria])
 
   // LIMPIAR
   function limpiarFormulario() {
     setMarca("")
     setCategoria("")
     setModelo("")
+    setCodigo("")
     setPrecio("")
     setStock("")
   }
@@ -183,6 +202,7 @@ function Productos() {
     const marcaLimpia = marca.trim()
     const categoriaLimpia = categoria.trim()
     const modeloLimpio = modelo.trim()
+    const codigoLimpio = codigo.trim()
     const precioNumero = Number(precio)
     const stockNumero = Number(stock)
 
@@ -220,6 +240,7 @@ function Productos() {
           marca: marcaLimpia,
           categoria: categoriaLimpia,
           modelo: modeloLimpio,
+          codigo: codigoLimpio,
           precio: precioNumero,
           stock: stockNumero,
         })
@@ -237,6 +258,7 @@ function Productos() {
           marca: marcaLimpia,
           categoria: categoriaLimpia,
           modelo: modeloLimpio,
+          codigo: codigoLimpio,
           precio: precioNumero,
           stock: stockNumero,
         })
@@ -296,6 +318,7 @@ function Productos() {
     setMarca(producto.marca)
     setCategoria(producto.categoria)
     setModelo(producto.modelo)
+    setCodigo(producto.codigo || "")
     setPrecio(producto.precio)
     setStock(producto.stock)
 
@@ -303,21 +326,47 @@ function Productos() {
     setModalAbierto(true)
   }
 
-  // FILTRO
-  const terminosBusqueda = busqueda
-    .toLowerCase()
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
+  const marcas = useMemo(
+    () => obtenerValoresUnicos(productos, "marca"),
+    [productos]
+  )
 
-  const productosFiltrados = productos.filter((p) => {
-    const textoProducto = `${p.marca || ""} ${p.modelo || ""} ${p.categoria || ""}`
-      .toLowerCase()
+  const categorias = useMemo(
+    () => obtenerValoresUnicos(productos, "categoria"),
+    [productos]
+  )
 
-    return terminosBusqueda.every((termino) =>
-      textoProducto.includes(termino)
-    )
-  })
+  const productosFiltrados = useMemo(
+    () =>
+      filtrarProductos(productos, {
+        busqueda,
+        marca: filtroMarca,
+        categoria: filtroCategoria,
+      }),
+    [productos, busqueda, filtroMarca, filtroCategoria]
+  )
+
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(productosFiltrados.length / PRODUCTOS_POR_PAGINA)
+  )
+
+  const paginaSegura = Math.min(paginaActual, totalPaginas)
+
+  const productosPagina = productosFiltrados.slice(
+    (paginaSegura - 1) * PRODUCTOS_POR_PAGINA,
+    paginaSegura * PRODUCTOS_POR_PAGINA
+  )
+
+  const indiceDesde =
+    productosFiltrados.length === 0
+      ? 0
+      : (paginaSegura - 1) * PRODUCTOS_POR_PAGINA + 1
+
+  const indiceHasta = Math.min(
+    paginaSegura * PRODUCTOS_POR_PAGINA,
+    productosFiltrados.length
+  )
 
   return (
     <div className="space-y-8">
@@ -330,24 +379,46 @@ function Productos() {
             Productos
           </h1>
           <p className="text-slate-500 mt-2">
-            Gestiona tu inventario y repón stock cuando llegue mercadería
+            {productos.length} productos en catálogo — {PRODUCTOS_POR_PAGINA} por página
           </p>
         </div>
 
-        {/* SEARCH */}
-        <div className="relative">
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+          <select
+            value={filtroMarca}
+            onChange={(e) => setFiltroMarca(e.target.value)}
+            className="p-3 rounded-2xl border dark:bg-slate-900 dark:text-white min-w-[160px]"
+          >
+            <option value="">Todas las marcas</option>
+            {marcas.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
 
-          <PackageSearch
-            className="absolute left-4 top-4 text-slate-400"
-            size={20}
-          />
+          <select
+            value={filtroCategoria}
+            onChange={(e) => setFiltroCategoria(e.target.value)}
+            className="p-3 rounded-2xl border dark:bg-slate-900 dark:text-white min-w-[160px]"
+          >
+            <option value="">Todas las categorías</option>
+            {categorias.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
 
-          <input
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar..."
-            className="pl-12 pr-4 py-4 rounded-2xl border w-[300px] dark:bg-slate-900 dark:text-white"
-          />
+          <div className="relative flex-1 min-w-[220px]">
+            <PackageSearch
+              className="absolute left-4 top-4 text-slate-400"
+              size={20}
+            />
+
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Código, marca, modelo..."
+              className="w-full pl-12 pr-4 py-4 rounded-2xl border dark:bg-slate-900 dark:text-white"
+            />
+          </div>
         </div>
       </div>
 
@@ -390,10 +461,19 @@ function Productos() {
       {/* TABLE */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl overflow-hidden">
 
+        {productosFiltrados.length > 0 && (
+          <p className="p-4 text-sm text-slate-500 border-b dark:border-slate-800">
+            Mostrando {indiceDesde}–{indiceHasta} de {productosFiltrados.length}
+            {productosFiltrados.length !== productos.length &&
+              ` (filtrado de ${productos.length})`}
+          </p>
+        )}
+
         <table className="w-full">
 
           <thead className="bg-slate-100 dark:bg-slate-800">
             <tr>
+              <th className="p-4 text-left">Código</th>
               <th className="p-4 text-left">Marca</th>
               <th className="p-4 text-left">Categoría</th>
               <th className="p-4 text-left">Modelo</th>
@@ -405,8 +485,28 @@ function Productos() {
 
           <tbody>
 
-            {productosFiltrados.map((p) => (
+            {cargando && (
+              <tr>
+                <td colSpan={7} className="p-8 text-center text-slate-500">
+                  Cargando productos...
+                </td>
+              </tr>
+            )}
+
+            {!cargando && productosPagina.length === 0 && (
+              <tr>
+                <td colSpan={7} className="p-8 text-center text-slate-500">
+                  No hay productos para mostrar
+                </td>
+              </tr>
+            )}
+
+            {productosPagina.map((p) => (
               <tr key={p.id} className="border-t">
+
+                <td className="p-4 font-mono text-sm text-slate-600 dark:text-slate-400">
+                  {p.codigo || "—"}
+                </td>
 
                 <td className="p-4 font-bold">{p.marca}</td>
 
@@ -460,6 +560,34 @@ function Productos() {
 
         </table>
 
+        {totalPaginas > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-4 p-4 border-t dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
+              disabled={paginaSegura <= 1}
+              className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 disabled:opacity-40 dark:text-white"
+            >
+              Anterior
+            </button>
+
+            <span className="text-slate-600 dark:text-slate-400 font-medium">
+              Página {paginaSegura} de {totalPaginas}
+            </span>
+
+            <button
+              type="button"
+              onClick={() =>
+                setPaginaActual((p) => Math.min(totalPaginas, p + 1))
+              }
+              disabled={paginaSegura >= totalPaginas}
+              className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 disabled:opacity-40 dark:text-white"
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
+
       </div>
 
       {/* MODAL */}
@@ -471,15 +599,37 @@ function Productos() {
 
         <form onSubmit={agregarProducto} className="flex flex-col gap-3">
 
-          <input value={marca} onChange={(e) => setMarca(e.target.value)} placeholder="Marca" />
-          <input value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Categoría" />
-          <input value={modelo} onChange={(e) => setModelo(e.target.value)} placeholder="Modelo" />
+          <input
+            value={codigo}
+            onChange={(e) => setCodigo(e.target.value)}
+            placeholder="Código / SKU (opcional)"
+            className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+          <input
+            value={marca}
+            onChange={(e) => setMarca(e.target.value)}
+            placeholder="Marca"
+            className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+          <input
+            value={categoria}
+            onChange={(e) => setCategoria(e.target.value)}
+            placeholder="Categoría"
+            className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+          <input
+            value={modelo}
+            onChange={(e) => setModelo(e.target.value)}
+            placeholder="Modelo"
+            className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
           <input
             value={precio}
             onChange={(e) => cambiarPrecio(e.target.value)}
             placeholder="Precio"
             inputMode="decimal"
             type="text"
+            className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
           <input
             value={stock}
@@ -487,6 +637,7 @@ function Productos() {
             placeholder="Stock"
             inputMode="numeric"
             type="text"
+            className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
 
           <button className="bg-blue-600 text-white py-3 rounded-xl">

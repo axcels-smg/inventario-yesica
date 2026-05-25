@@ -12,14 +12,24 @@ import {
 
 import { db } from "../firebase"
 
+import {
+  filtrarProductos,
+  obtenerValoresUnicos,
+  MIN_CARACTERES_BUSQUEDA,
+  MAX_RESULTADOS_VENTAS,
+} from "../utils/productos"
+
 function Ventas() {
 
   const [productos, setProductos] = useState([])
   const [clientes, setClientes] = useState([])
+  const [cargandoProductos, setCargandoProductos] = useState(true)
 
   const [clienteSeleccionado, setClienteSeleccionado] = useState("")
   const [carrito, setCarrito] = useState([])
   const [busquedaProducto, setBusquedaProducto] = useState("")
+  const [filtroMarca, setFiltroMarca] = useState("")
+  const [filtroCategoria, setFiltroCategoria] = useState("")
   const [vendiendo, setVendiendo] = useState(false)
 
   useEffect(() => {
@@ -29,6 +39,8 @@ function Ventas() {
 
   async function cargarProductos() {
     try {
+      setCargandoProductos(true)
+
       const querySnapshot = await getDocs(collection(db, "productos"))
 
       const lista = []
@@ -48,6 +60,8 @@ function Ventas() {
         icon: "error",
         title: "Error cargando productos",
       })
+    } finally {
+      setCargandoProductos(false)
     }
   }
 
@@ -317,23 +331,24 @@ function Ventas() {
     }
   }
 
-  const terminosProducto = busquedaProducto
-    .toLowerCase()
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
+  const marcas = obtenerValoresUnicos(productos, "marca")
+  const categorias = obtenerValoresUnicos(productos, "categoria")
 
-  const productosFiltrados = productos.filter((producto) => {
-    const textoProducto = `
-      ${producto.marca || ""}
-      ${producto.modelo || ""}
-      ${producto.categoria || ""}
-    `.toLowerCase()
+  const busquedaLista = busquedaProducto.trim().length >= MIN_CARACTERES_BUSQUEDA
 
-    return terminosProducto.every((termino) =>
-      textoProducto.includes(termino)
-    )
+  const productosFiltrados = filtrarProductos(productos, {
+    busqueda: busquedaLista ? busquedaProducto : "",
+    marca: filtroMarca,
+    categoria: filtroCategoria,
   })
+
+  const totalCoincidencias = busquedaLista ? productosFiltrados.length : 0
+
+  const productosMostrar = busquedaLista
+    ? productosFiltrados.slice(0, MAX_RESULTADOS_VENTAS)
+    : []
+
+  const hayMasResultados = totalCoincidencias > MAX_RESULTADOS_VENTAS
 
   return (
     <div className="space-y-8">
@@ -344,7 +359,8 @@ function Ventas() {
         </h1>
 
         <p className="text-slate-500 dark:text-slate-400 mt-2">
-          Sistema de ventas profesional
+          Busca por código, marca o modelo (mín. {MIN_CARACTERES_BUSQUEDA} letras).
+          Catálogo: {productos.length} productos.
         </p>
       </div>
 
@@ -352,10 +368,34 @@ function Ventas() {
 
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6">
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div className="flex flex-col gap-4 mb-6">
             <h2 className="text-3xl font-bold dark:text-white">
-              Productos
+              Buscar producto
             </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <select
+                value={filtroMarca}
+                onChange={(e) => setFiltroMarca(e.target.value)}
+                className="p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              >
+                <option value="">Todas las marcas</option>
+                {marcas.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+
+              <select
+                value={filtroCategoria}
+                onChange={(e) => setFiltroCategoria(e.target.value)}
+                className="p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              >
+                <option value="">Todas las categorías</option>
+                {categorias.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
 
             <div className="relative">
               <PackageSearch
@@ -366,27 +406,56 @@ function Ventas() {
               <input
                 value={busquedaProducto}
                 onChange={(e) => setBusquedaProducto(e.target.value)}
-                placeholder="Buscar producto..."
-                className="w-full sm:w-[260px] pl-12 pr-4 py-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                placeholder="Código, marca, modelo..."
+                className="w-full pl-12 pr-4 py-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               />
             </div>
+
+            {busquedaLista && totalCoincidencias > 0 && (
+              <p className="text-sm text-slate-500">
+                Mostrando {productosMostrar.length} de {totalCoincidencias} resultados
+                {hayMasResultados && " (refina la búsqueda para ver más exacto)"}
+              </p>
+            )}
           </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 max-h-[520px] overflow-y-auto">
 
-            {productosFiltrados.length === 0 && (
-              <p className="text-slate-500 text-center">
-                No hay productos para mostrar
+            {cargandoProductos && (
+              <p className="text-slate-500 text-center py-8">
+                Cargando catálogo...
               </p>
             )}
 
-            {productosFiltrados.map((p) => (
+            {!cargandoProductos && !busquedaLista && (
+              <div className="text-center py-10 text-slate-500 border border-dashed dark:border-slate-700 rounded-2xl">
+                <PackageSearch className="mx-auto mb-3 opacity-40" size={40} />
+                <p className="font-medium">Escribe para buscar un producto</p>
+                <p className="text-sm mt-1">
+                  Mínimo {MIN_CARACTERES_BUSQUEDA} caracteres
+                </p>
+              </div>
+            )}
+
+            {!cargandoProductos && busquedaLista && productosMostrar.length === 0 && (
+              <p className="text-slate-500 text-center py-8">
+                No se encontraron productos
+              </p>
+            )}
+
+            {productosMostrar.map((p) => (
               <div
                 key={p.id}
                 className="border dark:border-slate-700 rounded-2xl p-5 flex flex-col sm:flex-row sm:justify-between gap-4"
               >
 
                 <div>
+                  {p.codigo && (
+                    <p className="text-xs font-mono text-blue-600 dark:text-blue-400 mb-1">
+                      {p.codigo}
+                    </p>
+                  )}
+
                   <h3 className="font-bold dark:text-white">
                     {p.marca}
                   </h3>
@@ -460,6 +529,9 @@ function Ventas() {
                   <div>
                     <p className="font-bold dark:text-white">{item.marca}</p>
                     <p className="text-sm text-slate-500">{item.modelo}</p>
+                    {item.codigo && (
+                      <p className="text-xs text-slate-400 font-mono">{item.codigo}</p>
+                    )}
                     <p className="text-sm text-slate-500">
                       Stock: {obtenerStockProducto(item.id)}
                     </p>
