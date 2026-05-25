@@ -6,6 +6,8 @@ import Ventas from "./pages/Ventas"
 import Clientes from "./pages/Clientes"
 import Reportes from "./pages/Reportes"
 import HistorialVentas from "./pages/HistorialVentas"
+import Movimientos from "./pages/Movimientos"
+import InventarioExcel from "./pages/InventarioExcel"
 
 import MainLayout from "./layout/MainLayout"
 
@@ -34,6 +36,9 @@ function App() {
 
           {/* HISTORIAL */}
           <Route path="historial" element={<HistorialVentas />} />
+
+          <Route path="movimientos" element={<Movimientos />} />
+          <Route path="excel" element={<InventarioExcel />} />
 
         </Route>
 

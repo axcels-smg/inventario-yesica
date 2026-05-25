@@ -5,12 +5,16 @@ import {
   Users,
   BarChart3,
   History,
+  ClipboardList,
+  Table,
 } from "lucide-react"
+import { useStockBajo } from "../hooks/useStockBajo"
 
 import { NavLink } from "react-router-dom"
 import ThemeButton from "./ThemeButton"
 
 function Sidebar({ onNavigate }) {
+  const { cantidad: stockBajoCantidad } = useStockBajo()
 
   const links = [
     {
@@ -42,6 +46,16 @@ function Sidebar({ onNavigate }) {
       name: "Historial",
       path: "/historial",
       icon: <History size={22} />,
+    },
+    {
+      name: "Movimientos",
+      path: "/movimientos",
+      icon: <ClipboardList size={22} />,
+    },
+    {
+      name: "Excel",
+      path: "/excel",
+      icon: <Table size={22} />,
     },
   ]
 
@@ -125,7 +139,12 @@ function Sidebar({ onNavigate }) {
               {link.icon}
             </span>
 
-            <span>{link.name}</span>
+            <span className="flex-1">{link.name}</span>
+            {link.path === "/reportes" && stockBajoCantidad > 0 && (
+              <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[22px] text-center">
+                {stockBajoCantidad > 99 ? "99+" : stockBajoCantidad}
+              </span>
+            )}
           </NavLink>
         ))}
 

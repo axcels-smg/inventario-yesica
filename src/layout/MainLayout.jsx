@@ -2,9 +2,11 @@ import { Outlet } from "react-router-dom"
 import { Menu, X } from "lucide-react"
 import { useState } from "react"
 import Sidebar from "../components/Sidebar"
+import { useStockBajo } from "../hooks/useStockBajo"
 
 function MainLayout() {
   const [menuAbierto, setMenuAbierto] = useState(false)
+  const { cantidad: alertasStock } = useStockBajo()
 
   return (
     <div
@@ -56,13 +58,23 @@ function MainLayout() {
           <Menu size={24} />
         </button>
 
-        <div className="text-right">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Inventario
-          </p>
-          <h1 className="text-lg font-black text-slate-900 dark:text-white">
-            Yesica
-          </h1>
+        <div className="text-right flex items-center gap-3">
+          {alertasStock > 0 && (
+            <span
+              className="bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full"
+              title="Productos con stock bajo"
+            >
+              {alertasStock} stock bajo
+            </span>
+          )}
+          <div>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Inventario
+            </p>
+            <h1 className="text-lg font-black text-slate-900 dark:text-white">
+              Yesica
+            </h1>
+          </div>
         </div>
       </header>
 

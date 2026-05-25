@@ -11,6 +11,9 @@ import {
 } from "firebase/firestore"
 
 import { db } from "../firebase"
+import { obtenerSiguienteNumeroBoleta, formatearNumeroBoleta } from "../utils/boleta"
+import { registrarMovimiento } from "../utils/movimientos"
+import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 
 import {
   filtrarProductos,
@@ -260,6 +263,10 @@ function Ventas() {
         cantidad: Number(item.cantidad),
       }))
 
+      const numeroBoleta = await obtenerSiguienteNumeroBoleta()
+      const ventaRef = doc(collection(db, "ventas"))
+      const movimientosPendientes = []
+
       await runTransaction(db, async (transaction) => {
         const productosActuales = []
 
@@ -287,6 +294,14 @@ function Ventas() {
             stock: stockActual,
             item,
           })
+
+          movimientosPendientes.push({
+            productoId: item.id,
+            productoNombre: `${item.marca} ${item.modelo}`.trim(),
+            cantidad: item.cantidad,
+            stockAntes: stockActual,
+            stockDespues: stockActual - item.cantidad,
+          })
         }
 
         productosActuales.forEach(({ ref, stock, item }) => {
@@ -295,18 +310,28 @@ function Ventas() {
           })
         })
 
-        const ventaRef = doc(collection(db, "ventas"))
-
         transaction.set(ventaRef, {
           cliente: clienteData?.nombre || "",
           clienteId: clienteData?.id || "",
           telefono: clienteData?.telefono || "",
           productos: productosVenta,
           total,
+          numeroBoleta,
           fecha: serverTimestamp(),
           fechaTexto: new Date().toLocaleString("es-PE"),
         })
       })
+
+      for (const mov of movimientosPendientes) {
+        await registrarMovimiento({
+          tipo: TIPOS_MOVIMIENTO.VENTA,
+          ...mov,
+          ventaId: ventaRef.id,
+          numeroBoleta: formatearNumeroBoleta(numeroBoleta),
+          cliente: clienteData?.nombre || "",
+          detalle: `Venta boleta #${formatearNumeroBoleta(numeroBoleta)}`,
+        })
+      }
 
       setCarrito([])
       setClienteSeleccionado("")
@@ -315,7 +340,7 @@ function Ventas() {
       Swal.fire({
         icon: "success",
         title: "Venta realizada",
-        text: `Total S/ ${total}`,
+        text: `Boleta #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${total}`,
       })
 
     } catch (error) {

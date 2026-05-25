@@ -14,41 +14,12 @@ import { db } from "../firebase"
 import jsPDF from "jspdf"
 import Swal from "sweetalert2"
 
-import { FileDown, Receipt, Ban, Trash2 } from "lucide-react"
+import { FileDown, Receipt, Ban, Trash2, Printer } from "lucide-react"
 import { formatearFecha, obtenerTiempoFecha } from "../utils/fechas"
-
-async function restaurarStockEnTransaccion(transaction, productosVenta) {
-  if (!productosVenta?.length) return
-
-  for (const item of productosVenta) {
-    if (!item.id) {
-      throw new Error("Un producto de la venta no tiene identificador")
-    }
-
-    const cantidad = Number(item.cantidad)
-
-    if (!Number.isInteger(cantidad) || cantidad <= 0) {
-      throw new Error(`Cantidad inválida para ${item.marca || "producto"}`)
-    }
-
-    const productoRef = doc(db, "productos", item.id)
-    const productoSnap = await transaction.get(productoRef)
-
-    if (!productoSnap.exists()) {
-      throw new Error(`El producto ${item.marca || item.id} ya no existe`)
-    }
-
-    const stockActual = Number(productoSnap.data().stock)
-
-    if (!Number.isFinite(stockActual)) {
-      throw new Error(`Stock inválido para ${item.marca || "producto"}`)
-    }
-
-    transaction.update(productoRef, {
-      stock: stockActual + cantidad,
-    })
-  }
-}
+import { formatearNumeroBoleta } from "../utils/boleta"
+import { registrarMovimiento } from "../utils/movimientos"
+import { TIPOS_MOVIMIENTO } from "../constants/inventario"
+import { imprimirBoleta } from "../utils/impresion"
 
 function HistorialVentas() {
 
@@ -124,6 +95,9 @@ function HistorialVentas() {
     try {
       setProcesandoId(venta.id)
 
+      const registrosMovimiento = []
+      let metaAnulacion = { cliente: "", numeroBoleta: "" }
+
       await runTransaction(db, async (transaction) => {
         const ventaRef = doc(db, "ventas", venta.id)
         const ventaSnap = await transaction.get(ventaRef)
@@ -144,7 +118,40 @@ function HistorialVentas() {
           throw new Error("La venta no tiene productos")
         }
 
-        await restaurarStockEnTransaccion(transaction, productosVenta)
+        metaAnulacion = {
+          cliente: ventaActual.cliente || "",
+          numeroBoleta: ventaActual.numeroBoleta
+            ? formatearNumeroBoleta(ventaActual.numeroBoleta)
+            : "",
+        }
+
+        for (const item of productosVenta) {
+          if (!item.id) {
+            throw new Error("Un producto de la venta no tiene identificador")
+          }
+
+          const cantidad = Number(item.cantidad)
+          const productoRef = doc(db, "productos", item.id)
+          const productoSnap = await transaction.get(productoRef)
+
+          if (!productoSnap.exists()) {
+            throw new Error(`El producto ${item.marca || item.id} ya no existe`)
+          }
+
+          const stockActual = Number(productoSnap.data().stock)
+
+          transaction.update(productoRef, {
+            stock: stockActual + cantidad,
+          })
+
+          registrosMovimiento.push({
+            productoId: item.id,
+            productoNombre: `${item.marca || ""} ${item.modelo || ""}`.trim(),
+            cantidad,
+            stockAntes: stockActual,
+            stockDespues: stockActual + cantidad,
+          })
+        }
 
         transaction.update(ventaRef, {
           anulada: true,
@@ -152,6 +159,17 @@ function HistorialVentas() {
           fechaAnulacionTexto: new Date().toLocaleString("es-PE"),
         })
       })
+
+      for (const mov of registrosMovimiento) {
+        await registrarMovimiento({
+          tipo: TIPOS_MOVIMIENTO.ANULACION,
+          ...mov,
+          ventaId: venta.id,
+          numeroBoleta: metaAnulacion.numeroBoleta,
+          cliente: metaAnulacion.cliente,
+          detalle: `Anulación boleta #${metaAnulacion.numeroBoleta || venta.id.slice(0, 6)}`,
+        })
+      }
 
       await cargarVentas()
 
@@ -234,10 +252,21 @@ function HistorialVentas() {
 
     let y = 20
 
+    const numeroBoleta =
+      venta.numeroBoleta != null
+        ? formatearNumeroBoleta(venta.numeroBoleta)
+        : ""
+
     pdf.setFontSize(20)
     pdf.text(venta.anulada ? "BOLETA ANULADA" : "BOLETA DE VENTA", 20, y)
 
-    y += 15
+    y += 12
+
+    if (numeroBoleta) {
+      pdf.setFontSize(14)
+      pdf.text(`N° ${numeroBoleta}`, 20, y)
+      y += 10
+    }
 
     pdf.setFontSize(12)
     pdf.text(`Cliente: ${venta.cliente}`, 20, y)
@@ -323,7 +352,9 @@ function HistorialVentas() {
                 <div className="flex flex-wrap items-center gap-2 text-slate-700 dark:text-white">
                   <Receipt size={20} />
                   <h2 className="text-2xl font-bold">
-                    Venta #{venta.id.slice(0, 6)}
+                    {venta.numeroBoleta != null
+                      ? `Boleta #${formatearNumeroBoleta(venta.numeroBoleta)}`
+                      : `Venta #${venta.id.slice(0, 6)}`}
                   </h2>
                   {venta.anulada && (
                     <span className="bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 px-3 py-1 rounded-full text-sm font-bold">
@@ -363,6 +394,14 @@ function HistorialVentas() {
                 </h3>
 
                 <div className="flex flex-wrap gap-2 justify-end">
+                  <button
+                    onClick={() => imprimirBoleta(venta)}
+                    className="flex items-center gap-2 bg-slate-700 text-white px-5 py-3 rounded-2xl hover:bg-slate-800 transition"
+                  >
+                    <Printer size={18} />
+                    Ticket
+                  </button>
+
                   <button
                     onClick={() => descargarPDF(venta)}
                     className="flex items-center gap-2 bg-blue-600 text-white px-5 py-3 rounded-2xl hover:bg-blue-700 transition"

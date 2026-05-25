@@ -26,6 +26,8 @@ import {
   obtenerValoresUnicos,
   PRODUCTOS_POR_PAGINA,
 } from "../utils/productos"
+import { registrarMovimiento } from "../utils/movimientos"
+import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 
 function Productos() {
 
@@ -171,6 +173,16 @@ function Productos() {
         })
       })
 
+      await registrarMovimiento({
+        tipo: TIPOS_MOVIMIENTO.REPOSICION,
+        productoId: productoReponer.id,
+        productoNombre: `${productoReponer.marca} ${productoReponer.modelo}`.trim(),
+        cantidad,
+        stockAntes: Number(productoReponer.stock),
+        stockDespues: Number(productoReponer.stock) + cantidad,
+        detalle: `Reposición +${cantidad} unidades`,
+      })
+
       Swal.fire({
         icon: "success",
         title: "Stock repuesto",
@@ -235,6 +247,8 @@ function Productos() {
     try {
 
       if (editandoId) {
+        const productoAnterior = productos.find((p) => p.id === editandoId)
+        const stockAnterior = Number(productoAnterior?.stock)
 
         await updateDoc(doc(db, "productos", editandoId), {
           marca: marcaLimpia,
@@ -244,6 +258,18 @@ function Productos() {
           precio: precioNumero,
           stock: stockNumero,
         })
+
+        if (stockAnterior !== stockNumero) {
+          await registrarMovimiento({
+            tipo: TIPOS_MOVIMIENTO.EDICION_STOCK,
+            productoId: editandoId,
+            productoNombre: `${marcaLimpia} ${modeloLimpio}`.trim(),
+            cantidad: stockNumero - stockAnterior,
+            stockAntes: stockAnterior,
+            stockDespues: stockNumero,
+            detalle: "Edición manual de stock",
+          })
+        }
 
         Swal.fire({
           icon: "success",
