@@ -31,11 +31,21 @@ function SelectorRol() {
 
   const dropdownPosition = buttonRect ? (() => {
     const dropdownWidth = 350
+    const dropdownHeight = 200
     const screenWidth = window.innerWidth
+    const screenHeight = window.innerHeight
     const buttonRight = buttonRect.right
+    const buttonBottom = buttonRect.bottom
+    const buttonTop = buttonRect.top
 
-    let position = {
-      top: buttonRect.bottom + 8,
+    let position = {}
+
+    if (buttonBottom + dropdownHeight <= screenHeight) {
+      position.top = buttonBottom + 8
+    } else if (buttonTop - dropdownHeight >= 0) {
+      position.top = buttonTop - dropdownHeight - 8
+    } else {
+      position.top = Math.max(8, screenHeight - dropdownHeight - 8)
     }
 
     if (buttonRight + dropdownWidth <= screenWidth) {
