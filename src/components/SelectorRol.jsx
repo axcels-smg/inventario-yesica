@@ -7,6 +7,7 @@ import { ROLES_USUARIO, ETIQUETAS_ROLES } from "../constants/inventario"
 function SelectorRol() {
   const { rolActual, cambiarRol } = useRol()
   const [abierto, setAbierto] = useState(false)
+  const [buttonRect, setButtonRect] = useState(null)
   const buttonRef = useRef(null)
   const dropdownRef = useRef(null)
 
@@ -20,20 +21,27 @@ function SelectorRol() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  const buttonRect = buttonRef.current ? buttonRef.current.getBoundingClientRect() : null
+  useEffect(() => {
+    if (abierto && buttonRef.current) {
+      setButtonRect(buttonRef.current.getBoundingClientRect())
+    } else {
+      setButtonRect(null)
+    }
+  }, [abierto])
 
   const dropdownPosition = buttonRect ? (() => {
-    const dropdownWidth = 300
-    const spaceOnRight = window.innerWidth - buttonRect.right
+    const dropdownWidth = 350
+    const screenWidth = window.innerWidth
+    const buttonRight = buttonRect.right
 
     let position = {
       top: buttonRect.bottom + 8,
     }
 
-    if (spaceOnRight >= dropdownWidth) {
+    if (buttonRight + dropdownWidth <= screenWidth) {
       position.left = buttonRect.left
     } else {
-      position.left = Math.max(8, window.innerWidth - dropdownWidth - 8)
+      position.left = Math.max(8, screenWidth - dropdownWidth - 8)
     }
 
     return position
@@ -42,10 +50,11 @@ function SelectorRol() {
   const dropdownContent = abierto && buttonRect && dropdownPosition && (
     <div
       ref={dropdownRef}
-      className="fixed bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-[99999] overflow-y-auto"
+      className="fixed bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-[999999] overflow-y-auto"
       style={{
         ...dropdownPosition,
-        width: '300px',
+        width: '350px',
+        maxHeight: 'calc(100vh - 32px)',
       }}
     >
       {Object.values(ROLES_USUARIO).map((rol) => (
