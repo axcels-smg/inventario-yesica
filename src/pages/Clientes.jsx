@@ -8,6 +8,7 @@ import {
   getDocs,
   deleteDoc,
   doc,
+  serverTimestamp,
 } from "firebase/firestore"
 
 function Clientes() {
@@ -60,7 +61,8 @@ function Clientes() {
         telefono,
         correo,
         direccion,
-        fecha: new Date().toLocaleString(),
+        fecha: serverTimestamp(),
+        fechaTexto: new Date().toLocaleString("es-PE"),
       })
 
       Swal.fire({

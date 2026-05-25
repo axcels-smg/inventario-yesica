@@ -111,8 +111,8 @@ function Productos() {
     if (Number.isNaN(precioNumero) || precioNumero < 0) {
       Swal.fire({
         icon: "warning",
-        title: "Precio invalido",
-        text: "El precio solo puede contener numeros",
+        title: "Precio inválido",
+        text: "El precio solo puede contener números",
       })
       return
     }
@@ -120,8 +120,8 @@ function Productos() {
     if (!Number.isInteger(stockNumero) || stockNumero < 0) {
       Swal.fire({
         icon: "warning",
-        title: "Stock invalido",
-        text: "El stock solo puede contener numeros enteros",
+        title: "Stock inválido",
+        text: "El stock solo puede contener números enteros",
       })
       return
     }

@@ -22,6 +22,7 @@ import {
 } from "firebase/firestore"
 
 import { db } from "../firebase"
+import { esFechaDeHoy } from "../utils/fechas"
 
 function Dashboard() {
 
@@ -70,11 +71,8 @@ function Dashboard() {
     0
   )
 
-  const hoy = new Date().toLocaleDateString()
-
   const ventasHoy = ventas.filter((venta) => {
-    if (!venta.fecha) return false
-    return venta.fecha.includes(hoy)
+    return esFechaDeHoy(venta.fecha || venta.fechaTexto)
   }).length
 
   const dataGrafico = ventas.map((venta, index) => ({

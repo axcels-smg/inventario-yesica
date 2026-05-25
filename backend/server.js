@@ -7,7 +7,7 @@ const PORT = 3000
 
 // RUTA PRINCIPAL
 app.get("/", (req, res) => {
-  res.send("Backend funcionando 🚀")
+  res.send("Backend funcionando")
 })
 
 // LEVANTAR SERVIDOR

@@ -51,7 +51,7 @@ function MainLayout() {
             bg-blue-600
             text-white
           "
-          aria-label="Abrir menu"
+          aria-label="Abrir menú"
         >
           <Menu size={24} />
         </button>
@@ -72,7 +72,7 @@ function MainLayout() {
             type="button"
             className="absolute inset-0 bg-black/50 w-full h-full"
             onClick={() => setMenuAbierto(false)}
-            aria-label="Cerrar menu"
+            aria-label="Cerrar menú"
           />
 
           <div className="relative w-[300px] max-w-[85vw] h-full">
@@ -93,7 +93,7 @@ function MainLayout() {
                 bg-slate-800
                 text-white
               "
-              aria-label="Cerrar menu"
+              aria-label="Cerrar menú"
             >
               <X size={22} />
             </button>

@@ -10,6 +10,7 @@ import { db } from "../firebase"
 import jsPDF from "jspdf"
 
 import { FileDown, Receipt } from "lucide-react"
+import { formatearFecha } from "../utils/fechas"
 
 function HistorialVentas() {
 
@@ -56,7 +57,7 @@ function HistorialVentas() {
     doc.text(`Teléfono: ${venta.telefono}`, 20, y)
     y += 8
 
-    doc.text(`Fecha: ${venta.fecha}`, 20, y)
+    doc.text(`Fecha: ${formatearFecha(venta.fecha || venta.fechaTexto)}`, 20, y)
     y += 12
 
     doc.setFontSize(14)
@@ -129,7 +130,7 @@ function HistorialVentas() {
                 </div>
 
                 <p className="text-slate-500 dark:text-slate-400">
-                  {venta.fecha}
+                  {formatearFecha(venta.fecha || venta.fechaTexto)}
                 </p>
 
                 <p className="font-medium dark:text-white">

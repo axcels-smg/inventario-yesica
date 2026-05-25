@@ -4,9 +4,9 @@ import Swal from "sweetalert2"
 import {
   collection,
   getDocs,
-  addDoc,
-  updateDoc,
   doc,
+  runTransaction,
+  serverTimestamp,
 } from "firebase/firestore"
 
 import { db } from "../firebase"
@@ -18,6 +18,7 @@ function Ventas() {
 
   const [clienteSeleccionado, setClienteSeleccionado] = useState("")
   const [carrito, setCarrito] = useState([])
+  const [vendiendo, setVendiendo] = useState(false)
 
   useEffect(() => {
     cargarProductos()
@@ -150,37 +151,59 @@ function Ventas() {
     }
 
     try {
+      setVendiendo(true)
 
-      // DESCONTAR STOCK
-      for (const item of carrito) {
-
-        const productoOriginal = productos.find(
-          (p) => p.id === item.id
-        )
-
-        const nuevoStock =
-          Number(productoOriginal.stock) - item.cantidad
-
-        await updateDoc(doc(db, "productos", item.id), {
-          stock: nuevoStock,
-        })
-      }
-
-      // CLIENTE
       const clienteData = clientes.find(
         (c) => c.id === clienteSeleccionado
       )
 
-      // VENTA
-      const nuevaVenta = {
-        cliente: clienteData?.nombre || "",
-        telefono: clienteData?.telefono || "",
-        productos: carrito,
-        total,
-        fecha: new Date().toLocaleString(),
-      }
+      await runTransaction(db, async (transaction) => {
+        const productosActuales = []
 
-      await addDoc(collection(db, "ventas"), nuevaVenta)
+        for (const item of carrito) {
+          const productoRef = doc(db, "productos", item.id)
+          const productoSnap = await transaction.get(productoRef)
+
+          if (!productoSnap.exists()) {
+            throw new Error(`El producto ${item.marca} ya no existe`)
+          }
+
+          const productoActual = productoSnap.data()
+          const stockActual = Number(productoActual.stock)
+
+          if (!Number.isFinite(stockActual)) {
+            throw new Error(`Stock inválido para ${item.marca}`)
+          }
+
+          if (stockActual < item.cantidad) {
+            throw new Error(`Stock insuficiente para ${item.marca}`)
+          }
+
+          productosActuales.push({
+            ref: productoRef,
+            stock: stockActual,
+            item,
+          })
+        }
+
+        productosActuales.forEach(({ ref, stock, item }) => {
+          transaction.update(ref, {
+            stock: stock - item.cantidad,
+          })
+        })
+
+        const ventaRef = doc(collection(db, "ventas"))
+
+        transaction.set(ventaRef, {
+          cliente: clienteData?.nombre || "",
+          clienteId: clienteData?.id || "",
+          telefono: clienteData?.telefono || "",
+          productos: carrito,
+          total,
+          fecha: serverTimestamp(),
+          fechaTexto: new Date().toLocaleString("es-PE"),
+        })
+      })
 
       // RESET
       setCarrito([])
@@ -199,7 +222,10 @@ function Ventas() {
       Swal.fire({
         icon: "error",
         title: "Error al vender",
+        text: error.message,
       })
+    } finally {
+      setVendiendo(false)
     }
   }
 
@@ -330,9 +356,12 @@ function Ventas() {
 
             <button
               onClick={finalizarVenta}
-              className="w-full mt-4 bg-green-600 text-white py-4 rounded-2xl"
+              disabled={vendiendo}
+              className={`w-full mt-4 text-white py-4 rounded-2xl ${
+                vendiendo ? "bg-slate-400" : "bg-green-600"
+              }`}
             >
-              Finalizar Venta
+              {vendiendo ? "Procesando..." : "Finalizar Venta"}
             </button>
 
           </div>

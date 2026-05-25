@@ -1,11 +1,12 @@
 import {
   createContext,
-  useContext,
   useEffect,
   useState,
 } from "react"
 
 const ThemeContext = createContext()
+
+export { ThemeContext }
 
 export function ThemeProvider({ children }) {
 
@@ -32,8 +33,4 @@ export function ThemeProvider({ children }) {
       {children}
     </ThemeContext.Provider>
   )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
 }
