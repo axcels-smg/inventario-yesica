@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from "react"
 import { collection, getDocs, doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
+import { useAuth } from "./AuthContext"
 
 const TiendaContext = createContext()
 
@@ -13,6 +14,7 @@ export function useTienda() {
 }
 
 export function TiendaProvider({ children }) {
+  const { tienda: tiendaAuth, cargando: cargandoAuth } = useAuth()
   const [tiendaActual, setTiendaActual] = useState(null)
   const [tiendas, setTiendas] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -21,20 +23,17 @@ export function TiendaProvider({ children }) {
     cargarTiendas()
   }, [])
 
+  // Usar la tienda del AuthContext cuando esté disponible
   useEffect(() => {
-    const tiendaGuardada = localStorage.getItem("tiendaActual")
-    if (tiendaGuardada && tiendas.length > 0) {
-      const tienda = tiendas.find((t) => t.id === tiendaGuardada)
-      if (tienda) {
-        setTiendaActual(tienda)
-      }
+    if (!cargandoAuth && tiendaAuth) {
+      setTiendaActual(tiendaAuth)
     }
-  }, [tiendas])
+  }, [cargandoAuth, tiendaAuth])
 
   async function cargarTiendas() {
     try {
       setCargando(true)
-      const querySnapshot = await getDocs(collection(db, "tiendas"))
+      const querySnapshot = await getDocs(collection(db, "Tienda"))
       const lista = []
       querySnapshot.forEach((docu) => {
         lista.push({ id: docu.id, ...docu.data() })
@@ -49,12 +48,11 @@ export function TiendaProvider({ children }) {
 
   function seleccionarTienda(tienda) {
     setTiendaActual(tienda)
-    localStorage.setItem("tiendaActual", tienda.id)
   }
 
   async function obtenerTiendaPorId(tiendaId) {
     try {
-      const docRef = doc(db, "tiendas", tiendaId)
+      const docRef = doc(db, "Tienda", tiendaId)
       const docSnap = await getDoc(docRef)
       if (docSnap.exists()) {
         return { id: docSnap.id, ...docSnap.data() }
@@ -69,7 +67,7 @@ export function TiendaProvider({ children }) {
   const value = {
     tiendaActual,
     tiendas,
-    cargando,
+    cargando: cargando || cargandoAuth,
     seleccionarTienda,
     cargarTiendas,
     obtenerTiendaPorId,

@@ -28,7 +28,8 @@ export function useStockBajo() {
 
       setProductos(lista)
       setCantidad(lista.length)
-    } catch {
+    } catch (error) {
+      console.error("Error cargando productos con stock bajo:", error.message, error)
       setProductos([])
       setCantidad(0)
     } finally {

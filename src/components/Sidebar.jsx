@@ -11,21 +11,45 @@ import {
   ChevronDown,
   ArrowRight,
   Globe,
+  LogOut,
 } from "lucide-react"
 import { useStockBajo } from "../hooks/useStockBajo"
 import { useTienda } from "../context/TiendaContext"
 import { useRol } from "../context/RolContext"
+import { useAuth } from "../context/AuthContext"
 
-import { NavLink } from "react-router-dom"
+import { NavLink, useNavigate } from "react-router-dom"
 import { useState } from "react"
 import ThemeButton from "./ThemeButton"
 import SelectorRol from "./SelectorRol"
+import Swal from "sweetalert2"
 
 function Sidebar({ onNavigate }) {
   const { cantidad: stockBajoCantidad } = useStockBajo()
   const { tiendaActual, tiendas, seleccionarTienda, cargando } = useTienda()
   const { esSuperAdmin, puedeGestionarTiendas, puedeHacerTransferencias } = useRol()
+  const { logout, usuario } = useAuth()
+  const navigate = useNavigate()
   const [selectorAbierto, setSelectorAbierto] = useState(false)
+
+  async function handleLogout() {
+    const { value: confirmar } = await Swal.fire({
+      title: "¿Cerrar sesión?",
+      text: "Serás redirigido a la página de login",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Cerrar sesión",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#ef4444",
+    })
+
+    if (confirmar) {
+      const resultado = await logout()
+      if (resultado.success) {
+        navigate("/login")
+      }
+    }
+  }
 
   const links = [
     {
@@ -240,6 +264,14 @@ function Sidebar({ onNavigate }) {
         <div className="mb-4 relative overflow-visible">
           <SelectorRol />
         </div>
+
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-4 py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 rounded-2xl transition text-red-400 hover:text-red-300 mb-4"
+        >
+          <LogOut size={20} />
+          <span className="font-medium">Cerrar Sesión</span>
+        </button>
 
         <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
           <p className="text-slate-400 text-sm">Inventario G.R.L.</p>

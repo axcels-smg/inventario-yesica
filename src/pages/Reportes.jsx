@@ -123,29 +123,33 @@ function Reportes() {
   const productosStockBajo = filtrarProductosStockBajo(productos)
   const ventasPorDia = agruparVentasPorDia(ventasFiltradas).slice(0, 14)
 
-  const productosMap = {}
-  ventasFiltradas.forEach((venta) => {
-    venta.productos?.forEach((p) => {
-      const nombre = p.marca || p.nombre || "Producto"
-      productosMap[nombre] = (productosMap[nombre] || 0) + Number(p.cantidad)
+  const productosVendidos = useMemo(() => {
+    const productosMap = {}
+    ventasFiltradas.forEach((venta) => {
+      venta.productos?.forEach((p) => {
+        const nombre = p.marca || p.nombre || "Producto"
+        productosMap[nombre] = (productosMap[nombre] || 0) + Number(p.cantidad)
+      })
     })
-  })
 
-  const productosVendidos = Object.entries(productosMap)
-    .map(([nombre, cantidad]) => ({ nombre, cantidad }))
-    .sort((a, b) => b.cantidad - a.cantidad)
-    .slice(0, 12)
+    return Object.entries(productosMap)
+      .map(([nombre, cantidad]) => ({ nombre, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad)
+      .slice(0, 12)
+  }, [ventasFiltradas])
 
-  const clientesMap = {}
-  ventasFiltradas.forEach((v) => {
-    const c = v.cliente || "Sin nombre"
-    clientesMap[c] = (clientesMap[c] || 0) + 1
-  })
+  const clientesFrecuentes = useMemo(() => {
+    const clientesMap = {}
+    ventasFiltradas.forEach((v) => {
+      const c = v.cliente || "Sin nombre"
+      clientesMap[c] = (clientesMap[c] || 0) + 1
+    })
 
-  const clientesFrecuentes = Object.entries(clientesMap)
-    .map(([cliente, cantidad]) => ({ cliente, cantidad }))
-    .sort((a, b) => b.cantidad - a.cantidad)
-    .slice(0, 8)
+    return Object.entries(clientesMap)
+      .map(([cliente, cantidad]) => ({ cliente, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad)
+      .slice(0, 8)
+  }, [ventasFiltradas])
 
   const colores = ["#2563eb", "#16a34a", "#dc2626", "#ca8a04", "#9333ea"]
 

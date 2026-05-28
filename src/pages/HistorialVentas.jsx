@@ -29,6 +29,8 @@ function HistorialVentas() {
 
   const [ventas, setVentas] = useState([])
   const [procesandoId, setProcesandoId] = useState(null)
+  const [paginaActual, setPaginaActual] = useState(1)
+  const VENTAS_POR_PAGINA = 20
 
   useEffect(() => {
     if (tiendaActual) {
@@ -60,6 +62,7 @@ function HistorialVentas() {
       )
 
       setVentas(listaVentas)
+      setPaginaActual(1) // Resetear a la primera página al cargar
 
     } catch (error) {
       console.log(error)
@@ -434,7 +437,7 @@ function HistorialVentas() {
 
       <div className="flex flex-col gap-6">
 
-        {ventas.map((venta) => (
+        {ventas.slice((paginaActual - 1) * VENTAS_POR_PAGINA, paginaActual * VENTAS_POR_PAGINA).map((venta) => (
           <div
             key={venta.id}
             className={`bg-white dark:bg-slate-900 rounded-3xl shadow-sm border p-6 ${
@@ -573,6 +576,29 @@ function HistorialVentas() {
         ))}
 
       </div>
+
+      {/* Controles de Paginación */}
+      {ventas.length > VENTAS_POR_PAGINA && (
+        <div className="flex justify-center items-center gap-4 mt-6">
+          <button
+            onClick={() => setPaginaActual(paginaActual - 1)}
+            disabled={paginaActual === 1}
+            className="px-4 py-2 rounded-xl bg-blue-600 text-white disabled:bg-slate-300 disabled:cursor-not-allowed hover:bg-blue-700 transition"
+          >
+            Anterior
+          </button>
+          <span className="text-slate-600 dark:text-slate-400">
+            Página {paginaActual} de {Math.ceil(ventas.length / VENTAS_POR_PAGINA)}
+          </span>
+          <button
+            onClick={() => setPaginaActual(paginaActual + 1)}
+            disabled={paginaActual === Math.ceil(ventas.length / VENTAS_POR_PAGINA)}
+            className="px-4 py-2 rounded-xl bg-blue-600 text-white disabled:bg-slate-300 disabled:cursor-not-allowed hover:bg-blue-700 transition"
+          >
+            Siguiente
+          </button>
+        </div>
+      )}
 
     </div>
   )

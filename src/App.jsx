@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 
 import Dashboard from "./pages/Dashboard"
 import DashboardGlobal from "./pages/DashboardGlobal"
@@ -11,51 +11,77 @@ import Movimientos from "./pages/Movimientos"
 import InventarioExcel from "./pages/InventarioExcel"
 import Tiendas from "./pages/Tiendas"
 import Transferencias from "./pages/Transferencias"
+import Login from "./pages/Login"
 
 import MainLayout from "./layout/MainLayout"
 import { TiendaProvider } from "./context/TiendaContext"
 import { RolProvider } from "./context/RolContext"
+import { AuthProvider, useAuth } from "./context/AuthContext"
+
+function ProtectedRoute({ children }) {
+  const { usuario, cargando } = useAuth()
+  
+  if (cargando) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-500">Cargando...</div>
+  }
+  
+  if (!usuario) {
+    return <Navigate to="/login" replace />
+  }
+  
+  return children
+}
 
 function App() {
   return (
-    <RolProvider>
-      <TiendaProvider>
-      <BrowserRouter>
-        <Routes>
+    <AuthProvider>
+      <RolProvider>
+        <TiendaProvider>
+          <BrowserRouter>
+            <Routes>
 
-          {/* LAYOUT PRINCIPAL */}
-          <Route path="/" element={<MainLayout />}>
-            
-            {/* DASHBOARD */}
-            <Route index element={<Dashboard />} />
-            <Route path="global" element={<DashboardGlobal />} />
+              {/* LOGIN */}
+              <Route path="/login" element={<Login />} />
 
-            {/* PRODUCTOS */}
-            <Route path="productos" element={<Productos />} />
+              {/* LAYOUT PRINCIPAL */}
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <MainLayout />
+                </ProtectedRoute>
+              }>
+                
+                {/* DASHBOARD */}
+                <Route index element={<Dashboard />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="global" element={<DashboardGlobal />} />
 
-            {/* VENTAS */}
-            <Route path="ventas" element={<Ventas />} />
+                {/* PRODUCTOS */}
+                <Route path="productos" element={<Productos />} />
 
-            {/* CLIENTES */}
-            <Route path="clientes" element={<Clientes />} />
+                {/* VENTAS */}
+                <Route path="ventas" element={<Ventas />} />
 
-            {/* REPORTES */}
-            <Route path="reportes" element={<Reportes />} />
+                {/* CLIENTES */}
+                <Route path="clientes" element={<Clientes />} />
 
-            {/* HISTORIAL */}
-            <Route path="historial" element={<HistorialVentas />} />
+                {/* REPORTES */}
+                <Route path="reportes" element={<Reportes />} />
 
-            <Route path="movimientos" element={<Movimientos />} />
-            <Route path="excel" element={<InventarioExcel />} />
-            <Route path="tiendas" element={<Tiendas />} />
-            <Route path="transferencias" element={<Transferencias />} />
+                {/* HISTORIAL */}
+                <Route path="historial" element={<HistorialVentas />} />
 
-          </Route>
+                <Route path="movimientos" element={<Movimientos />} />
+                <Route path="excel" element={<InventarioExcel />} />
+                <Route path="tiendas" element={<Tiendas />} />
+                <Route path="transferencias" element={<Transferencias />} />
 
-        </Routes>
-      </BrowserRouter>
-      </TiendaProvider>
-    </RolProvider>
+              </Route>
+
+            </Routes>
+          </BrowserRouter>
+        </TiendaProvider>
+      </RolProvider>
+    </AuthProvider>
   )
 }
 

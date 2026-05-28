@@ -94,6 +94,7 @@ function InventarioExcel() {
             modelo: p.modelo,
             precio: p.precio,
             stock: p.stock,
+            tiendaId: tiendaActual.id,
           })
         })
 

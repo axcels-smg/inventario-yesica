@@ -266,6 +266,27 @@ function Transferencias() {
     if (!confirmacion.isConfirmed) return
 
     try {
+      // Primero obtener los datos necesarios fuera de la transacción
+      const productosDestinoMap = new Map()
+      
+      for (const item of transferencia.productos) {
+        const q = query(
+          collection(db, "productos"),
+          where("tiendaId", "==", transferencia.destinoTiendaId),
+          where("codigo", "==", item.productoId)
+        )
+        const querySnapshot = await getDocs(q)
+        
+        if (!querySnapshot.empty) {
+          productosDestinoMap.set(item.productoId, {
+            id: querySnapshot.docs[0].id,
+            stock: querySnapshot.docs[0].data().stock,
+          })
+        } else {
+          productosDestinoMap.set(item.productoId, null)
+        }
+      }
+
       await runTransaction(db, async (transaction) => {
         const transferenciaRef = doc(db, "transferencias", transferencia.id)
         const transferenciaSnap = await transaction.get(transferenciaRef)
@@ -274,18 +295,29 @@ function Transferencias() {
           throw "Transferencia no encontrada"
         }
 
-        for (const item of transferencia.productos) {
-          const productoRef = doc(db, "productos", item.productoId)
-          const productoSnap = await transaction.get(productoRef)
+        const transferenciaData = transferenciaSnap.data()
 
-          if (!productoSnap.exists()) {
-            throw "Producto no encontrado"
+        for (const item of transferenciaData.productos) {
+          const productoDestino = productosDestinoMap.get(item.productoId)
+          
+          if (productoDestino === null) {
+            // Si no existe el producto en destino, crearlo
+            const nuevoProductoRef = doc(collection(db, "productos"))
+            transaction.set(nuevoProductoRef, {
+              codigo: item.productoId,
+              marca: item.productoNombre,
+              modelo: "",
+              categoria: "",
+              precio: 0,
+              stock: item.cantidad,
+              tiendaId: transferenciaData.destinoTiendaId,
+            })
+          } else {
+            // Si existe, actualizar el stock
+            const productoDestinoRef = doc(db, "productos", productoDestino.id)
+            const nuevoStock = productoDestino.stock + item.cantidad
+            transaction.update(productoDestinoRef, { stock: nuevoStock })
           }
-
-          const stockActual = productoSnap.data().stock
-          const nuevoStock = stockActual + item.cantidad
-
-          transaction.update(productoRef, { stock: nuevoStock })
         }
 
         transaction.update(transferenciaRef, {
@@ -347,7 +379,7 @@ function Transferencias() {
   }
 
   const productosFiltrados = productosOrigen.filter((p) => {
-    const nombre = (p.marca || p.nombre + " " + (p.modelo || "")).toLowerCase()
+    const nombre = ((p.marca || p.nombre) + " " + (p.modelo || "")).toLowerCase()
     return nombre.includes(busquedaProducto.toLowerCase())
   })
 

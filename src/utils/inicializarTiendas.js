@@ -34,7 +34,7 @@ export async function inicializarTiendas() {
 
   try {
     for (const tienda of tiendasEjemplo) {
-      const docRef = doc(db, "tiendas", tienda.id)
+      const docRef = doc(db, "Tienda", tienda.id)
       const docSnap = await getDoc(docRef)
 
       if (!docSnap.exists()) {
@@ -52,6 +52,3 @@ export async function inicializarTiendas() {
     return false
   }
 }
-
-// Función para llamar desde la consola del navegador
-window.inicializarTiendas = inicializarTiendas

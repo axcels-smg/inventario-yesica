@@ -355,6 +355,16 @@ function Productos() {
 
   // EDITAR
   function editarProducto(producto) {
+    // Validar que el producto pertenezca a la tienda actual
+    if (producto.tiendaId && producto.tiendaId !== tiendaActual.id) {
+      Swal.fire({
+        icon: "error",
+        title: "Producto no disponible",
+        text: "Este producto pertenece a otra tienda",
+      })
+      return
+    }
+    
     setMarca(producto.marca)
     setCategoria(producto.categoria)
     setModelo(producto.modelo)

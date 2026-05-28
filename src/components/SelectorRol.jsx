@@ -60,7 +60,7 @@ function SelectorRol() {
   const dropdownContent = abierto && buttonRect && dropdownPosition && (
     <div
       ref={dropdownRef}
-      className="fixed bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-[999999] overflow-y-auto"
+      className="fixed bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-y-auto"
       style={{
         ...dropdownPosition,
         width: '350px',

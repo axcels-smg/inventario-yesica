@@ -12,7 +12,7 @@ export function useRol() {
 }
 
 export function RolProvider({ children }) {
-  const [rolActual, setRolActual] = useState(ROLES_USUARIO.SUPER_ADMIN)
+  const [rolActual, setRolActual] = useState(ROLES_USUARIO.LECTOR)
 
   useEffect(() => {
     const rolGuardado = localStorage.getItem("rolUsuario")

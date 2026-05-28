@@ -54,8 +54,7 @@ function Clientes() {
       })
 
       lista.sort((a, b) =>
-        obtenerTiempoFecha(b.fecha || b.fechaTexto) -
-        obtenerTiempoFecha(a.fecha || a.fechaTexto)
+        String(a.nombre || "").localeCompare(String(b.nombre || ""))
       )
 
       setClientes(lista)

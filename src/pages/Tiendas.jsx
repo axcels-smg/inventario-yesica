@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
 import Swal from "sweetalert2"
-import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc } from "firebase/firestore"
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore"
+import { createUserWithEmailAndPassword, deleteUser } from "firebase/auth"
 import { Store, Plus, Edit2, Trash2, MapPin, Phone, FileText } from "lucide-react"
-import { db } from "../firebase"
+import { db, auth } from "../firebase"
 import { useTienda } from "../context/TiendaContext"
 
 function Tiendas() {
@@ -18,6 +19,7 @@ function Tiendas() {
     ruc: "",
     telefono: "",
     email: "",
+    password: "",
     activo: true,
   })
 
@@ -28,7 +30,7 @@ function Tiendas() {
   async function cargarTiendasLista() {
     try {
       setCargando(true)
-      const querySnapshot = await getDocs(collection(db, "tiendas"))
+      const querySnapshot = await getDocs(collection(db, "Tienda"))
       const lista = []
       querySnapshot.forEach((docu) => {
         lista.push({ id: docu.id, ...docu.data() })
@@ -52,6 +54,7 @@ function Tiendas() {
       ruc: "",
       telefono: "",
       email: "",
+      password: "",
       activo: true,
     })
     setModoEdicion(false)
@@ -69,9 +72,19 @@ function Tiendas() {
       })
     }
 
+    if (!modoEdicion && (!formulario.email.trim() || !formulario.password.trim())) {
+      return Swal.fire({
+        icon: "warning",
+        title: "Credenciales requeridas",
+        text: "El email y contraseña son obligatorios para crear una tienda",
+      })
+    }
+
     try {
       if (modoEdicion && tiendaEditando) {
-        await updateDoc(doc(db, "tiendas", tiendaEditando.id), formulario)
+        // Al editar, no cambiar email/password
+        const { password, ...datosTienda } = formulario
+        await updateDoc(doc(db, "Tienda", tiendaEditando.id), datosTienda)
         Swal.fire({
           icon: "success",
           title: "Tienda actualizada",
@@ -79,11 +92,28 @@ function Tiendas() {
           showConfirmButton: false,
         })
       } else {
-        await addDoc(collection(db, "tiendas"), formulario)
+        // Al crear, crear usuario en Firebase Auth primero
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          formulario.email,
+          formulario.password
+        )
+        
+        const uid = userCredential.user.uid
+        
+        // Crear documento de tienda usando el UID como ID
+        const { password, ...datosTienda } = formulario
+        await setDoc(doc(db, "Tienda", uid), {
+          ...datosTienda,
+          authUid: uid,
+          fechaCreacion: new Date(),
+        })
+        
         Swal.fire({
           icon: "success",
           title: "Tienda creada",
-          timer: 1500,
+          text: "Usuario de acceso creado exitosamente",
+          timer: 2000,
           showConfirmButton: false,
         })
       }
@@ -93,10 +123,22 @@ function Tiendas() {
       cargarTiendas()
     } catch (error) {
       console.error("Error guardando tienda:", error)
+      let mensaje = "Error al guardar tienda"
+      
+      if (error.code === "auth/email-already-in-use") {
+        mensaje = "El email ya está en uso"
+      } else if (error.code === "auth/weak-password") {
+        mensaje = "La contraseña debe tener al menos 6 caracteres"
+      } else if (error.code === "auth/invalid-email") {
+        mensaje = "Email inválido"
+      } else {
+        mensaje = error.message
+      }
+      
       Swal.fire({
         icon: "error",
         title: "Error al guardar",
-        text: error.message,
+        text: mensaje,
       })
     }
   }
@@ -121,7 +163,7 @@ function Tiendas() {
     if (!confirmacion.isConfirmed) return
 
     try {
-      await deleteDoc(doc(db, "tiendas", tienda.id))
+      await deleteDoc(doc(db, "Tienda", tienda.id))
       setTiendas(tiendas.filter((t) => t.id !== tienda.id))
       cargarTiendas()
       Swal.fire({
@@ -213,8 +255,24 @@ function Tiendas() {
                 onChange={(e) => setFormulario({ ...formulario, email: e.target.value })}
                 className="w-full p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 placeholder="Ej: tienda@ejemplo.com"
+                disabled={modoEdicion}
               />
             </div>
+
+            {!modoEdicion && (
+              <div>
+                <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Contraseña *</label>
+                <input
+                  type="password"
+                  value={formulario.password}
+                  onChange={(e) => setFormulario({ ...formulario, password: e.target.value })}
+                  className="w-full p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  placeholder="Mínimo 6 caracteres"
+                  minLength={6}
+                  required={!modoEdicion}
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3">
