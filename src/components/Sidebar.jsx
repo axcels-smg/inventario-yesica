@@ -155,7 +155,7 @@ function Sidebar({ onNavigate }) {
         <div className="relative">
           <button
             onClick={() => setSelectorAbierto(!selectorAbierto)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/60 hover:bg-slate-800 border border-slate-700 rounded-2xl transition"
+            className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700 hover:border-slate-600 rounded-2xl transition-all duration-200 hover:shadow-soft"
           >
             <div className="flex items-center gap-3">
               <Store size={20} className="text-blue-400" />
@@ -192,7 +192,7 @@ function Sidebar({ onNavigate }) {
                       seleccionarTienda(tienda)
                       setSelectorAbierto(false)
                     }}
-                    className={`w-full px-4 py-3 text-left hover:bg-slate-800 transition ${
+                    className={`w-full px-4 py-3 text-left hover:bg-slate-800 transition-all duration-200 hover:pl-5 ${
                       tiendaActual?.id === tienda.id ? "bg-slate-800" : ""
                     }`}
                   >
@@ -267,7 +267,7 @@ function Sidebar({ onNavigate }) {
 
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 rounded-2xl transition text-red-400 hover:text-red-300 mb-4"
+          className="w-full flex items-center gap-3 px-4 py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 hover:border-red-600/50 rounded-2xl transition-all duration-200 text-red-400 hover:text-red-300 mb-4 hover:shadow-soft"
         >
           <LogOut size={20} />
           <span className="font-medium">Cerrar Sesión</span>

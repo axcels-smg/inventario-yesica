@@ -9,7 +9,7 @@ function MainLayout() {
   const { cantidad: alertasStock } = useStockBajo()
 
   return (
-    <div className="flex min-h-screen bg-slate-100 dark:bg-slate-950 transition-colors duration-300">
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 transition-colors duration-300">
 
       {/* SIDEBAR ESCRITORIO — siempre visible */}
       <aside className="hidden lg:block fixed left-0 top-0 z-30 h-screen w-[300px]">
@@ -30,7 +30,7 @@ function MainLayout() {
             <button
               type="button"
               onClick={() => setMenuAbierto(false)}
-              className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-white"
+              className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-all duration-200 hover:shadow-soft"
               aria-label="Cerrar menú"
             >
               <X size={22} />
@@ -42,11 +42,11 @@ function MainLayout() {
       )}
 
       <div className="flex flex-1 flex-col min-h-screen w-full lg:ml-[300px]">
-        <header className="fixed top-0 left-0 right-0 lg:left-[300px] h-16 z-40 flex items-center justify-between px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm">
+        <header className="fixed top-0 left-0 right-0 lg:left-[300px] h-16 z-40 flex items-center justify-between px-4 glass border-b border-slate-200 dark:border-slate-800 shadow-soft">
           <button
             type="button"
             onClick={() => setMenuAbierto(true)}
-            className="lg:hidden w-11 h-11 flex items-center justify-center rounded-xl bg-blue-600 text-white"
+            className="lg:hidden w-11 h-11 flex items-center justify-center rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all duration-200 hover:shadow-glow"
             aria-label="Abrir menú"
           >
             <Menu size={24} />
