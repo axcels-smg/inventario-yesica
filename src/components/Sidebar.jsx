@@ -138,7 +138,7 @@ function Sidebar({ onNavigate }) {
       "
     >
 
-      <div className="shrink-0 mb-6">
+      <div className="shrink-0 mb-6 pb-6 border-b border-slate-800">
         <h1 className="text-3xl lg:text-4xl font-black leading-tight">
           <span className="text-blue-500">Inventario</span>
           <br />
@@ -151,7 +151,7 @@ function Sidebar({ onNavigate }) {
       </div>
 
       {/* Selector de Tienda */}
-      <div className="shrink-0 mb-4">
+      <div className="shrink-0 mb-4 pb-4 border-b border-slate-800/50">
         <div className="relative">
           <button
             onClick={() => setSelectorAbierto(!selectorAbierto)}
@@ -206,7 +206,7 @@ function Sidebar({ onNavigate }) {
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto flex flex-col gap-2 min-h-0 pr-1 -mr-1">
+      <nav className="flex-1 overflow-y-auto flex flex-col gap-1.5 min-h-0 pr-1 -mr-1">
         {linksFiltrados.map((link) => (
           <NavLink
             key={link.path}
@@ -226,29 +226,40 @@ function Sidebar({ onNavigate }) {
                 duration-200
                 group
                 shrink-0
+                relative
+                overflow-hidden
 
                 ${
                   isActive
                     ? `
-                      bg-blue-600
+                      bg-gradient-to-r
+                      from-blue-600
+                      to-blue-500
                       shadow-lg
-                      shadow-blue-500/20
+                      shadow-blue-500/30
+                      border-l-4
+                      border-blue-400
                     `
                     : `
                       hover:bg-slate-800/60
+                      hover:translate-x-1
+                      border-l-4
+                      border-transparent
                     `
                 }
               `
             }
           >
-            <span className="text-slate-300 group-hover:text-white transition shrink-0">
+            <span className={`transition-all duration-200 shrink-0 ${
+              link.path === "/" ? "text-blue-400 group-hover:text-blue-300" : "text-slate-300 group-hover:text-white group-hover:scale-110"
+            }`}>
               {link.icon}
             </span>
 
             <span className="flex-1">{link.name}</span>
 
             {link.path === "/reportes" && stockBajoCantidad > 0 && (
-              <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[22px] text-center shrink-0">
+              <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[22px] text-center shrink-0 animate-pulse shadow-lg shadow-red-500/30">
                 {stockBajoCantidad > 99 ? "99+" : stockBajoCantidad}
               </span>
             )}
@@ -273,7 +284,7 @@ function Sidebar({ onNavigate }) {
           <span className="font-medium">Cerrar Sesión</span>
         </button>
 
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
+        <div className="glass-strong border border-slate-700/50 rounded-2xl p-4">
           <p className="text-slate-400 text-sm">Inventario G.R.L.</p>
           <h3 className="text-xl font-bold mt-1 text-white">Versión PRO</h3>
           <p className="text-slate-500 text-xs mt-1">9 módulos activos</p>
