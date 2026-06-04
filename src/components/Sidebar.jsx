@@ -278,17 +278,11 @@ function Sidebar({ onNavigate }) {
 
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 hover:border-red-600/50 rounded-2xl transition-all duration-200 text-red-400 hover:text-red-300 mb-4 hover:shadow-soft"
+          className="w-full flex items-center gap-3 px-4 py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 hover:border-red-600/50 rounded-2xl transition-all duration-200 text-red-400 hover:text-red-300 hover:shadow-soft"
         >
           <LogOut size={20} />
           <span className="font-medium">Cerrar Sesión</span>
         </button>
-
-        <div className="glass-strong border border-slate-700/50 rounded-2xl p-4">
-          <p className="text-slate-400 text-sm">Inventario G.R.L.</p>
-          <h3 className="text-xl font-bold mt-1 text-white">Versión PRO</h3>
-          <p className="text-slate-500 text-xs mt-1">9 módulos activos</p>
-        </div>
       </div>
     </div>
   )
