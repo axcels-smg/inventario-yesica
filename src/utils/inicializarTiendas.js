@@ -1,4 +1,4 @@
-import { collection, doc, setDoc, getDoc } from "firebase/firestore"
+import { doc, setDoc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 
 export async function inicializarTiendas() {

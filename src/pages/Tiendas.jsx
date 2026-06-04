@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import Swal from "sweetalert2"
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore"
-import { createUserWithEmailAndPassword, deleteUser } from "firebase/auth"
+import { createUserWithEmailAndPassword } from "firebase/auth"
 import { Store, Plus, Edit2, Trash2, MapPin, Phone, FileText } from "lucide-react"
 import { db, auth } from "../firebase"
 import { useTienda } from "../context/TiendaContext"
@@ -83,7 +83,8 @@ function Tiendas() {
     try {
       if (modoEdicion && tiendaEditando) {
         // Al editar, no cambiar email/password
-        const { password, ...datosTienda } = formulario
+        // eslint-disable-next-line no-unused-vars
+        const { password: _password, ...datosTienda } = formulario
         await updateDoc(doc(db, "Tienda", tiendaEditando.id), datosTienda)
         Swal.fire({
           icon: "success",
@@ -98,17 +99,18 @@ function Tiendas() {
           formulario.email,
           formulario.password
         )
-        
+
         const uid = userCredential.user.uid
-        
+
         // Crear documento de tienda usando el UID como ID
-        const { password, ...datosTienda } = formulario
+        // eslint-disable-next-line no-unused-vars
+        const { password: _password, ...datosTienda } = formulario
         await setDoc(doc(db, "Tienda", uid), {
           ...datosTienda,
           authUid: uid,
           fechaCreacion: new Date(),
         })
-        
+
         Swal.fire({
           icon: "success",
           title: "Tienda creada",
@@ -123,23 +125,32 @@ function Tiendas() {
       cargarTiendas()
     } catch (error) {
       console.error("Error guardando tienda:", error)
-      let mensaje = "Error al guardar tienda"
-      
+
       if (error.code === "auth/email-already-in-use") {
-        mensaje = "El email ya está en uso"
+        Swal.fire({
+          icon: "error",
+          title: "Error al guardar",
+          text: "El email ya está en uso",
+        })
       } else if (error.code === "auth/weak-password") {
-        mensaje = "La contraseña debe tener al menos 6 caracteres"
+        Swal.fire({
+          icon: "error",
+          title: "Error al guardar",
+          text: "La contraseña debe tener al menos 6 caracteres",
+        })
       } else if (error.code === "auth/invalid-email") {
-        mensaje = "Email inválido"
+        Swal.fire({
+          icon: "error",
+          title: "Error al guardar",
+          text: "Email inválido",
+        })
       } else {
-        mensaje = error.message
+        Swal.fire({
+          icon: "error",
+          title: "Error al guardar",
+          text: error.message,
+        })
       }
-      
-      Swal.fire({
-        icon: "error",
-        title: "Error al guardar",
-        text: mensaje,
-      })
     }
   }
 

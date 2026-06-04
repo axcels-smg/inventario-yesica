@@ -45,7 +45,7 @@ function Transferencias() {
       cargarTransferencias()
       cargarProductosOrigen()
     }
-  }, [tiendaActual])
+  }, [tiendaActual, cargarTransferencias, cargarProductosOrigen])
 
   async function cargarTransferencias() {
     try {

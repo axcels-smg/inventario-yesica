@@ -27,8 +27,8 @@ import Swal from "sweetalert2"
 function Sidebar({ onNavigate }) {
   const { cantidad: stockBajoCantidad } = useStockBajo()
   const { tiendaActual, tiendas, seleccionarTienda, cargando } = useTienda()
-  const { esSuperAdmin, puedeGestionarTiendas, puedeHacerTransferencias } = useRol()
-  const { logout, usuario } = useAuth()
+  const { esSuperAdmin, puedeHacerTransferencias } = useRol()
+  const { logout } = useAuth()
   const navigate = useNavigate()
   const [selectorAbierto, setSelectorAbierto] = useState(false)
 

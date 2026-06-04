@@ -8,7 +8,7 @@ function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [cargando, setCargando] = useState(false)
-  const { login, tienda } = useAuth()
+  const { login, tienda, recuperarPassword } = useAuth()
   const navigate = useNavigate()
 
   async function handleSubmit(e) {
@@ -75,7 +75,6 @@ function Login() {
     })
 
     if (confirmar) {
-      const { recuperarPassword } = useAuth()
       const resultado = await recuperarPassword(email)
       
       if (resultado.success) {

@@ -59,7 +59,7 @@ function Reportes() {
     const { fechaDesde: d, fechaHasta: h } = obtenerRangoPreset("mes")
     setFechaDesde(d)
     setFechaHasta(h)
-  }, [tiendaActual])
+  }, [tiendaActual, cargarDatos])
 
   async function cargarDatos() {
     if (!tiendaActual) return

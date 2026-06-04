@@ -27,7 +27,7 @@ function Movimientos() {
     if (tiendaActual) {
       cargarMovimientos()
     }
-  }, [tiendaActual])
+  }, [tiendaActual, cargarMovimientos])
 
   async function cargarMovimientos() {
     if (!tiendaActual) return

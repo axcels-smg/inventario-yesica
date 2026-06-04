@@ -11,6 +11,7 @@ export function useRol() {
   return context
 }
 
+ 
 export function RolProvider({ children }) {
   const [rolActual, setRolActual] = useState(ROLES_USUARIO.LECTOR)
 

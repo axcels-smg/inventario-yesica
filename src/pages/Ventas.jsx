@@ -15,7 +15,6 @@ import { obtenerSiguienteNumeroBoleta, formatearNumeroBoleta } from "../utils/bo
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
-import { useRol } from "../context/RolContext"
 
 import {
   filtrarProductos,
@@ -26,7 +25,6 @@ import {
 
 function Ventas() {
   const { tiendaActual } = useTienda()
-  const { puedeAnularVentas } = useRol()
 
   const [productos, setProductos] = useState([])
   const [clientes, setClientes] = useState([])
@@ -44,7 +42,7 @@ function Ventas() {
       cargarProductos()
       cargarClientes()
     }
-  }, [tiendaActual])
+  }, [tiendaActual, cargarProductos, cargarClientes])
 
   async function cargarProductos() {
     if (!tiendaActual) return

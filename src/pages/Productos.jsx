@@ -66,7 +66,7 @@ function Productos() {
     if (tiendaActual) {
       obtenerProductos()
     }
-  }, [tiendaActual])
+  }, [tiendaActual, obtenerProductos])
 
   // OBTENER
   async function obtenerProductos() {

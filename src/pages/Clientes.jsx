@@ -12,7 +12,6 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore"
-import { obtenerTiempoFecha } from "../utils/fechas"
 import { useTienda } from "../context/TiendaContext"
 import { useRol } from "../context/RolContext"
 
@@ -33,7 +32,7 @@ function Clientes() {
     if (tiendaActual) {
       cargarClientes()
     }
-  }, [tiendaActual])
+  }, [tiendaActual, cargarClientes])
 
   async function cargarClientes() {
     if (!tiendaActual) return

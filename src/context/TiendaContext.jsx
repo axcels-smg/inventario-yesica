@@ -13,6 +13,7 @@ export function useTienda() {
   return context
 }
 
+ 
 export function TiendaProvider({ children }) {
   const { tienda: tiendaAuth, cargando: cargandoAuth } = useAuth()
   const [tiendaActual, setTiendaActual] = useState(null)

@@ -36,7 +36,7 @@ function HistorialVentas() {
     if (tiendaActual) {
       cargarVentas()
     }
-  }, [tiendaActual])
+  }, [tiendaActual, cargarVentas])
 
   async function cargarVentas() {
     if (!tiendaActual) return

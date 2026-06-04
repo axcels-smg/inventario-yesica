@@ -37,7 +37,7 @@ function Dashboard() {
       cargarProductos()
       cargarVentas()
     }
-  }, [tiendaActual])
+  }, [tiendaActual, cargarProductos, cargarVentas])
 
   useEffect(() => {
     async function registrarAlertaSiNecesario() {

@@ -75,7 +75,7 @@ export function AuthProvider({ children }) {
     } catch (error) {
       console.error("Error en login:", error)
       let mensaje = "Error al iniciar sesión"
-      
+
       switch (error.code) {
         case "auth/invalid-email":
           mensaje = "Email inválido"
@@ -90,9 +90,9 @@ export function AuthProvider({ children }) {
           mensaje = "Demasiados intentos. Intente más tarde"
           break
         default:
-          mensaje = error.message
+          return { success: false, error: error.message }
       }
-      
+
       return { success: false, error: mensaje }
     }
   }
@@ -117,20 +117,15 @@ export function AuthProvider({ children }) {
       return { success: true }
     } catch (error) {
       console.error("Error al recuperar contraseña:", error)
-      let mensaje = "Error al enviar correo de recuperación"
-      
+
       switch (error.code) {
         case "auth/invalid-email":
-          mensaje = "Email inválido"
-          break
+          return { success: false, error: "Email inválido" }
         case "auth/user-not-found":
-          mensaje = "Usuario no encontrado"
-          break
+          return { success: false, error: "Usuario no encontrado" }
         default:
-          mensaje = error.message
+          return { success: false, error: error.message }
       }
-      
-      return { success: false, error: mensaje }
     }
   }
 

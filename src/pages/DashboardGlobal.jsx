@@ -4,7 +4,6 @@ import {
   Package,
   ShoppingCart,
   DollarSign,
-  TrendingUp,
   Store,
   BarChart3,
 } from "lucide-react"
@@ -36,7 +35,7 @@ function DashboardGlobal() {
 
   useEffect(() => {
     cargarDatosConsolidados()
-  }, [tiendas])
+  }, [tiendas, cargarDatosConsolidados])
 
   async function cargarDatosConsolidados() {
     try {
