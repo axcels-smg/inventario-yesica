@@ -41,6 +41,7 @@ function Tiendas() {
       Swal.fire({
         icon: "error",
         title: "Error al cargar tiendas",
+        text: error.message || "Error de conexión con Firebase",
       })
     } finally {
       setCargando(false)

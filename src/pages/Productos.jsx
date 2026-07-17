@@ -535,7 +535,7 @@ function Productos() {
 
           <tbody>
 
-            {cargando && (
+            {cargando && productos.length === 0 && (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
                   Cargando productos...
