@@ -25,6 +25,10 @@ import {
   filtrarProductos,
   obtenerValoresUnicos,
   PRODUCTOS_POR_PAGINA,
+  buscarProductoDuplicado,
+  obtenerModelosDuplicados,
+  conteoPorClaveModelo,
+  claveModeloProducto,
 } from "../utils/productos"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
@@ -256,6 +260,21 @@ function Productos() {
       return
     }
 
+    const duplicado = buscarProductoDuplicado(productos, {
+      marca: marcaLimpia,
+      modelo: modeloLimpio,
+      excludeId: editandoId,
+    })
+
+    if (duplicado) {
+      Swal.fire({
+        icon: "warning",
+        title: "Modelo ya registrado",
+        text: `Ya existe "${marcaLimpia} ${modeloLimpio}". No se pueden repetir productos con el mismo modelo.`,
+      })
+      return
+    }
+
     try {
 
       if (editandoId) {
@@ -396,6 +415,16 @@ function Productos() {
     [productos, busqueda, filtroMarca, filtroCategoria]
   )
 
+  const modelosDuplicados = useMemo(
+    () => obtenerModelosDuplicados(productos),
+    [productos]
+  )
+
+  const conteoModelos = useMemo(
+    () => conteoPorClaveModelo(productos),
+    [productos]
+  )
+
   const totalPaginas = Math.max(
     1,
     Math.ceil(productosFiltrados.length / PRODUCTOS_POR_PAGINA)
@@ -511,6 +540,30 @@ function Productos() {
       {/* TABLE */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl overflow-hidden">
 
+        {modelosDuplicados.length > 0 && (
+          <div className="p-4 border-b border-amber-200 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-900 text-amber-900 dark:text-amber-200">
+            <p className="font-bold">
+              Hay {modelosDuplicados.length} modelo
+              {modelosDuplicados.length === 1 ? "" : "s"} repetido
+              {modelosDuplicados.length === 1 ? "" : "s"}
+            </p>
+            <p className="text-sm mt-1">
+              No se borran los que ya ingresaste. Desde ahora no se podrá
+              registrar el mismo modelo otra vez.
+            </p>
+            <ul className="mt-2 text-sm list-disc list-inside space-y-0.5">
+              {modelosDuplicados.slice(0, 8).map((d) => (
+                <li key={`${d.marca}-${d.modelo}`}>
+                  {d.marca} {d.modelo}: hay {d.cantidad} del mismo modelo
+                </li>
+              ))}
+              {modelosDuplicados.length > 8 && (
+                <li>…y {modelosDuplicados.length - 8} más</li>
+              )}
+            </ul>
+          </div>
+        )}
+
         {productosFiltrados.length > 0 && (
           <p className="p-4 text-sm text-slate-500 dark:text-slate-400 border-b dark:border-slate-800">
             Mostrando {indiceDesde}–{indiceHasta} de {productosFiltrados.length}
@@ -551,8 +604,19 @@ function Productos() {
               </tr>
             )}
 
-            {productosPagina.map((p) => (
-              <tr key={p.id} className="border-t">
+            {productosPagina.map((p) => {
+              const veces = conteoModelos.get(claveModeloProducto(p)) || 1
+              const esDuplicado = veces > 1
+
+              return (
+              <tr
+                key={p.id}
+                className={`border-t ${
+                  esDuplicado
+                    ? "bg-amber-50/80 dark:bg-amber-950/20"
+                    : ""
+                }`}
+              >
 
                 <td className="p-4 font-mono text-sm text-slate-600 dark:text-slate-400">
                   {p.codigo || "—"}
@@ -566,7 +630,19 @@ function Productos() {
                   </span>
                 </td>
 
-                <td className="p-4 dark:text-white">{p.modelo}</td>
+                <td className="p-4 dark:text-white">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span>{p.modelo}</span>
+                    {esDuplicado && (
+                      <span
+                        className="bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100 px-2 py-0.5 rounded-full text-xs font-bold"
+                        title={`Hay ${veces} productos con este mismo modelo`}
+                      >
+                        Hay {veces} del mismo modelo
+                      </span>
+                    )}
+                  </div>
+                </td>
 
                 <td className="p-4 font-bold dark:text-white">S/ {p.precio}</td>
 
@@ -608,7 +684,8 @@ function Productos() {
                 </td>
 
               </tr>
-            ))}
+              )
+            })}
 
           </tbody>
 

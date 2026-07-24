@@ -12,6 +12,9 @@ import {
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
+import {
+  claveModeloProducto,
+} from "../utils/productos"
 
 function InventarioExcel() {
   const { tiendaActual } = useTienda()
@@ -78,11 +81,48 @@ function InventarioExcel() {
 
       setImportando(true)
 
+      const existentes = await cargarTodosProductos()
+      const deEstaTienda = existentes.filter(
+        (p) => !p.tiendaId || p.tiendaId === tiendaActual.id
+      )
+      const clavesVistas = new Set(
+        deEstaTienda.map((p) => claveModeloProducto(p))
+      )
+
+      const nuevos = []
+      let omitidos = 0
+
+      for (const p of productos) {
+        const clave = claveModeloProducto(p)
+        if (!clave || clave === "||") {
+          omitidos += 1
+          continue
+        }
+        if (clavesVistas.has(clave)) {
+          omitidos += 1
+          continue
+        }
+        clavesVistas.add(clave)
+        nuevos.push(p)
+      }
+
+      if (nuevos.length === 0) {
+        Swal.fire({
+          icon: "info",
+          title: "Nada que importar",
+          text:
+            omitidos > 0
+              ? `Se omitieron ${omitidos} porque el modelo ya existe o está vacío.`
+              : "No hay productos válidos en el archivo",
+        })
+        return
+      }
+
       const LOTE = 400
       let importados = 0
 
-      for (let i = 0; i < productos.length; i += LOTE) {
-        const trozo = productos.slice(i, i + LOTE)
+      for (let i = 0; i < nuevos.length; i += LOTE) {
+        const trozo = nuevos.slice(i, i + LOTE)
         const batch = writeBatch(db)
 
         trozo.forEach((p) => {
@@ -104,7 +144,9 @@ function InventarioExcel() {
 
       await registrarMovimiento({
         tipo: TIPOS_MOVIMIENTO.IMPORTACION,
-        detalle: `Importados ${importados} productos desde Excel`,
+        detalle: `Importados ${importados} productos desde Excel${
+          omitidos ? ` (${omitidos} omitidos por modelo repetido)` : ""
+        }`,
         cantidad: importados,
         tiendaId: tiendaActual.id,
       })
@@ -112,12 +154,14 @@ function InventarioExcel() {
       Swal.fire({
         icon: "success",
         title: "Importación completa",
-        text: `${importados} productos agregados`,
+        text:
+          omitidos > 0
+            ? `${importados} agregados. ${omitidos} omitidos (modelo ya existía o repetido en el Excel).`
+            : `${importados} productos agregados`,
       })
 
       setVistaPrevia([])
       if (inputRef.current) inputRef.current.value = ""
-
     } catch (error) {
       Swal.fire({ icon: "error", title: "Error al importar", text: error.message })
     } finally {

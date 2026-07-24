@@ -45,3 +45,75 @@ export function obtenerValoresUnicos(productos, campo) {
     (a, b) => String(a).localeCompare(String(b), "es")
   )
 }
+
+/** Normaliza texto para comparar modelos (sin mayúsculas ni espacios de más). */
+export function normalizarModelo(modelo) {
+  return String(modelo || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+}
+
+export function claveModeloProducto(producto) {
+  const marca = String(producto?.marca || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+  const modelo = normalizarModelo(producto?.modelo)
+  return `${marca}||${modelo}`
+}
+
+/**
+ * Busca otro producto de la misma tienda con la misma marca + modelo.
+ * excludeId: al editar, ignora el producto actual.
+ */
+export function buscarProductoDuplicado(
+  productos,
+  { marca, modelo, excludeId = null } = {}
+) {
+  const clave = claveModeloProducto({ marca, modelo })
+  if (!clave || clave === "||") return null
+
+  return (
+    productos.find((p) => {
+      if (excludeId && p.id === excludeId) return false
+      return claveModeloProducto(p) === clave
+    }) || null
+  )
+}
+
+/** Modelos que aparecen más de una vez (no borra nada, solo informa). */
+export function obtenerModelosDuplicados(productos) {
+  const conteo = new Map()
+
+  productos.forEach((p) => {
+    const clave = claveModeloProducto(p)
+    if (!clave || clave === "||") return
+
+    const actual = conteo.get(clave) || {
+      marca: p.marca,
+      modelo: p.modelo,
+      cantidad: 0,
+      ids: [],
+    }
+    actual.cantidad += 1
+    actual.ids.push(p.id)
+    conteo.set(clave, actual)
+  })
+
+  return [...conteo.values()]
+    .filter((item) => item.cantidad > 1)
+    .sort((a, b) =>
+      String(a.modelo).localeCompare(String(b.modelo), "es")
+    )
+}
+
+export function conteoPorClaveModelo(productos) {
+  const mapa = new Map()
+  productos.forEach((p) => {
+    const clave = claveModeloProducto(p)
+    if (!clave || clave === "||") return
+    mapa.set(clave, (mapa.get(clave) || 0) + 1)
+  })
+  return mapa
+}
