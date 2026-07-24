@@ -262,6 +262,7 @@ function Productos() {
 
     const duplicado = buscarProductoDuplicado(productos, {
       marca: marcaLimpia,
+      categoria: categoriaLimpia,
       modelo: modeloLimpio,
       excludeId: editandoId,
     })
@@ -269,8 +270,8 @@ function Productos() {
     if (duplicado) {
       Swal.fire({
         icon: "warning",
-        title: "Modelo ya registrado",
-        text: `Ya existe "${marcaLimpia} ${modeloLimpio}". No se pueden repetir productos con el mismo modelo.`,
+        title: "Producto ya registrado",
+        text: `Ya existe "${marcaLimpia} / ${categoriaLimpia} / ${modeloLimpio}". No se pueden repetir la misma marca, categoría y modelo.`,
       })
       return
     }
@@ -543,18 +544,18 @@ function Productos() {
         {modelosDuplicados.length > 0 && (
           <div className="p-4 border-b border-amber-200 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-900 text-amber-900 dark:text-amber-200">
             <p className="font-bold">
-              Hay {modelosDuplicados.length} modelo
+              Hay {modelosDuplicados.length} producto
               {modelosDuplicados.length === 1 ? "" : "s"} repetido
               {modelosDuplicados.length === 1 ? "" : "s"}
             </p>
             <p className="text-sm mt-1">
               No se borran los que ya ingresaste. Desde ahora no se podrá
-              registrar el mismo modelo otra vez.
+              registrar la misma marca, categoría y modelo otra vez.
             </p>
             <ul className="mt-2 text-sm list-disc list-inside space-y-0.5">
               {modelosDuplicados.slice(0, 8).map((d) => (
-                <li key={`${d.marca}-${d.modelo}`}>
-                  {d.marca} {d.modelo}: hay {d.cantidad} del mismo modelo
+                <li key={`${d.marca}-${d.categoria}-${d.modelo}`}>
+                  {d.marca} / {d.categoria} / {d.modelo}: hay {d.cantidad} iguales
                 </li>
               ))}
               {modelosDuplicados.length > 8 && (
@@ -636,9 +637,9 @@ function Productos() {
                     {esDuplicado && (
                       <span
                         className="bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100 px-2 py-0.5 rounded-full text-xs font-bold"
-                        title={`Hay ${veces} productos con este mismo modelo`}
+                        title={`Hay ${veces} con la misma marca, categoría y modelo`}
                       >
-                        Hay {veces} del mismo modelo
+                        Hay {veces} iguales
                       </span>
                     )}
                   </div>

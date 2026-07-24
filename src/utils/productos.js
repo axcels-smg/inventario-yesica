@@ -46,33 +46,37 @@ export function obtenerValoresUnicos(productos, campo) {
   )
 }
 
-/** Normaliza texto para comparar modelos (sin mayúsculas ni espacios de más). */
-export function normalizarModelo(modelo) {
-  return String(modelo || "")
+/** Normaliza texto para comparar (sin mayúsculas ni espacios de más). */
+export function normalizarTextoProducto(valor) {
+  return String(valor || "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ")
 }
 
+/** @deprecated Usar normalizarTextoProducto */
+export function normalizarModelo(modelo) {
+  return normalizarTextoProducto(modelo)
+}
+
+/** Clave única: marca + categoría + modelo */
 export function claveModeloProducto(producto) {
-  const marca = String(producto?.marca || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-  const modelo = normalizarModelo(producto?.modelo)
-  return `${marca}||${modelo}`
+  const marca = normalizarTextoProducto(producto?.marca)
+  const categoria = normalizarTextoProducto(producto?.categoria)
+  const modelo = normalizarTextoProducto(producto?.modelo)
+  return `${marca}||${categoria}||${modelo}`
 }
 
 /**
- * Busca otro producto de la misma tienda con la misma marca + modelo.
+ * Busca otro producto con la misma marca + categoría + modelo.
  * excludeId: al editar, ignora el producto actual.
  */
 export function buscarProductoDuplicado(
   productos,
-  { marca, modelo, excludeId = null } = {}
+  { marca, categoria, modelo, excludeId = null } = {}
 ) {
-  const clave = claveModeloProducto({ marca, modelo })
-  if (!clave || clave === "||") return null
+  const clave = claveModeloProducto({ marca, categoria, modelo })
+  if (!clave || clave === "||||") return null
 
   return (
     productos.find((p) => {
@@ -82,16 +86,17 @@ export function buscarProductoDuplicado(
   )
 }
 
-/** Modelos que aparecen más de una vez (no borra nada, solo informa). */
+/** Combinaciones marca+categoría+modelo que aparecen más de una vez. */
 export function obtenerModelosDuplicados(productos) {
   const conteo = new Map()
 
   productos.forEach((p) => {
     const clave = claveModeloProducto(p)
-    if (!clave || clave === "||") return
+    if (!clave || clave === "||||") return
 
     const actual = conteo.get(clave) || {
       marca: p.marca,
+      categoria: p.categoria,
       modelo: p.modelo,
       cantidad: 0,
       ids: [],
@@ -112,7 +117,7 @@ export function conteoPorClaveModelo(productos) {
   const mapa = new Map()
   productos.forEach((p) => {
     const clave = claveModeloProducto(p)
-    if (!clave || clave === "||") return
+    if (!clave || clave === "||||") return
     mapa.set(clave, (mapa.get(clave) || 0) + 1)
   })
   return mapa

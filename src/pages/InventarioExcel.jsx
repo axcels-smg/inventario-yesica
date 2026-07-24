@@ -94,7 +94,7 @@ function InventarioExcel() {
 
       for (const p of productos) {
         const clave = claveModeloProducto(p)
-        if (!clave || clave === "||") {
+        if (!clave || clave === "||||") {
           omitidos += 1
           continue
         }
@@ -112,7 +112,7 @@ function InventarioExcel() {
           title: "Nada que importar",
           text:
             omitidos > 0
-              ? `Se omitieron ${omitidos} porque el modelo ya existe o está vacío.`
+              ? `Se omitieron ${omitidos} porque ya existe la misma marca, categoría y modelo, o faltan datos.`
               : "No hay productos válidos en el archivo",
         })
         return
@@ -145,7 +145,7 @@ function InventarioExcel() {
       await registrarMovimiento({
         tipo: TIPOS_MOVIMIENTO.IMPORTACION,
         detalle: `Importados ${importados} productos desde Excel${
-          omitidos ? ` (${omitidos} omitidos por modelo repetido)` : ""
+          omitidos ? ` (${omitidos} omitidos por duplicado marca/categoría/modelo)` : ""
         }`,
         cantidad: importados,
         tiendaId: tiendaActual.id,
@@ -156,7 +156,7 @@ function InventarioExcel() {
         title: "Importación completa",
         text:
           omitidos > 0
-            ? `${importados} agregados. ${omitidos} omitidos (modelo ya existía o repetido en el Excel).`
+            ? `${importados} agregados. ${omitidos} omitidos (misma marca, categoría y modelo).`
             : `${importados} productos agregados`,
       })
 
