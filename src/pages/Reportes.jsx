@@ -73,7 +73,7 @@ function Reportes() {
     const listaVentas = []
     snapVentas.forEach((d) => {
       const data = d.data()
-      if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+      if (data.tiendaId === tiendaActual.id) {
         listaVentas.push({ id: d.id, ...data })
       }
     })
@@ -81,7 +81,7 @@ function Reportes() {
     const listaProductos = []
     snapProductos.forEach((d) => {
       const data = d.data()
-      if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+      if (data.tiendaId === tiendaActual.id) {
         listaProductos.push({ id: d.id, ...data })
       }
     })
@@ -89,7 +89,7 @@ function Reportes() {
     const listaClientes = []
     snapClientes.forEach((d) => {
       const data = d.data()
-      if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+      if (data.tiendaId === tiendaActual.id) {
         listaClientes.push({ id: d.id, ...data })
       }
     })
@@ -315,7 +315,7 @@ function Reportes() {
       )}
 
       {/* ALERTAS ACUMULATIVAS POR DÍA */}
-      <AlertasStockAcumulativas />
+      <AlertasStockAcumulativas tiendaId={tiendaActual?.id} />
 
       {/* TABLA VENTAS FILTRADAS */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 overflow-x-auto">

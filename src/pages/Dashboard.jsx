@@ -41,16 +41,16 @@ function Dashboard() {
 
   useEffect(() => {
     async function registrarAlertaSiNecesario() {
-      if (productos.length === 0) return
+      if (productos.length === 0 || !tiendaActual) return
 
-      const yaExiste = await existeAlertaHoy()
+      const yaExiste = await existeAlertaHoy(tiendaActual.id)
       if (!yaExiste) {
-        await registrarAlertaDiaria(productos)
+        await registrarAlertaDiaria(productos, tiendaActual.id)
       }
     }
 
     registrarAlertaSiNecesario()
-  }, [productos])
+  }, [productos, tiendaActual])
 
   async function cargarProductos() {
     if (!tiendaActual) return
@@ -59,7 +59,7 @@ function Dashboard() {
     const lista = []
     querySnapshot.forEach((docu) => {
       const data = docu.data()
-      if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+      if (data.tiendaId === tiendaActual.id) {
         lista.push({ id: docu.id, ...data })
       }
     })
@@ -73,7 +73,7 @@ function Dashboard() {
     const lista = []
     querySnapshot.forEach((docu) => {
       const data = docu.data()
-      if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+      if (data.tiendaId === tiendaActual.id) {
         lista.push({ id: docu.id, ...data })
       }
     })

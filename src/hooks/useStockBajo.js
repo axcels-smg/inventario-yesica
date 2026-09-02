@@ -3,18 +3,26 @@ import { collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "../firebase"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 
-export function useStockBajo() {
+export function useStockBajo(tiendaId) {
   const [cantidad, setCantidad] = useState(0)
   const [productos, setProductos] = useState([])
   const [cargando, setCargando] = useState(true)
 
   async function recargar() {
+    if (!tiendaId) {
+      setProductos([])
+      setCantidad(0)
+      setCargando(false)
+      return
+    }
+
     try {
       setCargando(true)
 
       const q = query(
         collection(db, "productos"),
-        where("stock", "<=", STOCK_BAJO_UMBRAL)
+        where("stock", "<=", STOCK_BAJO_UMBRAL),
+        where("tiendaId", "==", tiendaId)
       )
 
       const snap = await getDocs(q)
@@ -39,7 +47,7 @@ export function useStockBajo() {
 
   useEffect(() => {
     recargar()
-  }, [])
+  }, [tiendaId])
 
   return { cantidad, productos, cargando, recargar }
 }

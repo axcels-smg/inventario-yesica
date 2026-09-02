@@ -3,29 +3,33 @@ import { db } from "../firebase"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 
 /**
- * Registra los productos con stock bajo (0-2) para un día específico
+ * Registra los productos con stock bajo (0-2) para un día y tienda específicos
  * Solo guarda si hay productos con stock bajo
  */
-export async function registrarAlertaDiaria(productos) {
+export async function registrarAlertaDiaria(productos, tiendaId) {
   const productosBajoStock = productos.filter(
     (p) => Number(p.stock) <= STOCK_BAJO_UMBRAL
   )
 
   if (productosBajoStock.length === 0) {
-    return null // No hay productos con stock bajo, no registrar
+    return null
   }
 
   const hoy = new Date()
   const fechaKey = obtenerFechaKey(hoy)
+  const docId = tiendaId ? `${tiendaId}_${fechaKey}` : fechaKey
 
-  const alertaRef = doc(db, "alertas_stock", fechaKey)
+  const alertaRef = doc(db, "alertas_stock", docId)
 
   await setDoc(alertaRef, {
     fecha: Timestamp.fromDate(hoy),
     fechaKey,
+    tiendaId: tiendaId || null,
     productos: productosBajoStock.map((p) => ({
       id: p.id,
-      nombre: p.nombre,
+      nombre: `${p.marca || ""} ${p.modelo || ""}`.trim(),
+      marca: p.marca || "",
+      modelo: p.modelo || "",
       stock: p.stock,
       precio: p.precio,
     })),
@@ -33,23 +37,30 @@ export async function registrarAlertaDiaria(productos) {
     createdAt: Timestamp.now(),
   })
 
-  return fechaKey
+  return docId
 }
 
 /**
- * Obtiene el historial de alertas acumuladas
- * Solo incluye días donde hubo productos con stock bajo
+ * Obtiene el historial de alertas acumuladas para una tienda específica
  */
-export async function obtenerHistorialAlertas() {
-  const alertasRef = collection(db, "alertas_stock")
-  const snapshot = await getDocs(alertasRef)
+export async function obtenerHistorialAlertas(tiendaId) {
+  let q
+  if (tiendaId) {
+    q = query(
+      collection(db, "alertas_stock"),
+      where("tiendaId", "==", tiendaId)
+    )
+  } else {
+    q = collection(db, "alertas_stock")
+  }
+
+  const snapshot = await getDocs(q)
 
   const alertas = []
   snapshot.forEach((doc) => {
     alertas.push({ id: doc.id, ...doc.data() })
   })
 
-  // Ordenar por fecha (más reciente primero)
   alertas.sort((a, b) => {
     const fechaA = a.fecha?.toDate?.() || new Date(a.fechaKey)
     const fechaB = b.fecha?.toDate?.() || new Date(b.fechaKey)
@@ -61,7 +72,6 @@ export async function obtenerHistorialAlertas() {
 
 /**
  * Genera una lista acumulativa de productos sin stock
- * Combina todos los días donde hubo alertas
  */
 export function generarListaAcumulativa(alertas) {
   const productosUnicos = new Map()
@@ -93,15 +103,17 @@ function obtenerFechaKey(fecha) {
 }
 
 /**
- * Verifica si ya existe una alerta para el día de hoy
+ * Verifica si ya existe una alerta para el día de hoy y una tienda
  */
-export async function existeAlertaHoy() {
+export async function existeAlertaHoy(tiendaId) {
   const hoy = new Date()
   const fechaKey = obtenerFechaKey(hoy)
+  const docId = tiendaId ? `${tiendaId}_${fechaKey}` : fechaKey
 
   const q = query(
     collection(db, "alertas_stock"),
-    where("fechaKey", "==", fechaKey)
+    where("fechaKey", "==", fechaKey),
+    where("tiendaId", "==", tiendaId || null)
   )
 
   const snapshot = await getDocs(q)

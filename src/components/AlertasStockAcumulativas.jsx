@@ -1,8 +1,8 @@
 import { AlertTriangle, Calendar, Package } from "lucide-react"
 import { useAlertasStockHistorial } from "../hooks/useAlertasStockHistorial"
 
-function AlertasStockAcumulativas() {
-  const { alertas, listaAcumulativa, cargando, recargar } = useAlertasStockHistorial()
+function AlertasStockAcumulativas({ tiendaId }) {
+  const { alertas, listaAcumulativa, cargando, recargar } = useAlertasStockHistorial(tiendaId)
 
   if (cargando) {
     return (

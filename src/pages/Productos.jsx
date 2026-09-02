@@ -84,7 +84,7 @@ function Productos() {
 
       querySnapshot.forEach((docu) => {
         const data = docu.data()
-        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+        if (data.tiendaId === tiendaActual.id) {
           lista.push({
             id: docu.id,
             ...data,
