@@ -1,7 +1,6 @@
-import { collection, doc, setDoc, getDoc, getDocs, query, where, Timestamp } from "firebase/firestore"
+import { collection, doc, setDoc, getDocs, query, where, Timestamp } from "firebase/firestore"
 import { db } from "../firebase"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
-import { nombreVisibleProducto } from "./consultasTienda"
 
 /**
  * Registra los productos con stock bajo (0-2) para un día y tienda específicos
@@ -28,7 +27,7 @@ export async function registrarAlertaDiaria(productos, tiendaId) {
     tiendaId: tiendaId || null,
     productos: productosBajoStock.map((p) => ({
       id: p.id,
-      nombre: nombreVisibleProducto(p),
+      nombre: `${p.marca || ""} ${p.modelo || ""}`.trim(),
       marca: p.marca || "",
       modelo: p.modelo || "",
       stock: p.stock,
@@ -107,9 +106,16 @@ function obtenerFechaKey(fecha) {
  * Verifica si ya existe una alerta para el día de hoy y una tienda
  */
 export async function existeAlertaHoy(tiendaId) {
-  if (!tiendaId) return false
+  const hoy = new Date()
+  const fechaKey = obtenerFechaKey(hoy)
+  const docId = tiendaId ? `${tiendaId}_${fechaKey}` : fechaKey
 
-  const fechaKey = obtenerFechaKey(new Date())
-  const snap = await getDoc(doc(db, "alertas_stock", `${tiendaId}_${fechaKey}`))
-  return snap.exists()
+  const q = query(
+    collection(db, "alertas_stock"),
+    where("fechaKey", "==", fechaKey),
+    where("tiendaId", "==", tiendaId || null)
+  )
+
+  const snapshot = await getDocs(q)
+  return !snapshot.empty
 }

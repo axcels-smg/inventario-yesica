@@ -1,6 +1,5 @@
 import { AlertTriangle, Calendar, Package } from "lucide-react"
 import { useAlertasStockHistorial } from "../hooks/useAlertasStockHistorial"
-import { nombreVisibleProducto } from "../utils/consultasTienda"
 
 function AlertasStockAcumulativas({ tiendaId }) {
   const { alertas, listaAcumulativa, cargando, recargar } = useAlertasStockHistorial(tiendaId)
@@ -90,7 +89,7 @@ function AlertasStockAcumulativas({ tiendaId }) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-slate-900 dark:text-white">
-                    {nombreVisibleProducto(producto)}
+                    {producto.nombre}
                   </p>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
                     Stock actual: {producto.stock} | Precio: S/ {producto.precio}

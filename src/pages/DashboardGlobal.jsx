@@ -31,7 +31,6 @@ function DashboardGlobal() {
     ventasPorTienda: [],
     productosPorTienda: [],
     ingresosPorTienda: [],
-    categoriasPorTienda: [],
   })
   const [cargando, setCargando] = useState(true)
 
@@ -76,39 +75,6 @@ function DashboardGlobal() {
         }
       })
 
-      const categoriasPorTienda = tiendas.map((tienda) => {
-        const productosTienda = productos.filter((p) => p.tiendaId === tienda.id)
-        const mapaCategorias = new Map()
-        let totalTienda = 0
-        let stockTienda = 0
-
-        productosTienda.forEach((p) => {
-          const cat = p.categoria || "Sin categoría"
-          const actual = mapaCategorias.get(cat) || { cantidad: 0, stock: 0 }
-          actual.cantidad += 1
-          actual.stock += Number(p.stock || 0)
-          mapaCategorias.set(cat, actual)
-          totalTienda += 1
-          stockTienda += Number(p.stock || 0)
-        })
-
-        const categorias = [...mapaCategorias.entries()]
-          .map(([nombre, datos]) => ({
-            nombre,
-            cantidad: datos.cantidad,
-            stock: datos.stock,
-          }))
-          .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es"))
-
-        return {
-          tiendaId: tienda.id,
-          tiendaNombre: tienda.nombre,
-          totalProductos: totalTienda,
-          totalStock: stockTienda,
-          categorias,
-        }
-      })
-
       setDatosConsolidados({
         totalProductos: productos.length,
         totalVentas: ventas.filter((v) => !v.anulada).length,
@@ -118,7 +84,6 @@ function DashboardGlobal() {
         ventasPorTienda,
         productosPorTienda,
         ingresosPorTienda,
-        categoriasPorTienda,
       })
     } catch (error) {
       console.error("Error cargando datos consolidados:", error)
@@ -328,95 +293,6 @@ function DashboardGlobal() {
                   })}
                 </tbody>
               </table>
-            </div>
-          </div>
-
-          {/* Desglose por categoría y tienda */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
-            <h3 className="text-xl font-bold mb-6 dark:text-white flex items-center gap-2">
-              <Package size={20} />
-              Inventario por Categoría y Tienda
-            </h3>
-            <div className="space-y-8">
-              {datosConsolidados.categoriasPorTienda.map((t) => (
-                <div
-                  key={t.tiendaId}
-                  className="border-b dark:border-slate-800 pb-6 last:border-b-0 last:pb-0"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                    <h4 className="text-lg font-bold dark:text-white flex items-center gap-2">
-                      <Store size={18} className="text-orange-500" />
-                      {t.tiendaNombre}
-                    </h4>
-                    <div className="flex gap-4 text-sm">
-                      <span className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full">
-                        {t.totalProductos} productos
-                      </span>
-                      <span className="bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 px-3 py-1 rounded-full">
-                        {t.totalStock} stock total
-                      </span>
-                    </div>
-                  </div>
-
-                  {t.categorias.length === 0 ? (
-                    <p className="text-sm text-slate-500 dark:text-slate-400 italic px-2">
-                      Sin productos registrados
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                            <th className="p-3 text-left dark:text-white">Categoría</th>
-                            <th className="p-3 text-right dark:text-white">Productos</th>
-                            <th className="p-3 text-right dark:text-white">Stock</th>
-                            <th className="p-3 text-left dark:text-white w-56">Distribución</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {t.categorias.map((c) => {
-                            const porcentaje =
-                              t.totalProductos > 0
-                                ? Math.round((c.cantidad / t.totalProductos) * 100)
-                                : 0
-                            return (
-                              <tr
-                                key={c.nombre}
-                                className="border-b dark:border-slate-800 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/30"
-                              >
-                                <td className="p-3 font-medium dark:text-white">
-                                  <span className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-xs">
-                                    {c.nombre}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-right font-bold dark:text-slate-300">
-                                  {c.cantidad}
-                                </td>
-                                <td className="p-3 text-right font-bold dark:text-slate-300">
-                                  {c.stock}
-                                </td>
-                                <td className="p-3">
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                      <div
-                                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
-                                        style={{ width: `${porcentaje}%` }}
-                                      />
-                                    </div>
-                                    <span className="text-xs text-slate-500 dark:text-slate-400 w-10 text-right">
-                                      {porcentaje}%
-                                    </span>
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              ))}
             </div>
           </div>
         </>
