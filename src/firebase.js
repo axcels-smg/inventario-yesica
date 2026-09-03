@@ -2,14 +2,19 @@ import { initializeApp } from "firebase/app"
 import { getFirestore } from "firebase/firestore"
 import { getAuth } from "firebase/auth"
 
-// Configuración Firebase desde variables de entorno
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBZX2IoQDD-iWNzZ5XydL68aE1dZHyfsm4",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "inventario-yesica-db01c.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "inventario-yesica-db01c",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "inventario-yesica-db01c.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "461672703245",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:461672703245:web:0c4e577c1fa21f75577c44"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+}
+
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  throw new Error(
+    "Faltan variables VITE_FIREBASE_* . Copia .env.example a .env en local, y en Vercel agrégalas en Settings → Environment Variables."
+  )
 }
 
 // Inicializar Firebase

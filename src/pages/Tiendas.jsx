@@ -1,9 +1,22 @@
 import { useEffect, useState } from "react"
 import Swal from "sweetalert2"
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore"
-import { createUserWithEmailAndPassword } from "firebase/auth"
+import { createUserWithEmailAndPassword, getAuth } from "firebase/auth"
+import { initializeApp, getApps } from "firebase/app"
 import { Store, Plus, Edit2, Trash2, MapPin, Phone, FileText } from "lucide-react"
-import { db, auth } from "../firebase"
+import { db } from "../firebase"
+
+// Segunda app de Firebase usada únicamente para crear usuarios sin afectar la sesión del admin
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+}
+const secondaryApp = getApps().find((a) => a.name === "secondary") || initializeApp(firebaseConfig, "secondary")
+const authSecundario = getAuth(secondaryApp)
 import { useTienda } from "../context/TiendaContext"
 
 function Tiendas() {
@@ -11,7 +24,7 @@ function Tiendas() {
   const [cargando, setCargando] = useState(true)
   const [modoEdicion, setModoEdicion] = useState(false)
   const [tiendaEditando, setTiendaEditando] = useState(null)
-  const { cargarTiendas } = useTienda()
+  const { cargarTiendas, tiendaPropia } = useTienda()
 
   const [formulario, setFormulario] = useState({
     nombre: "",
@@ -65,6 +78,14 @@ function Tiendas() {
   async function guardarTienda(e) {
     e.preventDefault()
 
+    if (!modoEdicion || tiendaEditando?.id !== tiendaPropia?.id) {
+      return Swal.fire({
+        icon: "warning",
+        title: "Solo lectura",
+        text: "Solo puedes editar los datos de tu propia tienda.",
+      })
+    }
+
     if (!formulario.nombre.trim()) {
       return Swal.fire({
         icon: "warning",
@@ -94,12 +115,14 @@ function Tiendas() {
           showConfirmButton: false,
         })
       } else {
-        // Al crear, crear usuario en Firebase Auth primero
+        // Crear usuario usando la app secundaria para NO desloguear al admin
         const userCredential = await createUserWithEmailAndPassword(
-          auth,
+          authSecundario,
           formulario.email,
           formulario.password
         )
+        // Cerrar sesión del nuevo usuario en la app secundaria inmediatamente
+        await authSecundario.signOut()
 
         const uid = userCredential.user.uid
 
@@ -109,6 +132,7 @@ function Tiendas() {
         await setDoc(doc(db, "Tienda", uid), {
           ...datosTienda,
           authUid: uid,
+          rol: "admin_tienda",
           fechaCreacion: new Date(),
         })
 
@@ -156,12 +180,26 @@ function Tiendas() {
   }
 
   function editarTienda(tienda) {
+    if (tienda.id !== tiendaPropia?.id) {
+      return Swal.fire({
+        icon: "info",
+        title: "Solo lectura",
+        text: "Puedes ver esta tienda, pero no modificarla.",
+      })
+    }
     setFormulario(tienda)
     setModoEdicion(true)
     setTiendaEditando(tienda)
   }
 
   async function eliminarTienda(tienda) {
+    if (tienda.id !== tiendaPropia?.id) {
+      return Swal.fire({
+        icon: "warning",
+        title: "No permitido",
+        text: "No puedes eliminar otra tienda.",
+      })
+    }
     const confirmacion = await Swal.fire({
       title: "¿Eliminar esta tienda?",
       text: "Esta acción no se puede deshacer",
@@ -201,11 +239,12 @@ function Tiendas() {
           Gestión de Tiendas
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
-          Administra todas las tiendas del sistema multitienda
+          Puedes ver todas las tiendas. Solo editas la tuya.
         </p>
       </div>
 
-      {/* Formulario */}
+      {/* Formulario: solo al editar la tienda propia */}
+      {modoEdicion && tiendaEditando?.id === tiendaPropia?.id && (
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
         <h2 className="text-2xl font-bold mb-6 dark:text-white flex items-center gap-2">
           {modoEdicion ? <Edit2 size={24} /> : <Plus size={24} />}
@@ -307,6 +346,7 @@ function Tiendas() {
           </div>
         </form>
       </div>
+      )}
 
       {/* Lista de Tiendas */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
@@ -357,6 +397,7 @@ function Tiendas() {
                   </div>
                 </div>
 
+                {tienda.id === tiendaPropia?.id ? (
                 <div className="flex gap-2 mt-4 pt-4 border-t dark:border-slate-700">
                   <button
                     onClick={() => editarTienda(tienda)}
@@ -365,15 +406,12 @@ function Tiendas() {
                     <Edit2 size={16} />
                     Editar
                   </button>
-
-                  <button
-                    onClick={() => eliminarTienda(tienda)}
-                    className="flex-1 flex items-center justify-center gap-2 bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 py-2 rounded-xl font-medium hover:bg-red-200 transition"
-                  >
-                    <Trash2 size={16} />
-                    Eliminar
-                  </button>
                 </div>
+                ) : (
+                <p className="mt-4 pt-4 border-t dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
+                  Solo lectura
+                </p>
+                )}
               </div>
             ))}
           </div>

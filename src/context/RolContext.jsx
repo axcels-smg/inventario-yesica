@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 import { ROLES_USUARIO } from "../constants/inventario"
+import { useAuth } from "./AuthContext"
 
 const RolContext = createContext()
 
@@ -11,21 +12,15 @@ export function useRol() {
   return context
 }
 
- 
 export function RolProvider({ children }) {
+  const { rolFirestore, cargando: cargandoAuth } = useAuth()
   const [rolActual, setRolActual] = useState(ROLES_USUARIO.LECTOR)
 
   useEffect(() => {
-    const rolGuardado = localStorage.getItem("rolUsuario")
-    if (rolGuardado) {
-      setRolActual(rolGuardado)
+    if (!cargandoAuth) {
+      setRolActual(rolFirestore || ROLES_USUARIO.LECTOR)
     }
-  }, [])
-
-  function cambiarRol(rol) {
-    setRolActual(rol)
-    localStorage.setItem("rolUsuario", rol)
-  }
+  }, [rolFirestore, cargandoAuth])
 
   function tienePermiso(permiso) {
     const permisosPorRol = {
@@ -42,6 +37,13 @@ export function RolProvider({ children }) {
         "editar_clientes",
         "eliminar_clientes",
         "crear_clientes",
+        "ventas",
+        "ver_dashboard",
+        "ver_reportes",
+        "ver_productos",
+        "ver_clientes",
+        "ver_ventas",
+        "reponer_stock",
       ],
       [ROLES_USUARIO.ADMIN_TIENDA]: [
         "ver_dashboard",
@@ -55,6 +57,10 @@ export function RolProvider({ children }) {
         "eliminar_clientes",
         "crear_clientes",
         "transferencias",
+        "ver_productos",
+        "ver_clientes",
+        "ver_ventas",
+        "reponer_stock",
       ],
       [ROLES_USUARIO.VENDEDOR]: [
         "ver_dashboard",
@@ -63,6 +69,7 @@ export function RolProvider({ children }) {
         "ver_clientes",
         "ver_reportes",
         "crear_clientes",
+        "reponer_stock",
       ],
       [ROLES_USUARIO.LECTOR]: [
         "ver_dashboard",
@@ -112,6 +119,10 @@ export function RolProvider({ children }) {
     return tienePermiso("crear_productos")
   }
 
+  function puedeReponerStock() {
+    return tienePermiso("reponer_stock")
+  }
+
   function puedeEditarClientes() {
     return tienePermiso("editar_clientes")
   }
@@ -128,9 +139,12 @@ export function RolProvider({ children }) {
     return tienePermiso("transferencias")
   }
 
+  function puedeVender() {
+    return tienePermiso("ventas")
+  }
+
   const value = {
     rolActual,
-    cambiarRol,
     tienePermiso,
     esSuperAdmin,
     esAdminTienda,
@@ -141,10 +155,12 @@ export function RolProvider({ children }) {
     puedeEditarProductos,
     puedeEliminarProductos,
     puedeCrearProductos,
+    puedeReponerStock,
     puedeEditarClientes,
     puedeEliminarClientes,
     puedeCrearClientes,
     puedeHacerTransferencias,
+    puedeVender,
   }
 
   return <RolContext.Provider value={value}>{children}</RolContext.Provider>

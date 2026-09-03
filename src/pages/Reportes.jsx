@@ -18,6 +18,7 @@ import {
   Download,
   MessageCircle,
   Mail,
+  FileDown,
 } from "lucide-react"
 
 import { filtrarProductosStockBajo } from "../utils/stock"
@@ -28,18 +29,22 @@ import {
 } from "../utils/reportesFiltros"
 import { exportarReporteContable } from "../utils/excel"
 import {
-  enlaceWhatsAppStockBajo,
-  enlaceEmailStockBajo,
-  obtenerTelefonoWhatsApp,
-  guardarTelefonoWhatsApp,
-} from "../utils/whatsapp"
+  enlaceWhatsAppTexto,
+  enlaceEmailTexto,
+  textoReciboPeriodo,
+  descargarPdfReciboPeriodo,
+  formatoMoneda,
+  nombreProductoVenta,
+} from "../utils/reciboCliente"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
+import { enlaceWhatsAppStockBajo, enlaceEmailStockBajo, obtenerTelefonoWhatsApp, guardarTelefonoWhatsApp } from "../utils/whatsapp"
 import AlertasStockAcumulativas from "../components/AlertasStockAcumulativas"
 import { useTienda } from "../context/TiendaContext"
+import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { listarPorTienda } from "../utils/consultasTienda"
 
 function Reportes() {
-  const { tiendaActual } = useTienda()
+  const { tiendaActual, esTiendaPropia } = useTienda()
   const [ventas, setVentas] = useState([])
   const [productos, setProductos] = useState([])
   const [clientes, setClientes] = useState([])
@@ -97,7 +102,7 @@ function Reportes() {
   )
 
   const productosStockBajo = filtrarProductosStockBajo(productos)
-  const ventasPorDia = agruparVentasPorDia(ventasFiltradas).slice(0, 14)
+  const ventasPorDia = agruparVentasPorDia(ventasFiltradas).slice(0, 31)
 
   const productosVendidos = useMemo(() => {
     const productosMap = {}
@@ -140,6 +145,84 @@ function Reportes() {
     Swal.fire({ icon: "success", title: "Número guardado", timer: 1200 })
   }
 
+  function abrirReciboWhatsApp() {
+    if (!clienteSeleccionado) {
+      return Swal.fire({
+        icon: "info",
+        title: "Elige un cliente",
+        text: "Selecciona el cliente y las fechas. Así se arma su recibo de ese período.",
+      })
+    }
+    if (ventasFiltradas.length === 0) {
+      return Swal.fire({ icon: "info", title: "Sin ventas", text: "Ese cliente no tiene ventas en las fechas elegidas." })
+    }
+    const texto = textoReciboPeriodo({
+      ventas: ventasFiltradas,
+      cliente: clienteSeleccionado,
+      fechaDesde,
+      fechaHasta,
+      tienda: tiendaActual,
+    })
+    const telefono = clienteSeleccionado.telefono || ""
+    if (!telefono) {
+      Swal.fire({
+        icon: "warning",
+        title: "El cliente no tiene teléfono",
+        text: "Se abrirá WhatsApp para que elijas el contacto.",
+      })
+    }
+    window.open(enlaceWhatsAppTexto(texto, telefono), "_blank")
+  }
+
+  function abrirReciboEmail() {
+    if (!clienteSeleccionado) {
+      return Swal.fire({
+        icon: "info",
+        title: "Elige un cliente",
+        text: "Selecciona el cliente y las fechas para enviar su recibo.",
+      })
+    }
+    if (ventasFiltradas.length === 0) {
+      return Swal.fire({ icon: "info", title: "Sin ventas", text: "Ese cliente no tiene ventas en las fechas elegidas." })
+    }
+    const texto = textoReciboPeriodo({
+      ventas: ventasFiltradas,
+      cliente: clienteSeleccionado,
+      fechaDesde,
+      fechaHasta,
+      tienda: tiendaActual,
+    })
+    window.location.href = enlaceEmailTexto(
+      texto,
+      clienteSeleccionado.correo || "",
+      `Recibo de compras — ${clienteSeleccionado.nombre}`
+    )
+  }
+
+  async function descargarReciboPdf() {
+    if (!clienteSeleccionado) {
+      return Swal.fire({
+        icon: "info",
+        title: "Elige un cliente",
+        text: "Selecciona el cliente y las fechas para descargar su recibo.",
+      })
+    }
+    if (ventasFiltradas.length === 0) {
+      return Swal.fire({ icon: "info", title: "Sin ventas", text: "Ese cliente no tiene ventas en las fechas elegidas." })
+    }
+    await descargarPdfReciboPeriodo({
+      ventas: ventasFiltradas,
+      cliente: clienteSeleccionado,
+      fechaDesde,
+      fechaHasta,
+      tienda: tiendaActual,
+    })
+  }
+
+  if (!esTiendaPropia) {
+    return <AvisoOtraTienda modo="bloqueo" />
+  }
+
   return (
     <div className="space-y-10">
       <div>
@@ -148,7 +231,7 @@ function Reportes() {
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
           {tiendaActual?.nombre ? `${tiendaActual.nombre} · ` : ""}
-          Filtros por fecha y cliente · Exportación contable · Alertas
+          Elige fechas y un cliente para ver y enviar su recibo de compras.
         </p>
       </div>
 
@@ -217,6 +300,60 @@ function Reportes() {
         </button>
       </div>
 
+      {/* RECIBO POR CLIENTE + FECHAS */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 space-y-4">
+        <h2 className="text-xl font-bold dark:text-white">Recibo del cliente</h2>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">
+          1) Elige <b>Desde</b> y <b>Hasta</b>. 2) Elige el <b>cliente</b>. 3) Envía el resumen de esas compras por WhatsApp, correo o PDF.
+        </p>
+
+        {!clienteId && (
+          <p className="text-amber-700 dark:text-amber-300 text-sm">
+            Todavía no hay cliente seleccionado. El reporte de arriba muestra todas las ventas del período. Para el recibo, elige un cliente.
+          </p>
+        )}
+
+        {clienteSeleccionado && (
+          <div className="rounded-2xl bg-slate-50 dark:bg-slate-800 p-4 space-y-2">
+            <p className="dark:text-white">
+              <b>{clienteSeleccionado.nombre}</b>
+              {clienteSeleccionado.telefono ? ` · Tel ${clienteSeleccionado.telefono}` : " · sin teléfono"}
+              {clienteSeleccionado.correo ? ` · ${clienteSeleccionado.correo}` : ""}
+            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Período {fechaDesde || "—"} al {fechaHasta || "—"} · {ventasFiltradas.length} ventas · {formatoMoneda(ingresosFiltrados)}
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={abrirReciboWhatsApp}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-green-600 text-white font-bold hover:bg-green-700"
+          >
+            <MessageCircle size={18} />
+            Enviar recibo por WhatsApp
+          </button>
+          <button
+            type="button"
+            onClick={abrirReciboEmail}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 text-white font-bold hover:bg-blue-700"
+          >
+            <Mail size={18} />
+            Enviar recibo por correo
+          </button>
+          <button
+            type="button"
+            onClick={descargarReciboPdf}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-800 text-white font-bold hover:bg-slate-900"
+          >
+            <FileDown size={18} />
+            Descargar PDF del período
+          </button>
+        </div>
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
@@ -230,7 +367,7 @@ function Reportes() {
           <DollarSign className="text-green-500" size={38} />
           <p className="text-slate-500 dark:text-slate-400 mt-4">Ingresos (filtro)</p>
           <h2 className="text-4xl font-black dark:text-white">
-            S/ {ingresosFiltrados}
+            S/ {Number(ingresosFiltrados).toFixed(2)}
           </h2>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
@@ -297,27 +434,30 @@ function Reportes() {
       {/* TABLA VENTAS FILTRADAS */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 overflow-x-auto">
         <h2 className="text-xl font-bold mb-4 dark:text-white">
-          Ventas del período
+          {clienteSeleccionado
+            ? `Compras de ${clienteSeleccionado.nombre}`
+            : "Ventas del período"}
         </h2>
-        <table className="w-full min-w-[600px] text-sm">
+        <table className="w-full min-w-[700px] text-sm">
           <thead className="bg-slate-100 dark:bg-slate-800">
             <tr>
               <th className="p-3 text-left">Boleta</th>
               <th className="p-3 text-left">Fecha</th>
               <th className="p-3 text-left">Cliente</th>
+              <th className="p-3 text-left">Productos</th>
               <th className="p-3 text-right">Total</th>
             </tr>
           </thead>
           <tbody>
             {ventasFiltradas.length === 0 && (
               <tr>
-                <td colSpan={4} className="p-6 text-center text-slate-500">
+                <td colSpan={5} className="p-6 text-center text-slate-500">
                   Sin ventas en este filtro
                 </td>
               </tr>
             )}
-            {ventasFiltradas.slice(0, 50).map((v) => (
-              <tr key={v.id} className="border-t dark:border-slate-800">
+            {ventasFiltradas.slice(0, 80).map((v) => (
+              <tr key={v.id} className="border-t dark:border-slate-800 align-top">
                 <td className="p-3 font-mono">
                   {v.numeroBoleta != null
                     ? String(v.numeroBoleta).padStart(6, "0")
@@ -325,14 +465,21 @@ function Reportes() {
                 </td>
                 <td className="p-3">{v.fechaTexto || "—"}</td>
                 <td className="p-3">{v.cliente}</td>
-                <td className="p-3 text-right font-bold">S/ {v.total}</td>
+                <td className="p-3 text-slate-600 dark:text-slate-300">
+                  {(v.productos || []).map((p, i) => (
+                    <div key={i}>
+                      {nombreProductoVenta(p)} × {p.cantidad}
+                    </div>
+                  ))}
+                </td>
+                <td className="p-3 text-right font-bold">{formatoMoneda(v.total)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        {ventasFiltradas.length > 50 && (
+        {ventasFiltradas.length > 80 && (
           <p className="text-slate-500 text-sm mt-3">
-            Mostrando 50 de {ventasFiltradas.length} — exporta Excel para ver todas
+            Mostrando 80 de {ventasFiltradas.length} — exporta Excel o el PDF del cliente para ver todas
           </p>
         )}
       </div>

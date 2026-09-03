@@ -1,18 +1,12 @@
 const express = require("express")
 
 const app = express()
+const PORT = process.env.PORT || 3000
 
-// PUERTO
-const PORT = 3000
-
-// RUTA PRINCIPAL
 app.get("/", (req, res) => {
-  res.send("Backend funcionando")
+  res.json({ status: "ok", message: "Backend Inventario G.R.L." })
 })
 
-// LEVANTAR SERVIDOR
 app.listen(PORT, () => {
-  console.log(
-    `Servidor corriendo en puerto ${PORT}`
-  )
+  console.log(`Servidor corriendo en puerto ${PORT}`)
 })

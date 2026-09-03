@@ -12,13 +12,14 @@ import {
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
+import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { listarPorTienda } from "../utils/consultasTienda"
 import {
   claveModeloProducto,
 } from "../utils/productos"
 
 function InventarioExcel() {
-  const { tiendaActual } = useTienda()
+  const { tiendaActual, esTiendaPropia } = useTienda()
   const inputRef = useRef(null)
   const [importando, setImportando] = useState(false)
   const [vistaPrevia, setVistaPrevia] = useState([])
@@ -162,6 +163,10 @@ function InventarioExcel() {
     } finally {
       setImportando(false)
     }
+  }
+
+  if (!esTiendaPropia) {
+    return <AvisoOtraTienda modo="bloqueo" />
   }
 
   return (

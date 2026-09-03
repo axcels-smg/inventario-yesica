@@ -11,10 +11,12 @@ import {
 
 import { db } from "../firebase"
 import { obtenerSiguienteNumeroBoleta, formatearNumeroBoleta } from "../utils/boleta"
+import { enlaceWhatsAppTexto, textoReciboVenta } from "../utils/reciboCliente"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
 import { listarPorTienda } from "../utils/consultasTienda"
+import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 import {
   filtrarProductos,
@@ -24,7 +26,7 @@ import {
 } from "../utils/productos"
 
 function Ventas() {
-  const { tiendaActual } = useTienda()
+  const { tiendaActual, esTiendaPropia } = useTienda()
 
   const [productos, setProductos] = useState([])
   const [clientes, setClientes] = useState([])
@@ -322,15 +324,35 @@ function Ventas() {
         })
       }
 
+      const ventaHecha = {
+        numeroBoleta,
+        fechaTexto: new Date().toLocaleString("es-PE"),
+        cliente: clienteData?.nombre || "",
+        telefono: clienteData?.telefono || "",
+        productos: productosVenta,
+        total,
+      }
+
       setCarrito([])
       setClienteSeleccionado("")
       cargarProductos()
 
-      Swal.fire({
+      const envio = await Swal.fire({
         icon: "success",
         title: "Venta realizada",
-        text: `Boleta #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${total}`,
+        text: `Boleta #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${Number(total).toFixed(2)}`,
+        showCancelButton: true,
+        confirmButtonText: "Enviar recibo por WhatsApp",
+        cancelButtonText: "Cerrar",
+        confirmButtonColor: "#16a34a",
       })
+
+      if (envio.isConfirmed) {
+        window.open(
+          enlaceWhatsAppTexto(textoReciboVenta(ventaHecha, tiendaActual), clienteData?.telefono),
+          "_blank"
+        )
+      }
 
     } catch (error) {
       console.log(error)
@@ -363,6 +385,10 @@ function Ventas() {
     : []
 
   const hayMasResultados = totalCoincidencias > MAX_RESULTADOS_VENTAS
+
+  if (!esTiendaPropia) {
+    return <AvisoOtraTienda modo="bloqueo" />
+  }
 
   return (
     <div className="space-y-8">

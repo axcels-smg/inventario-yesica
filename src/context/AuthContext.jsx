@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react"
 import { auth } from "../firebase"
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth"
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 
@@ -19,25 +19,19 @@ export function AuthProvider({ children }) {
   const [tienda, setTienda] = useState(null)
   const [cargando, setCargando] = useState(true)
 
-  // Cargar tienda por UID del usuario
   async function cargarTiendaPorUID(uid) {
     try {
-      const tiendasRef = doc(db, "Tienda", uid)
-      const tiendaSnap = await getDoc(tiendasRef)
-      
+      const tiendaSnap = await getDoc(doc(db, "Tienda", uid))
+
       if (tiendaSnap.exists()) {
         const tiendaData = tiendaSnap.data()
-        setTienda({
-          id: tiendaSnap.id,
-          ...tiendaData
-        })
+        const datos = { id: tiendaSnap.id, ...tiendaData }
+        setTienda(datos)
         return tiendaData
-      } else {
-        // Buscar tienda por campo authUid (si usamos ese campo)
-        // Por ahora asumimos que el ID de la tienda es el UID del usuario
-        setTienda(null)
-        return null
       }
+
+      setTienda(null)
+      return null
     } catch (error) {
       console.error("Error cargando tienda:", error)
       setTienda(null)
@@ -45,59 +39,46 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Escuchar cambios de autenticación
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUsuario(user)
-      
+
       if (user) {
         await cargarTiendaPorUID(user.uid)
       } else {
         setTienda(null)
       }
-      
+
       setCargando(false)
     })
 
     return unsubscribe
   }, [])
 
-  // Login
   async function login(email, password) {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
-      
-      // Cargar tienda del usuario
-      await cargarTiendaPorUID(user.uid)
-      
-      return { success: true, user }
+      const tiendaData = await cargarTiendaPorUID(user.uid)
+      return { success: true, user, tienda: tiendaData }
     } catch (error) {
       console.error("Error en login:", error)
-      let mensaje = "Error al iniciar sesión"
 
-      switch (error.code) {
-        case "auth/invalid-email":
-          mensaje = "Email inválido"
-          break
-        case "auth/user-not-found":
-          mensaje = "Usuario no encontrado"
-          break
-        case "auth/wrong-password":
-          mensaje = "Contraseña incorrecta"
-          break
-        case "auth/too-many-requests":
-          mensaje = "Demasiados intentos. Intente más tarde"
-          break
-        default:
-          return { success: false, error: error.message }
+      const mensajes = {
+        "auth/invalid-email": "Email inválido",
+        "auth/user-not-found": "Usuario no encontrado",
+        "auth/wrong-password": "Contraseña incorrecta",
+        "auth/too-many-requests": "Demasiados intentos. Intente más tarde",
+        "auth/invalid-credential": "Email o contraseña incorrectos",
       }
 
-      return { success: false, error: mensaje }
+      return {
+        success: false,
+        error: mensajes[error.code] || "Error al iniciar sesión. Intente nuevamente.",
+      }
     }
   }
 
-  // Logout
   async function logout() {
     try {
       await signOut(auth)
@@ -110,7 +91,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Recuperar contraseña
   async function recuperarPassword(email) {
     try {
       await sendPasswordResetEmail(auth, email)
@@ -118,13 +98,56 @@ export function AuthProvider({ children }) {
     } catch (error) {
       console.error("Error al recuperar contraseña:", error)
 
-      switch (error.code) {
-        case "auth/invalid-email":
-          return { success: false, error: "Email inválido" }
-        case "auth/user-not-found":
-          return { success: false, error: "Usuario no encontrado" }
-        default:
-          return { success: false, error: error.message }
+      const mensajes = {
+        "auth/invalid-email": "Email inválido",
+        "auth/user-not-found": "Usuario no encontrado",
+      }
+
+      return {
+        success: false,
+        error: mensajes[error.code] || "Error al enviar el correo. Intente nuevamente.",
+      }
+    }
+  }
+
+  async function cambiarPassword(passwordActual, passwordNueva) {
+    try {
+      const user = auth.currentUser
+      if (!user?.email) {
+        return { success: false, error: "No hay sesión activa. Entra primero a la tienda." }
+      }
+
+      try {
+        await updatePassword(user, passwordNueva)
+        return { success: true }
+      } catch (errorInterno) {
+        if (errorInterno.code !== "auth/requires-recent-login") {
+          throw errorInterno
+        }
+        if (!passwordActual) {
+          return {
+            success: false,
+            error: "Tu sesión es antigua. Escribe la contraseña actual. Si no la recuerdas, usa un Gmail real en Firebase para restablecerla.",
+          }
+        }
+        const credencial = EmailAuthProvider.credential(user.email, passwordActual)
+        await reauthenticateWithCredential(user, credencial)
+        await updatePassword(user, passwordNueva)
+        return { success: true }
+      }
+    } catch (error) {
+      console.error("Error al cambiar contraseña:", error)
+
+      const mensajes = {
+        "auth/wrong-password": "La contraseña actual es incorrecta",
+        "auth/invalid-credential": "La contraseña actual es incorrecta",
+        "auth/weak-password": "La nueva contraseña debe tener al menos 6 caracteres",
+        "auth/requires-recent-login": "Vuelve a iniciar sesión e inténtalo de nuevo",
+      }
+
+      return {
+        success: false,
+        error: mensajes[error.code] || "No se pudo cambiar la contraseña",
       }
     }
   }
@@ -136,7 +159,8 @@ export function AuthProvider({ children }) {
     login,
     logout,
     recuperarPassword,
-    cargarTiendaPorUID
+    cambiarPassword,
+    cargarTiendaPorUID,
   }
 
   return (

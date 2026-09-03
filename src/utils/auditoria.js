@@ -34,17 +34,14 @@ export async function obtenerHistorialAuditoria({
   limite = 100,
 }) {
   try {
-    let q = collection(db, "auditoria")
+    const condiciones = []
+    if (coleccion) condiciones.push(where("coleccion", "==", coleccion))
+    if (documentoId) condiciones.push(where("documentoId", "==", documentoId))
+    if (tiendaId) condiciones.push(where("tiendaId", "==", tiendaId))
 
-    if (coleccion) {
-      q = query(q, where("coleccion", "==", coleccion))
-    }
-    if (documentoId) {
-      q = query(q, where("documentoId", "==", documentoId))
-    }
-    if (tiendaId) {
-      q = query(q, where("tiendaId", "==", tiendaId))
-    }
+    const q = condiciones.length > 0
+      ? query(collection(db, "auditoria"), ...condiciones)
+      : collection(db, "auditoria")
 
     const snap = await getDocs(q)
     const lista = []

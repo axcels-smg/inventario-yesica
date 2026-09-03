@@ -8,7 +8,7 @@ function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [cargando, setCargando] = useState(false)
-  const { login, tienda, recuperarPassword } = useAuth()
+  const { login, recuperarPassword } = useAuth()
   const navigate = useNavigate()
 
   async function handleSubmit(e) {
@@ -28,15 +28,24 @@ function Login() {
       const resultado = await login(email, password)
       
       if (resultado.success) {
-        Swal.fire({
-          icon: "success",
-          title: "Bienvenido",
-          text: tienda ? `Iniciaste sesión en ${tienda.nombre}` : "Sesión iniciada",
-          timer: 1500,
-          showConfirmButton: false,
-        }).then(() => {
+        if (!resultado.tienda) {
+          await Swal.fire({
+            icon: "warning",
+            title: "Sesión iniciada, pero sin tienda",
+            text: "Este usuario no tiene documento en Firestore (colección Tienda) con el mismo ID. El inventario no se verá hasta vincularlo.",
+          })
           navigate("/dashboard")
-        })
+        } else {
+          Swal.fire({
+            icon: "success",
+            title: "Bienvenido",
+            text: `Iniciaste sesión en ${resultado.tienda.nombre}`,
+            timer: 1500,
+            showConfirmButton: false,
+          }).then(() => {
+            navigate("/dashboard")
+          })
+        }
       } else {
         Swal.fire({
           icon: "error",

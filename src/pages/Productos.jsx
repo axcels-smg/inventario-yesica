@@ -8,6 +8,7 @@ import {
   PackageSearch,
   PackagePlus,
   Package,
+  ChevronDown,
 } from "lucide-react"
 
 import { db } from "../firebase"
@@ -33,12 +34,12 @@ import {
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
-import { useRol } from "../context/RolContext"
 import { listarPorTienda } from "../utils/consultasTienda"
+import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 function Productos() {
-  const { tiendaActual } = useTienda()
-  const { puedeEditarProductos, puedeEliminarProductos, puedeCrearProductos } = useRol()
+  const { tiendaActual, esTiendaPropia } = useTienda()
+  const puedeEditar = esTiendaPropia
 
   // PRODUCTOS
   const [productos, setProductos] = useState([])
@@ -66,6 +67,7 @@ function Productos() {
   const [productoReponer, setProductoReponer] = useState(null)
   const [cantidadReponer, setCantidadReponer] = useState("")
   const [reponiendo, setReponiendo] = useState(false)
+  const [resumenAbierto, setResumenAbierto] = useState(false)
 
   useEffect(() => {
     if (tiendaActual) {
@@ -140,6 +142,7 @@ function Productos() {
 
   async function confirmarReponer(e) {
     e.preventDefault()
+    if (!esTiendaPropia) return
 
     if (!productoReponer) return
 
@@ -214,6 +217,7 @@ function Productos() {
   // GUARDAR / EDITAR
   async function agregarProducto(e) {
     e.preventDefault()
+    if (!esTiendaPropia) return
 
     const marcaLimpia = marca.trim()
     const categoriaLimpia = categoria.trim()
@@ -336,6 +340,7 @@ function Productos() {
 
   // ELIMINAR
   async function eliminarProducto(id) {
+    if (!esTiendaPropia) return
 
     Swal.fire({
       title: "¿Eliminar producto?",
@@ -452,6 +457,7 @@ function Productos() {
 
   return (
     <div className="space-y-8">
+      <AvisoOtraTienda />
 
       {/* HEADER */}
       <div className="flex flex-col lg:flex-row lg:justify-between gap-6">
@@ -527,6 +533,7 @@ function Productos() {
             <h2 className="text-2xl font-black">PRO</h2>
           </div>
 
+          {puedeEditar && (
           <button
             onClick={() => {
               limpiarFormulario()
@@ -537,88 +544,10 @@ function Productos() {
           >
             + Nuevo
           </button>
+          )}
 
         </div>
       </div>
-
-      {/* RESUMEN POR CATEGORÍA (TIENDA ACTUAL) */}
-      {resumenPorCategoria.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
-          <h2 className="text-2xl font-bold mb-5 dark:text-white flex items-center gap-2">
-            <Package size={22} className="text-blue-600 dark:text-blue-400" />
-            Resumen por categoría — {tiendaActual?.nombre || "Tienda actual"}
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                  <th className="p-4 text-left dark:text-white">Categoría</th>
-                  <th className="p-4 text-right dark:text-white">Productos</th>
-                  <th className="p-4 text-right dark:text-white">Stock total</th>
-                  <th className="p-4 text-left dark:text-white w-48">Participación</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  const totalProductos = resumenPorCategoria.reduce(
-                    (s, c) => s + c.cantidad,
-                    0
-                  )
-                  return resumenPorCategoria.map((c) => {
-                    const porcentaje =
-                      totalProductos > 0
-                        ? Math.round((c.cantidad / totalProductos) * 100)
-                        : 0
-                    return (
-                      <tr
-                        key={c.categoria}
-                        className="border-b dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30"
-                      >
-                        <td className="p-4 font-medium dark:text-white">
-                          <span className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full">
-                            {c.categoria}
-                          </span>
-                        </td>
-                        <td className="p-4 text-right font-bold dark:text-slate-300">
-                          {c.cantidad}
-                        </td>
-                        <td className="p-4 text-right font-bold dark:text-slate-300">
-                          {c.stock}
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-blue-500 rounded-full"
-                                style={{ width: `${porcentaje}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-slate-500 dark:text-slate-400 w-10 text-right">
-                              {porcentaje}%
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })
-                })()}
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-100 dark:bg-slate-800 font-black">
-                  <td className="p-4 dark:text-white">TOTAL</td>
-                  <td className="p-4 text-right text-blue-600 dark:text-blue-400">
-                    {resumenPorCategoria.reduce((s, c) => s + c.cantidad, 0)}
-                  </td>
-                  <td className="p-4 text-right text-blue-600 dark:text-blue-400">
-                    {resumenPorCategoria.reduce((s, c) => s + c.stock, 0)}
-                  </td>
-                  <td className="p-4" />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* TABLE */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl overflow-hidden">
@@ -733,16 +662,16 @@ function Productos() {
 
                 <td className="p-4 flex gap-2">
 
-                  <button
+                  {puedeEditar && <button
                     onClick={() => abrirReponer(p)}
                     className="bg-green-600 text-white p-2 rounded-xl hover:bg-green-700"
                     title="Reponer stock"
                     aria-label="Reponer stock"
                   >
                     <PackagePlus size={18} />
-                  </button>
+                  </button>}
 
-                  {puedeEditarProductos() && (
+                  {puedeEditar && (
                     <button
                       onClick={() => editarProducto(p)}
                       className="bg-yellow-500 text-white p-2 rounded-xl"
@@ -753,7 +682,7 @@ function Productos() {
                     </button>
                   )}
 
-                  {puedeEliminarProductos() && (
+                  {puedeEditar && (
                     <button
                       onClick={() => eliminarProducto(p.id)}
                       className="bg-red-500 text-white p-2 rounded-xl"
@@ -803,6 +732,97 @@ function Productos() {
         )}
 
       </div>
+
+      {resumenPorCategoria.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setResumenAbierto((v) => !v)}
+            className="w-full flex items-center justify-between gap-3 p-5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50"
+          >
+            <span className="text-lg font-bold dark:text-white flex items-center gap-2">
+              <Package size={20} className="text-blue-600 dark:text-blue-400" />
+              Resumen por categoría — {tiendaActual?.nombre || "Tienda actual"}
+            </span>
+            <ChevronDown
+              size={22}
+              className={`text-slate-400 shrink-0 transition-transform ${resumenAbierto ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {resumenAbierto && (
+          <div className="px-6 pb-6 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                  <th className="p-4 text-left dark:text-white">Categoría</th>
+                  <th className="p-4 text-right dark:text-white">Productos</th>
+                  <th className="p-4 text-right dark:text-white">Stock total</th>
+                  <th className="p-4 text-left dark:text-white w-48">Participación</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const totalProductos = resumenPorCategoria.reduce(
+                    (s, c) => s + c.cantidad,
+                    0
+                  )
+                  return resumenPorCategoria.map((c) => {
+                    const porcentaje =
+                      totalProductos > 0
+                        ? Math.round((c.cantidad / totalProductos) * 100)
+                        : 0
+                    return (
+                      <tr
+                        key={c.categoria}
+                        className="border-b dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                      >
+                        <td className="p-4 font-medium dark:text-white">
+                          <span className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full">
+                            {c.categoria}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right font-bold dark:text-slate-300">
+                          {c.cantidad}
+                        </td>
+                        <td className="p-4 text-right font-bold dark:text-slate-300">
+                          {c.stock}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-blue-500 rounded-full"
+                                style={{ width: `${porcentaje}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 w-10 text-right">
+                              {porcentaje}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                })()}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-100 dark:bg-slate-800 font-black">
+                  <td className="p-4 dark:text-white">TOTAL</td>
+                  <td className="p-4 text-right text-blue-600 dark:text-blue-400">
+                    {resumenPorCategoria.reduce((s, c) => s + c.cantidad, 0)}
+                  </td>
+                  <td className="p-4 text-right text-blue-600 dark:text-blue-400">
+                    {resumenPorCategoria.reduce((s, c) => s + c.stock, 0)}
+                  </td>
+                  <td className="p-4" />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          )}
+        </div>
+      )}
 
       {/* MODAL */}
       <Modal isOpen={modalAbierto} onClose={() => setModalAbierto(false)}>
@@ -854,7 +874,7 @@ function Productos() {
             className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
 
-          {puedeCrearProductos() && (
+          {puedeEditar && (
             <button className="bg-blue-600 text-white py-3 rounded-xl">
               Guardar
             </button>

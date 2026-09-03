@@ -23,12 +23,13 @@ import StockAlertBanner from "../components/StockAlertBanner"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { registrarAlertaDiaria, existeAlertaHoy } from "../utils/alertasStock"
 import { useTienda } from "../context/TiendaContext"
+import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { listarPorTienda } from "../utils/consultasTienda"
 
 function Dashboard() {
   const [productos, setProductos] = useState([])
   const [ventas, setVentas] = useState([])
-  const { tiendaActual } = useTienda()
+  const { tiendaActual, esTiendaPropia } = useTienda()
 
   useEffect(() => {
     if (tiendaActual) {
@@ -84,6 +85,10 @@ function Dashboard() {
   const ventasHoy = ventasActivas.filter((venta) =>
     esFechaDeHoy(venta.fecha || venta.fechaTexto)
   ).length
+
+  if (!esTiendaPropia) {
+    return <AvisoOtraTienda modo="bloqueo" />
+  }
 
   return (
     <div className="text-slate-900 dark:text-white transition-all duration-300">

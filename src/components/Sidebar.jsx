@@ -12,23 +12,21 @@ import {
   ArrowRight,
   Globe,
   LogOut,
+  KeyRound,
 } from "lucide-react"
 import { useStockBajo } from "../hooks/useStockBajo"
 import { useTienda } from "../context/TiendaContext"
-import { useRol } from "../context/RolContext"
 import { useAuth } from "../context/AuthContext"
 
 import { NavLink, useNavigate } from "react-router-dom"
 import { useState } from "react"
 import ThemeButton from "./ThemeButton"
-import SelectorRol from "./SelectorRol"
 import Swal from "sweetalert2"
 
 function Sidebar({ onNavigate }) {
-  const { tiendaActual, tiendas, seleccionarTienda, cargando } = useTienda()
+  const { tiendaActual, tiendaPropia, esTiendaPropia, tiendas, seleccionarTienda, cargando } = useTienda()
   const { cantidad: stockBajoCantidad } = useStockBajo(tiendaActual?.id)
-  const { esSuperAdmin, puedeHacerTransferencias } = useRol()
-  const { logout } = useAuth()
+  const { logout, cambiarPassword } = useAuth()
   const navigate = useNavigate()
   const [selectorAbierto, setSelectorAbierto] = useState(false)
 
@@ -51,6 +49,55 @@ function Sidebar({ onNavigate }) {
     }
   }
 
+  async function handleCambiarPassword() {
+    const { value: form } = await Swal.fire({
+      title: "Cambiar contraseña",
+      html: `
+        <p style="font-size:13px;margin-bottom:12px;text-align:left">
+          Si ya estás dentro de la tienda, basta la nueva contraseña. No se borra inventario.
+        </p>
+        <input id="pass-actual" type="password" class="swal2-input" placeholder="Contraseña actual (opcional)">
+        <input id="pass-nueva" type="password" class="swal2-input" placeholder="Nueva contraseña (mín. 6)">
+        <input id="pass-repetir" type="password" class="swal2-input" placeholder="Repetir nueva contraseña">
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: "Guardar",
+      cancelButtonText: "Cancelar",
+      preConfirm: () => {
+        const actual = document.getElementById("pass-actual")?.value || ""
+        const nueva = document.getElementById("pass-nueva")?.value || ""
+        const repetir = document.getElementById("pass-repetir")?.value || ""
+        if (!nueva || !repetir) {
+          Swal.showValidationMessage("Escribe la nueva contraseña dos veces")
+          return false
+        }
+        if (nueva.length < 6) {
+          Swal.showValidationMessage("La nueva contraseña debe tener al menos 6 caracteres")
+          return false
+        }
+        if (nueva !== repetir) {
+          Swal.showValidationMessage("Las contraseñas nuevas no coinciden")
+          return false
+        }
+        return { actual, nueva }
+      },
+    })
+
+    if (!form) return
+
+    const resultado = await cambiarPassword(form.actual, form.nueva)
+    if (resultado.success) {
+      Swal.fire({
+        icon: "success",
+        title: "Contraseña actualizada",
+        text: "La próxima vez entra con la nueva. Nada de tu inventario se perdió.",
+      })
+    } else {
+      Swal.fire({ icon: "error", title: "No se pudo cambiar", text: resultado.error })
+    }
+  }
+
   const links = [
     {
       name: "Dashboard",
@@ -61,7 +108,6 @@ function Sidebar({ onNavigate }) {
       name: "Dashboard Global",
       path: "/global",
       icon: <Globe size={22} />,
-      soloSuperAdmin: true,
     },
     {
       name: "Productos",
@@ -102,21 +148,13 @@ function Sidebar({ onNavigate }) {
       name: "Tiendas",
       path: "/tiendas",
       icon: <Store size={22} />,
-      soloSuperAdmin: true,
     },
     {
       name: "Transferencias",
       path: "/transferencias",
       icon: <ArrowRight size={22} />,
-      requierePermiso: "transferencias",
     },
   ]
-
-  const linksFiltrados = links.filter((link) => {
-    if (link.soloSuperAdmin && !esSuperAdmin()) return false
-    if (link.requierePermiso && !puedeHacerTransferencias()) return false
-    return true
-  })
 
   return (
     <div
@@ -150,17 +188,19 @@ function Sidebar({ onNavigate }) {
         </p>
       </div>
 
-      {/* Selector de Tienda */}
+      {/* Selector: cualquier tienda puede ver las demás; otras = solo lectura */}
       <div className="shrink-0 mb-4 pb-4 border-b border-slate-800/50">
         <div className="relative">
           <button
             onClick={() => setSelectorAbierto(!selectorAbierto)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700 hover:border-slate-600 rounded-2xl transition-all duration-200 hover:shadow-soft"
+            className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-2xl transition-all duration-200 hover:bg-slate-700/80 hover:border-slate-600 hover:shadow-soft cursor-pointer"
           >
             <div className="flex items-center gap-3">
               <Store size={20} className="text-blue-400" />
               <div className="text-left">
-                <p className="text-xs text-slate-400">Tienda actual</p>
+                <p className="text-xs text-slate-400">
+                  {esTiendaPropia ? "Tu tienda" : "Solo lectura"}
+                </p>
                 <p className="text-sm font-semibold text-white">
                   {cargando ? "Cargando..." : tiendaActual?.nombre || "Seleccionar tienda"}
                 </p>
@@ -191,13 +231,18 @@ function Sidebar({ onNavigate }) {
                     onClick={() => {
                       seleccionarTienda(tienda)
                       setSelectorAbierto(false)
+                      if (tienda.id !== tiendaPropia?.id) {
+                        navigate("/productos")
+                      }
                     }}
                     className={`w-full px-4 py-3 text-left hover:bg-slate-800 transition-all duration-200 hover:pl-5 ${
                       tiendaActual?.id === tienda.id ? "bg-slate-800" : ""
                     }`}
                   >
                     <p className="font-medium text-white">{tienda.nombre}</p>
-                    <p className="text-xs text-slate-400">{tienda.direccion}</p>
+                    <p className="text-xs text-slate-400">
+                      {tienda.id === tiendaPropia?.id ? "Tu tienda — control total" : "Solo ver productos"}
+                    </p>
                   </button>
                 ))
               )}
@@ -207,7 +252,7 @@ function Sidebar({ onNavigate }) {
       </div>
 
       <nav className="flex-1 overflow-y-auto flex flex-col gap-1.5 min-h-0 pr-1 -mr-1">
-        {linksFiltrados.map((link) => (
+        {links.map((link) => (
           <NavLink
             key={link.path}
             to={link.path}
@@ -272,9 +317,13 @@ function Sidebar({ onNavigate }) {
           <ThemeButton />
         </div>
 
-        <div className="mb-4 relative overflow-visible">
-          <SelectorRol />
-        </div>
+        <button
+          onClick={handleCambiarPassword}
+          className="w-full flex items-center gap-3 px-4 py-3 mb-2 bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700 rounded-2xl transition-all duration-200 text-slate-200 hover:text-white"
+        >
+          <KeyRound size={20} />
+          <span className="font-medium">Cambiar contraseña</span>
+        </button>
 
         <button
           onClick={handleLogout}

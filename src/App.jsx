@@ -15,72 +15,55 @@ import Login from "./pages/Login"
 
 import MainLayout from "./layout/MainLayout"
 import { TiendaProvider } from "./context/TiendaContext"
-import { RolProvider } from "./context/RolContext"
 import { AuthProvider, useAuth } from "./context/AuthContext"
 
 function ProtectedRoute({ children }) {
   const { usuario, cargando } = useAuth()
-  
+
   if (cargando) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-500">Cargando...</div>
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-500">
+        Cargando...
+      </div>
+    )
   }
-  
+
   if (!usuario) {
     return <Navigate to="/login" replace />
   }
-  
+
   return children
 }
 
 function App() {
   return (
     <AuthProvider>
-      <RolProvider>
-        <TiendaProvider>
-          <BrowserRouter>
-            <Routes>
+      <TiendaProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
 
-              {/* LOGIN */}
-              <Route path="/login" element={<Login />} />
-
-              {/* LAYOUT PRINCIPAL */}
-              <Route path="/" element={
-                <ProtectedRoute>
-                  <MainLayout />
-                </ProtectedRoute>
-              }>
-                
-                {/* DASHBOARD */}
-                <Route index element={<Dashboard />} />
-                <Route path="dashboard" element={<Dashboard />} />
-                <Route path="global" element={<DashboardGlobal />} />
-
-                {/* PRODUCTOS */}
-                <Route path="productos" element={<Productos />} />
-
-                {/* VENTAS */}
-                <Route path="ventas" element={<Ventas />} />
-
-                {/* CLIENTES */}
-                <Route path="clientes" element={<Clientes />} />
-
-                {/* REPORTES */}
-                <Route path="reportes" element={<Reportes />} />
-
-                {/* HISTORIAL */}
-                <Route path="historial" element={<HistorialVentas />} />
-
-                <Route path="movimientos" element={<Movimientos />} />
-                <Route path="excel" element={<InventarioExcel />} />
-                <Route path="tiendas" element={<Tiendas />} />
-                <Route path="transferencias" element={<Transferencias />} />
-
-              </Route>
-
-            </Routes>
-          </BrowserRouter>
-        </TiendaProvider>
-      </RolProvider>
+            <Route path="/" element={
+              <ProtectedRoute>
+                <MainLayout />
+              </ProtectedRoute>
+            }>
+              <Route index element={<Dashboard />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="global" element={<DashboardGlobal />} />
+              <Route path="productos" element={<Productos />} />
+              <Route path="ventas" element={<Ventas />} />
+              <Route path="clientes" element={<Clientes />} />
+              <Route path="reportes" element={<Reportes />} />
+              <Route path="historial" element={<HistorialVentas />} />
+              <Route path="movimientos" element={<Movimientos />} />
+              <Route path="excel" element={<InventarioExcel />} />
+              <Route path="tiendas" element={<Tiendas />} />
+              <Route path="transferencias" element={<Transferencias />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </TiendaProvider>
     </AuthProvider>
   )
 }

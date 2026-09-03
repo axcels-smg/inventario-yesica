@@ -1,8 +1,17 @@
 import { formatearFecha } from "./fechas"
 import { formatearNumeroBoleta } from "./boleta"
 import { DATOS_NEGOCIO } from "../constants/inventario"
+import Swal from "sweetalert2"
 
-export function imprimirBoleta(venta) {
+export function imprimirBoleta(venta, tienda = null) {
+  const negocio = {
+    nombre: tienda?.nombre || DATOS_NEGOCIO.nombre,
+    direccion: tienda?.direccion || DATOS_NEGOCIO.direccion,
+    telefono: tienda?.telefono || DATOS_NEGOCIO.telefono,
+    ruc: tienda?.ruc || DATOS_NEGOCIO.ruc,
+    email: tienda?.email || DATOS_NEGOCIO.email,
+    sitioWeb: DATOS_NEGOCIO.sitioWeb,
+  }
   const numero =
     venta.numeroBoleta != null
       ? formatearNumeroBoleta(venta.numeroBoleta)
@@ -127,10 +136,10 @@ export function imprimirBoleta(venta) {
     </head>
     <body>
       <div class="header">
-        <h1>${DATOS_NEGOCIO.nombre}</h1>
-        <p>${DATOS_NEGOCIO.direccion}</p>
-        <p>Tel: ${DATOS_NEGOCIO.telefono}</p>
-        <p class="ruc">RUC: ${DATOS_NEGOCIO.ruc}</p>
+        <h1>${negocio.nombre}</h1>
+        <p>${negocio.direccion}</p>
+        <p>Tel: ${negocio.telefono}</p>
+        <p class="ruc">RUC: ${negocio.ruc}</p>
       </div>
 
       <div class="boleta-info">
@@ -162,13 +171,13 @@ export function imprimirBoleta(venta) {
       </div>
 
       <div class="pie">
-        <p><strong>${DATOS_NEGOCIO.nombre}</strong></p>
-        <p>${DATOS_NEGOCIO.direccion}</p>
-        <p>RUC: ${DATOS_NEGOCIO.ruc}</p>
-        <p>Tel: ${DATOS_NEGOCIO.telefono}</p>
-        <p>${DATOS_NEGOCIO.email}</p>
+        <p><strong>${negocio.nombre}</strong></p>
+        <p>${negocio.direccion}</p>
+        <p>RUC: ${negocio.ruc}</p>
+        <p>Tel: ${negocio.telefono}</p>
+        <p>${negocio.email}</p>
         <p style="margin-top: 8px;">¡Gracias por su compra!</p>
-        <p>${DATOS_NEGOCIO.sitioWeb}</p>
+        <p>${negocio.sitioWeb}</p>
       </div>
 
       <script>
@@ -184,7 +193,11 @@ export function imprimirBoleta(venta) {
   const ventana = window.open("", "_blank", "width=320,height=700")
 
   if (!ventana) {
-    alert("Permite ventanas emergentes para imprimir el ticket")
+    Swal.fire({
+      icon: "warning",
+      title: "Ventanas bloqueadas",
+      text: "Permite ventanas emergentes en tu navegador para imprimir el ticket.",
+    })
     return
   }
 

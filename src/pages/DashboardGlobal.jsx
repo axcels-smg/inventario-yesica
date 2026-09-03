@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { collection, getDocs } from "firebase/firestore"
 import {
   Package,
@@ -6,6 +6,7 @@ import {
   DollarSign,
   Store,
   BarChart3,
+  PieChart as PieChartIcon,
 } from "lucide-react"
 import {
   BarChart,
@@ -34,11 +35,7 @@ function DashboardGlobal() {
   })
   const [cargando, setCargando] = useState(true)
 
-  useEffect(() => {
-    cargarDatosConsolidados()
-  }, [tiendas, cargarDatosConsolidados])
-
-  async function cargarDatosConsolidados() {
+  const cargarDatosConsolidados = useCallback(async () => {
     try {
       setCargando(true)
 
@@ -128,7 +125,11 @@ function DashboardGlobal() {
     } finally {
       setCargando(false)
     }
-  }
+  }, [tiendas])
+
+  useEffect(() => {
+    cargarDatosConsolidados()
+  }, [cargarDatosConsolidados])
 
   const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"]
 
@@ -253,7 +254,7 @@ function DashboardGlobal() {
             {/* Distribución de Ingresos */}
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
               <h3 className="text-xl font-bold mb-6 dark:text-white flex items-center gap-2">
-                <PieChart size={20} />
+                <PieChartIcon size={20} />
                 Distribución de Ingresos
               </h3>
               <ResponsiveContainer width="100%" height={300}>

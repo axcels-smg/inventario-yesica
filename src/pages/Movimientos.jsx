@@ -6,6 +6,7 @@ import { db } from "../firebase"
 import { obtenerTiempoFecha } from "../utils/fechas"
 import { ETIQUETAS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
+import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { listarPorTienda } from "../utils/consultasTienda"
 
 const COLORES_TIPO = {
@@ -19,7 +20,7 @@ const COLORES_TIPO = {
 }
 
 function Movimientos() {
-  const { tiendaActual } = useTienda()
+  const { tiendaActual, esTiendaPropia } = useTienda()
   const [movimientos, setMovimientos] = useState([])
   const [filtroTipo, setFiltroTipo] = useState("")
   const [cargando, setCargando] = useState(true)
@@ -54,6 +55,10 @@ function Movimientos() {
   const listaFiltrada = filtroTipo
     ? movimientos.filter((m) => m.tipo === filtroTipo)
     : movimientos
+
+  if (!esTiendaPropia) {
+    return <AvisoOtraTienda modo="bloqueo" />
+  }
 
   return (
     <div className="space-y-8">

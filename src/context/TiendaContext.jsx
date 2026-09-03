@@ -13,25 +13,32 @@ export function useTienda() {
   return context
 }
 
- 
 export function TiendaProvider({ children }) {
   const { tienda: tiendaAuth, cargando: cargandoAuth } = useAuth()
   const [tiendaActual, setTiendaActual] = useState(null)
   const [tiendas, setTiendas] = useState([])
   const [cargando, setCargando] = useState(true)
 
-  useEffect(() => {
-    cargarTiendas()
-  }, [])
+  const tiendaPropia = tiendaAuth
+  const esTiendaPropia = !tiendaActual?.id || !tiendaPropia?.id || tiendaActual.id === tiendaPropia.id
 
-  // Usar la tienda del AuthContext cuando esté disponible
   useEffect(() => {
     if (!cargandoAuth && tiendaAuth) {
       setTiendaActual(tiendaAuth)
     }
   }, [cargandoAuth, tiendaAuth])
 
-  async function cargarTiendas() {
+  useEffect(() => {
+    if (cargandoAuth) return
+    if (tiendaAuth) {
+      cargarTodasLasTiendas()
+    } else {
+      setTiendas([])
+      setCargando(false)
+    }
+  }, [cargandoAuth, tiendaAuth])
+
+  async function cargarTodasLasTiendas() {
     try {
       setCargando(true)
       const querySnapshot = await getDocs(collection(db, "Tienda"))
@@ -51,6 +58,10 @@ export function TiendaProvider({ children }) {
     setTiendaActual(tienda)
   }
 
+  function volverAMiTienda() {
+    if (tiendaPropia) setTiendaActual(tiendaPropia)
+  }
+
   async function obtenerTiendaPorId(tiendaId) {
     try {
       const docRef = doc(db, "Tienda", tiendaId)
@@ -67,10 +78,13 @@ export function TiendaProvider({ children }) {
 
   const value = {
     tiendaActual,
+    tiendaPropia,
+    esTiendaPropia,
     tiendas,
     cargando: cargando || cargandoAuth,
     seleccionarTienda,
-    cargarTiendas,
+    volverAMiTienda,
+    cargarTiendas: cargarTodasLasTiendas,
     obtenerTiendaPorId,
   }
 

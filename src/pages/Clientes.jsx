@@ -13,12 +13,11 @@ import {
   updateDoc,
 } from "firebase/firestore"
 import { useTienda } from "../context/TiendaContext"
-import { useRol } from "../context/RolContext"
 import { listarPorTienda } from "../utils/consultasTienda"
+import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 function Clientes() {
-  const { tiendaActual } = useTienda()
-  const { puedeEditarClientes, puedeEliminarClientes, puedeCrearClientes } = useRol()
+  const { tiendaActual, esTiendaPropia } = useTienda()
 
   const [clientes, setClientes] = useState([])
 
@@ -173,6 +172,10 @@ function Clientes() {
     )
   })
 
+  if (!esTiendaPropia) {
+    return <AvisoOtraTienda modo="bloqueo" />
+  }
+
   return (
     <div className="space-y-8">
 
@@ -224,7 +227,7 @@ function Clientes() {
               className="p-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
 
-            {puedeCrearClientes() && (
+            {esTiendaPropia && (
               <button className="bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition">
                 {editandoId ? "Actualizar Cliente" : "Guardar Cliente"}
               </button>
@@ -289,7 +292,7 @@ function Clientes() {
                 </div>
 
                 <div className="flex gap-2 self-end sm:self-auto">
-                  {puedeEditarClientes() && (
+                  {esTiendaPropia && (
                     <button
                       onClick={() => editarCliente(cliente)}
                       className="flex items-center gap-2 bg-yellow-500 text-white px-4 py-3 rounded-2xl hover:bg-yellow-600 transition"
@@ -299,7 +302,7 @@ function Clientes() {
                     </button>
                   )}
 
-                  {puedeEliminarClientes() && (
+                  {esTiendaPropia && (
                     <button
                       onClick={() => eliminarCliente(cliente.id)}
                       className="flex items-center gap-2 bg-red-500 text-white px-4 py-3 rounded-2xl hover:bg-red-600 transition"

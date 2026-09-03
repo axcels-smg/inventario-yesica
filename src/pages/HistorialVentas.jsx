@@ -14,20 +14,28 @@ import { db } from "../firebase"
 import jsPDF from "jspdf"
 import Swal from "sweetalert2"
 
-import { FileDown, Receipt, Ban, Trash2, Printer } from "lucide-react"
+import { FileDown, Receipt, Ban, Trash2, Printer, MessageCircle } from "lucide-react"
 import { formatearFecha, obtenerTiempoFecha } from "../utils/fechas"
 import { formatearNumeroBoleta } from "../utils/boleta"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO, DATOS_NEGOCIO } from "../constants/inventario"
 import { imprimirBoleta } from "../utils/impresion"
+import { enlaceWhatsAppTexto, textoReciboVenta } from "../utils/reciboCliente"
 import { useTienda } from "../context/TiendaContext"
-import { useRol } from "../context/RolContext"
 import { listarPorTienda } from "../utils/consultasTienda"
+import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 function HistorialVentas() {
-  const { tiendaActual } = useTienda()
-  const { puedeAnularVentas, puedeEliminarVentas } = useRol()
-
+  const { tiendaActual, esTiendaPropia } = useTienda()
+  const negocioActual = tiendaActual
+    ? {
+        nombre: tiendaActual.nombre,
+        ruc: tiendaActual.ruc || DATOS_NEGOCIO.ruc,
+        direccion: tiendaActual.direccion || DATOS_NEGOCIO.direccion,
+        telefono: tiendaActual.telefono || DATOS_NEGOCIO.telefono,
+        email: tiendaActual.email || DATOS_NEGOCIO.email,
+      }
+    : DATOS_NEGOCIO
   const [ventas, setVentas] = useState([])
   const [procesandoId, setProcesandoId] = useState(null)
   const [paginaActual, setPaginaActual] = useState(1)
@@ -265,19 +273,19 @@ function HistorialVentas() {
     // Encabezado del negocio
     pdf.setFontSize(22)
     pdf.setFont("helvetica", "bold")
-    pdf.text(DATOS_NEGOCIO.nombre, pageWidth / 2, y, { align: "center" })
+    pdf.text(negocioActual.nombre, pageWidth / 2, y, { align: "center" })
     y += 10
 
     pdf.setFontSize(10)
     pdf.setFont("helvetica", "normal")
-    pdf.text(DATOS_NEGOCIO.direccion, pageWidth / 2, y, { align: "center" })
+    pdf.text(negocioActual.direccion, pageWidth / 2, y, { align: "center" })
     y += 6
 
-    pdf.text(`Tel: ${DATOS_NEGOCIO.telefono}`, pageWidth / 2, y, { align: "center" })
+    pdf.text(`Tel: ${negocioActual.telefono}`, pageWidth / 2, y, { align: "center" })
     y += 6
 
     pdf.setFont("helvetica", "bold")
-    pdf.text(`RUC: ${DATOS_NEGOCIO.ruc}`, pageWidth / 2, y, { align: "center" })
+    pdf.text(`RUC: ${negocioActual.ruc}`, pageWidth / 2, y, { align: "center" })
     y += 12
 
     // Línea separadora
@@ -379,19 +387,19 @@ function HistorialVentas() {
     // Pie de página
     pdf.setFontSize(9)
     pdf.setFont("helvetica", "normal")
-    pdf.text(DATOS_NEGOCIO.nombre, pageWidth / 2, y, { align: "center" })
+    pdf.text(negocioActual.nombre, pageWidth / 2, y, { align: "center" })
     y += 5
 
-    pdf.text(DATOS_NEGOCIO.direccion, pageWidth / 2, y, { align: "center" })
+    pdf.text(negocioActual.direccion, pageWidth / 2, y, { align: "center" })
     y += 5
 
-    pdf.text(`RUC: ${DATOS_NEGOCIO.ruc}`, pageWidth / 2, y, { align: "center" })
+    pdf.text(`RUC: ${negocioActual.ruc}`, pageWidth / 2, y, { align: "center" })
     y += 5
 
-    pdf.text(`Tel: ${DATOS_NEGOCIO.telefono}`, pageWidth / 2, y, { align: "center" })
+    pdf.text(`Tel: ${negocioActual.telefono}`, pageWidth / 2, y, { align: "center" })
     y += 5
 
-    pdf.text(DATOS_NEGOCIO.email, pageWidth / 2, y, { align: "center" })
+    pdf.text(negocioActual.email, pageWidth / 2, y, { align: "center" })
     y += 8
 
     pdf.setFont("helvetica", "bold")
@@ -402,6 +410,10 @@ function HistorialVentas() {
     pdf.text(DATOS_NEGOCIO.sitioWeb, pageWidth / 2, y, { align: "center" })
 
     pdf.save(`boleta-${numeroBoleta || venta.id.slice(0, 6)}.pdf`)
+  }
+
+  if (!esTiendaPropia) {
+    return <AvisoOtraTienda modo="bloqueo" />
   }
 
   return (
@@ -486,7 +498,7 @@ function HistorialVentas() {
 
                 <div className="flex flex-wrap gap-2 justify-end">
                   <button
-                    onClick={() => imprimirBoleta(venta)}
+                    onClick={() => imprimirBoleta(venta, negocioActual)}
                     className="flex items-center gap-2 bg-slate-700 text-white px-5 py-3 rounded-2xl hover:bg-slate-800 transition"
                   >
                     <Printer size={18} />
@@ -501,7 +513,27 @@ function HistorialVentas() {
                     PDF
                   </button>
 
-                  {!venta.anulada && puedeAnularVentas() && (
+                  {!venta.anulada && (
+                    <button
+                      onClick={() => {
+                        const texto = textoReciboVenta(venta, negocioActual)
+                        if (!venta.telefono) {
+                          Swal.fire({
+                            icon: "warning",
+                            title: "Sin teléfono",
+                            text: "Esta venta no tiene teléfono. Se abrirá WhatsApp para elegir el contacto.",
+                          })
+                        }
+                        window.open(enlaceWhatsAppTexto(texto, venta.telefono), "_blank")
+                      }}
+                      className="flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-2xl hover:bg-green-700 transition"
+                    >
+                      <MessageCircle size={18} />
+                      WhatsApp
+                    </button>
+                  )}
+
+                  {!venta.anulada && esTiendaPropia && (
                     <button
                       onClick={() => anularVenta(venta)}
                       disabled={procesandoId === venta.id}
@@ -516,7 +548,7 @@ function HistorialVentas() {
                     </button>
                   )}
 
-                  {puedeEliminarVentas() && (
+                  {esTiendaPropia && (
                     <button
                       onClick={() => eliminarVenta(venta)}
                       disabled={procesandoId === venta.id}

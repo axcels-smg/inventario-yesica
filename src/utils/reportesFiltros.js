@@ -61,7 +61,14 @@ export function agruparVentasPorDia(ventas) {
 
 export function obtenerRangoPreset(preset) {
   const hoy = new Date()
-  const formato = (d) => d.toISOString().slice(0, 10)
+
+  // Usar hora local en lugar de UTC para evitar desfase de día
+  const formato = (d) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, "0")
+    const day = String(d.getDate()).padStart(2, "0")
+    return `${y}-${m}-${day}`
+  }
 
   if (preset === "hoy") {
     return { fechaDesde: formato(hoy), fechaHasta: formato(hoy) }
