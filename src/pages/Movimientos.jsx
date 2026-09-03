@@ -6,7 +6,6 @@ import { db } from "../firebase"
 import { obtenerTiempoFecha } from "../utils/fechas"
 import { ETIQUETAS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
-import { listarPorTienda } from "../utils/consultasTienda"
 
 const COLORES_TIPO = {
   venta: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
@@ -28,14 +27,22 @@ function Movimientos() {
     if (tiendaActual) {
       cargarMovimientos()
     }
-  }, [tiendaActual?.id])
+  }, [tiendaActual, cargarMovimientos])
 
   async function cargarMovimientos() {
     if (!tiendaActual) return
 
     try {
       setCargando(true)
-      const lista = await listarPorTienda("movimientos", tiendaActual.id)
+      const snap = await getDocs(collection(db, "movimientos"))
+      const lista = []
+
+      snap.forEach((docu) => {
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          lista.push({ id: docu.id, ...data })
+        }
+      })
 
       lista.sort(
         (a, b) =>

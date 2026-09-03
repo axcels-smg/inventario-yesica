@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { collection, getDocs } from "firebase/firestore"
 import Swal from "sweetalert2"
 import {
   BarChart,
@@ -20,6 +21,7 @@ import {
   Mail,
 } from "lucide-react"
 
+import { db } from "../firebase"
 import { filtrarProductosStockBajo } from "../utils/stock"
 import {
   aplicarFiltrosReporte,
@@ -36,7 +38,6 @@ import {
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import AlertasStockAcumulativas from "../components/AlertasStockAcumulativas"
 import { useTienda } from "../context/TiendaContext"
-import { listarPorTienda } from "../utils/consultasTienda"
 
 function Reportes() {
   const { tiendaActual } = useTienda()
@@ -58,17 +59,40 @@ function Reportes() {
     const { fechaDesde: d, fechaHasta: h } = obtenerRangoPreset("mes")
     setFechaDesde(d)
     setFechaHasta(h)
-  }, [tiendaActual?.id])
+  }, [tiendaActual, cargarDatos])
 
   async function cargarDatos() {
     if (!tiendaActual) return
 
-    const [listaVentas, listaProductos, listaClientes] = await Promise.all([
-      listarPorTienda("ventas", tiendaActual.id),
-      listarPorTienda("productos", tiendaActual.id),
-      listarPorTienda("clientes", tiendaActual.id),
+    const [snapVentas, snapProductos, snapClientes] = await Promise.all([
+      getDocs(collection(db, "ventas")),
+      getDocs(collection(db, "productos")),
+      getDocs(collection(db, "clientes")),
     ])
 
+    const listaVentas = []
+    snapVentas.forEach((d) => {
+      const data = d.data()
+      if (data.tiendaId === tiendaActual.id) {
+        listaVentas.push({ id: d.id, ...data })
+      }
+    })
+
+    const listaProductos = []
+    snapProductos.forEach((d) => {
+      const data = d.data()
+      if (data.tiendaId === tiendaActual.id) {
+        listaProductos.push({ id: d.id, ...data })
+      }
+    })
+
+    const listaClientes = []
+    snapClientes.forEach((d) => {
+      const data = d.data()
+      if (data.tiendaId === tiendaActual.id) {
+        listaClientes.push({ id: d.id, ...data })
+      }
+    })
     listaClientes.sort((a, b) =>
       String(a.nombre || "").localeCompare(String(b.nombre || ""))
     )
@@ -147,7 +171,6 @@ function Reportes() {
           Reportes
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
-          {tiendaActual?.nombre ? `${tiendaActual.nombre} · ` : ""}
           Filtros por fecha y cliente · Exportación contable · Alertas
         </p>
       </div>

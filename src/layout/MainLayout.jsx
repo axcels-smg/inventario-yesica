@@ -3,12 +3,10 @@ import { Menu, X } from "lucide-react"
 import { useState } from "react"
 import Sidebar from "../components/Sidebar"
 import { useStockBajo } from "../hooks/useStockBajo"
-import { useTienda } from "../context/TiendaContext"
 
 function MainLayout() {
   const [menuAbierto, setMenuAbierto] = useState(false)
-  const { tiendaActual } = useTienda()
-  const { cantidad: alertasStock } = useStockBajo(tiendaActual?.id)
+  const { cantidad: alertasStock } = useStockBajo()
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 transition-colors duration-300">

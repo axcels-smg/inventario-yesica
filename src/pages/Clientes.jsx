@@ -14,7 +14,6 @@ import {
 } from "firebase/firestore"
 import { useTienda } from "../context/TiendaContext"
 import { useRol } from "../context/RolContext"
-import { listarPorTienda } from "../utils/consultasTienda"
 
 function Clientes() {
   const { tiendaActual } = useTienda()
@@ -33,13 +32,25 @@ function Clientes() {
     if (tiendaActual) {
       cargarClientes()
     }
-  }, [tiendaActual?.id])
+  }, [tiendaActual, cargarClientes])
 
   async function cargarClientes() {
     if (!tiendaActual) return
 
     try {
-      const lista = await listarPorTienda("clientes", tiendaActual.id)
+      const querySnapshot = await getDocs(collection(db, "clientes"))
+
+      const lista = []
+
+      querySnapshot.forEach((docu) => {
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          lista.push({
+            id: docu.id,
+            ...data,
+          })
+        }
+      })
 
       lista.sort((a, b) =>
         String(a.nombre || "").localeCompare(String(b.nombre || ""))

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react"
 import Swal from "sweetalert2"
 import { FileDown, FileUp, Table } from "lucide-react"
-import { collection, writeBatch, doc } from "firebase/firestore"
+import { collection, getDocs, writeBatch, doc } from "firebase/firestore"
 
 import { db } from "../firebase"
 import {
@@ -12,7 +12,6 @@ import {
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
-import { listarPorTienda } from "../utils/consultasTienda"
 import {
   claveModeloProducto,
 } from "../utils/productos"
@@ -23,13 +22,16 @@ function InventarioExcel() {
   const [importando, setImportando] = useState(false)
   const [vistaPrevia, setVistaPrevia] = useState([])
 
-  async function cargarProductosDeTienda() {
-    return listarPorTienda("productos", tiendaActual?.id)
+  async function cargarTodosProductos() {
+    const snap = await getDocs(collection(db, "productos"))
+    const lista = []
+    snap.forEach((d) => lista.push({ id: d.id, ...d.data() }))
+    return lista
   }
 
   async function exportarInventario() {
     try {
-      const productos = await cargarProductosDeTienda()
+      const productos = await cargarTodosProductos()
 
       if (productos.length === 0) {
         Swal.fire({ icon: "info", title: "No hay productos para exportar" })
@@ -79,7 +81,10 @@ function InventarioExcel() {
 
       setImportando(true)
 
-      const deEstaTienda = await cargarProductosDeTienda()
+      const existentes = await cargarTodosProductos()
+      const deEstaTienda = existentes.filter(
+        (p) => !p.tiendaId || p.tiendaId === tiendaActual.id
+      )
       const clavesVistas = new Set(
         deEstaTienda.map((p) => claveModeloProducto(p))
       )

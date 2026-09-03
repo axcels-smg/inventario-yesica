@@ -22,7 +22,6 @@ import { TIPOS_MOVIMIENTO, DATOS_NEGOCIO } from "../constants/inventario"
 import { imprimirBoleta } from "../utils/impresion"
 import { useTienda } from "../context/TiendaContext"
 import { useRol } from "../context/RolContext"
-import { listarPorTienda } from "../utils/consultasTienda"
 
 function HistorialVentas() {
   const { tiendaActual } = useTienda()
@@ -37,13 +36,25 @@ function HistorialVentas() {
     if (tiendaActual) {
       cargarVentas()
     }
-  }, [tiendaActual?.id])
+  }, [tiendaActual, cargarVentas])
 
   async function cargarVentas() {
     if (!tiendaActual) return
 
     try {
-      const listaVentas = await listarPorTienda("ventas", tiendaActual.id)
+      const querySnapshot = await getDocs(collection(db, "ventas"))
+
+      const listaVentas = []
+
+      querySnapshot.forEach((docu) => {
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          listaVentas.push({
+            id: docu.id,
+            ...data,
+          })
+        }
+      })
 
       listaVentas.sort((a, b) =>
         obtenerTiempoFecha(b.fecha || b.fechaTexto) -

@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from "react"
-import { listarPorTienda } from "../utils/consultasTienda"
-import { filtrarProductosStockBajo } from "../utils/stock"
+import { useEffect, useState } from "react"
+import { collection, getDocs, query, where } from "firebase/firestore"
+import { db } from "../firebase"
+import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 
 export function useStockBajo(tiendaId) {
   const [cantidad, setCantidad] = useState(0)
   const [productos, setProductos] = useState([])
   const [cargando, setCargando] = useState(true)
 
-  const recargar = useCallback(async () => {
+  async function recargar() {
     if (!tiendaId) {
       setProductos([])
       setCantidad(0)
@@ -17,8 +18,21 @@ export function useStockBajo(tiendaId) {
 
     try {
       setCargando(true)
-      const deEstaTienda = await listarPorTienda("productos", tiendaId)
-      const lista = filtrarProductosStockBajo(deEstaTienda)
+
+      const q = query(
+        collection(db, "productos"),
+        where("stock", "<=", STOCK_BAJO_UMBRAL),
+        where("tiendaId", "==", tiendaId)
+      )
+
+      const snap = await getDocs(q)
+      const lista = []
+
+      snap.forEach((docu) => {
+        lista.push({ id: docu.id, ...docu.data() })
+      })
+
+      lista.sort((a, b) => Number(a.stock) - Number(b.stock))
 
       setProductos(lista)
       setCantidad(lista.length)
@@ -29,11 +43,11 @@ export function useStockBajo(tiendaId) {
     } finally {
       setCargando(false)
     }
-  }, [tiendaId])
+  }
 
   useEffect(() => {
     recargar()
-  }, [recargar])
+  }, [tiendaId])
 
   return { cantidad, productos, cargando, recargar }
 }

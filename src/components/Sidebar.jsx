@@ -25,8 +25,8 @@ import SelectorRol from "./SelectorRol"
 import Swal from "sweetalert2"
 
 function Sidebar({ onNavigate }) {
-  const { tiendaActual, tiendas, seleccionarTienda, cargando } = useTienda()
   const { cantidad: stockBajoCantidad } = useStockBajo(tiendaActual?.id)
+  const { tiendaActual, tiendas, seleccionarTienda, cargando } = useTienda()
   const { esSuperAdmin, puedeHacerTransferencias } = useRol()
   const { logout } = useAuth()
   const navigate = useNavigate()

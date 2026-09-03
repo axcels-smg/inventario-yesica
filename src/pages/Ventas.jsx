@@ -4,6 +4,7 @@ import { Minus, PackageSearch, Plus, Trash2 } from "lucide-react"
 
 import {
   collection,
+  getDocs,
   doc,
   runTransaction,
   serverTimestamp,
@@ -14,7 +15,6 @@ import { obtenerSiguienteNumeroBoleta, formatearNumeroBoleta } from "../utils/bo
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
-import { listarPorTienda } from "../utils/consultasTienda"
 
 import {
   filtrarProductos,
@@ -42,14 +42,29 @@ function Ventas() {
       cargarProductos()
       cargarClientes()
     }
-  }, [tiendaActual?.id])
+  }, [tiendaActual, cargarProductos, cargarClientes])
 
   async function cargarProductos() {
     if (!tiendaActual) return
 
     try {
       setCargandoProductos(true)
-      setProductos(await listarPorTienda("productos", tiendaActual.id))
+
+      const querySnapshot = await getDocs(collection(db, "productos"))
+
+      const lista = []
+
+      querySnapshot.forEach((docu) => {
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          lista.push({
+            id: docu.id,
+            ...data,
+          })
+        }
+      })
+
+      setProductos(lista)
 
     } catch (error) {
       console.log(error)
@@ -66,7 +81,19 @@ function Ventas() {
     if (!tiendaActual) return
 
     try {
-      const lista = await listarPorTienda("clientes", tiendaActual.id)
+      const querySnapshot = await getDocs(collection(db, "clientes"))
+
+      const lista = []
+
+      querySnapshot.forEach((docu) => {
+        const data = docu.data()
+        if (!data.tiendaId || data.tiendaId === tiendaActual.id) {
+          lista.push({
+            id: docu.id,
+            ...data,
+          })
+        }
+      })
 
       lista.sort((a, b) =>
         String(a.nombre || "").localeCompare(String(b.nombre || ""))

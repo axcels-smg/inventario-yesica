@@ -15,6 +15,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
+import { collection, getDocs } from "firebase/firestore"
+
+import { db } from "../firebase"
 import { esFechaDeHoy } from "../utils/fechas"
 import { filtrarVentasActivas } from "../utils/ventas"
 import { agruparVentasPorDia, obtenerRangoPreset } from "../utils/reportesFiltros"
@@ -23,7 +26,6 @@ import StockAlertBanner from "../components/StockAlertBanner"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { registrarAlertaDiaria, existeAlertaHoy } from "../utils/alertasStock"
 import { useTienda } from "../context/TiendaContext"
-import { listarPorTienda } from "../utils/consultasTienda"
 
 function Dashboard() {
   const [productos, setProductos] = useState([])
@@ -35,7 +37,7 @@ function Dashboard() {
       cargarProductos()
       cargarVentas()
     }
-  }, [tiendaActual?.id])
+  }, [tiendaActual, cargarProductos, cargarVentas])
 
   useEffect(() => {
     async function registrarAlertaSiNecesario() {
@@ -52,12 +54,30 @@ function Dashboard() {
 
   async function cargarProductos() {
     if (!tiendaActual) return
-    setProductos(await listarPorTienda("productos", tiendaActual.id))
+
+    const querySnapshot = await getDocs(collection(db, "productos"))
+    const lista = []
+    querySnapshot.forEach((docu) => {
+      const data = docu.data()
+      if (data.tiendaId === tiendaActual.id) {
+        lista.push({ id: docu.id, ...data })
+      }
+    })
+    setProductos(lista)
   }
 
   async function cargarVentas() {
     if (!tiendaActual) return
-    setVentas(await listarPorTienda("ventas", tiendaActual.id))
+
+    const querySnapshot = await getDocs(collection(db, "ventas"))
+    const lista = []
+    querySnapshot.forEach((docu) => {
+      const data = docu.data()
+      if (data.tiendaId === tiendaActual.id) {
+        lista.push({ id: docu.id, ...data })
+      }
+    })
+    setVentas(lista)
   }
 
   const ventasActivas = filtrarVentasActivas(ventas)
@@ -90,9 +110,7 @@ function Dashboard() {
       <div className="mb-6">
         <h1 className="text-5xl font-black dark:text-white">Dashboard</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
-          {tiendaActual?.nombre
-            ? `Resumen de ${tiendaActual.nombre}`
-            : "Resumen general del inventario"}
+          Resumen general del inventario
         </p>
       </div>
 
