@@ -18,7 +18,7 @@ import {
 import { esFechaDeHoy } from "../utils/fechas"
 import { filtrarVentasActivas } from "../utils/ventas"
 import { agruparVentasPorDia, obtenerRangoPreset } from "../utils/reportesFiltros"
-import { filtrarProductosStockBajo } from "../utils/stock"
+import { resumenStockBajo } from "../utils/stock"
 import StockAlertBanner from "../components/StockAlertBanner"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { registrarAlertaDiaria, existeAlertaHoy } from "../utils/alertasStock"
@@ -62,7 +62,7 @@ function Dashboard() {
   }
 
   const ventasActivas = filtrarVentasActivas(ventas)
-  const stockBajo = filtrarProductosStockBajo(productos)
+  const stockBajo = resumenStockBajo(productos)
 
   const { fechaDesde, fechaHasta } = obtenerRangoPreset("semana")
   const ventasSemana = ventasActivas.filter((v) => {
@@ -101,7 +101,12 @@ function Dashboard() {
         </p>
       </div>
 
-      <StockAlertBanner cantidad={stockBajo.length} />
+      <StockAlertBanner
+        cantidad={stockBajo.total}
+        agotados={stockBajo.agotados}
+        poco={stockBajo.poco}
+        tienda={tiendaActual?.nombre || ""}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6 mb-10">
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
@@ -150,11 +155,13 @@ function Dashboard() {
         >
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-red-600 dark:text-red-300">Stock bajo</p>
+              <p className="text-red-600 dark:text-red-300">Poco stock</p>
               <h2 className="text-4xl font-black mt-2 text-red-700 dark:text-red-200">
-                {stockBajo.length}
+                {stockBajo.total}
               </h2>
-              <p className="text-xs text-red-500 mt-1">≤ {STOCK_BAJO_UMBRAL} u.</p>
+              <p className="text-xs text-red-500 mt-1">
+                ≤ {STOCK_BAJO_UMBRAL} u. · {stockBajo.agotados} agotados
+              </p>
             </div>
             <AlertTriangle size={40} className="text-red-500" />
           </div>

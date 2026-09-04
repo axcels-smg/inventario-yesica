@@ -1,5 +1,6 @@
 import { AlertTriangle, Calendar, Package } from "lucide-react"
 import { useAlertasStockHistorial } from "../hooks/useAlertasStockHistorial"
+import { etiquetaEstadoStock, esStockAgotado } from "../utils/stock"
 
 function AlertasStockAcumulativas({ tiendaId }) {
   const { alertas, listaAcumulativa, cargando, recargar } = useAlertasStockHistorial(tiendaId)
@@ -84,15 +85,22 @@ function AlertasStockAcumulativas({ tiendaId }) {
           {listaAcumulativa.map((producto) => (
             <div
               key={producto.id}
-              className="p-4 bg-orange-50 dark:bg-orange-950/30 rounded-xl border border-orange-200 dark:border-orange-900"
+              className={`p-4 rounded-xl border ${
+                esStockAgotado(producto.stock)
+                  ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900"
+                  : "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900"
+              }`}
             >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-slate-900 dark:text-white">
+                    {producto.codigo ? `[${producto.codigo}] ` : ""}
                     {producto.nombre}
                   </p>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Stock actual: {producto.stock} | Precio: S/ {producto.precio}
+                    {producto.categoria ? `${producto.categoria} · ` : ""}
+                    Stock: {producto.stock} · {etiquetaEstadoStock(producto.stock)}
+                    {producto.precio != null ? ` · S/ ${producto.precio}` : ""}
                   </p>
                 </div>
                 <div className="text-right">

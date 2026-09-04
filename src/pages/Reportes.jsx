@@ -21,7 +21,7 @@ import {
   FileDown,
 } from "lucide-react"
 
-import { filtrarProductosStockBajo } from "../utils/stock"
+import { filtrarProductosStockBajo, etiquetaEstadoStock, esStockAgotado, resumenStockBajo } from "../utils/stock"
 import {
   aplicarFiltrosReporte,
   agruparVentasPorDia,
@@ -102,6 +102,7 @@ function Reportes() {
   )
 
   const productosStockBajo = filtrarProductosStockBajo(productos)
+  const resumenPocoStock = resumenStockBajo(productos)
   const ventasPorDia = agruparVentasPorDia(ventasFiltradas).slice(0, 31)
 
   const productosVendidos = useMemo(() => {
@@ -372,10 +373,13 @@ function Reportes() {
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
           <AlertTriangle className="text-red-500" size={38} />
-          <p className="text-slate-500 dark:text-slate-400 mt-4">Stock bajo (≤{STOCK_BAJO_UMBRAL})</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-4">Poco stock (≤{STOCK_BAJO_UMBRAL})</p>
           <h2 className="text-4xl font-black dark:text-white">
-            {productosStockBajo.length}
+            {resumenPocoStock.total}
           </h2>
+          <p className="text-xs text-slate-500 mt-2">
+            {resumenPocoStock.agotados} agotados · {resumenPocoStock.poco} poco stock
+          </p>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
           <p className="text-slate-500 dark:text-slate-400 mt-2">Clientes en filtro</p>
@@ -389,7 +393,7 @@ function Reportes() {
       {productosStockBajo.length > 0 && (
         <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-3xl p-6 space-y-4">
           <h2 className="text-xl font-bold text-red-800 dark:text-red-200">
-            Alertas de stock bajo
+            Alertas de poco stock — {tiendaActual?.nombre || "esta tienda"}
           </h2>
           <p className="text-sm text-red-700 dark:text-red-300">
             WhatsApp automático requiere abrir el enlace (sin servidor). Guarda tu
@@ -409,7 +413,11 @@ function Reportes() {
               Guardar número
             </button>
             <a
-              href={enlaceWhatsAppStockBajo(productosStockBajo, telefonoWhatsApp)}
+              href={enlaceWhatsAppStockBajo(
+                productosStockBajo,
+                telefonoWhatsApp,
+                tiendaActual?.nombre || ""
+              )}
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-green-600 text-white font-bold"
@@ -418,7 +426,11 @@ function Reportes() {
               Enviar por WhatsApp
             </a>
             <a
-              href={enlaceEmailStockBajo(productosStockBajo)}
+              href={enlaceEmailStockBajo(
+                productosStockBajo,
+                "",
+                tiendaActual?.nombre || ""
+              )}
               className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 text-white font-bold"
             >
               <Mail size={18} />
@@ -545,20 +557,68 @@ function Reportes() {
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
-        <h2 className="text-2xl font-bold mb-6 text-red-500">Stock bajo</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto">
-          {productosStockBajo.map((p) => (
-            <div
-              key={p.id}
-              className="flex justify-between p-3 border dark:border-slate-700 rounded-xl"
-            >
-              <span className="font-medium dark:text-white">
-                {p.marca} {p.modelo}
-              </span>
-              <span className="text-red-500 font-bold">{p.stock}</span>
-            </div>
-          ))}
-        </div>
+        <h2 className="text-2xl font-bold mb-2 text-red-500">
+          Poco stock — {tiendaActual?.nombre || "tienda"}
+        </h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+          Productos con {STOCK_BAJO_UMBRAL} unidades o menos. Agotado = 0.
+        </p>
+        {productosStockBajo.length === 0 ? (
+          <p className="text-slate-500">No hay productos con poco stock en esta tienda.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead className="bg-slate-100 dark:bg-slate-800">
+                <tr>
+                  <th className="p-3 text-left">Código</th>
+                  <th className="p-3 text-left">Producto</th>
+                  <th className="p-3 text-left">Categoría</th>
+                  <th className="p-3 text-right">Stock</th>
+                  <th className="p-3 text-left">Estado</th>
+                  <th className="p-3 text-right">Precio</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productosStockBajo.map((p) => {
+                  const agotado = esStockAgotado(p.stock)
+                  return (
+                    <tr
+                      key={p.id}
+                      className={`border-t dark:border-slate-800 ${
+                        agotado
+                          ? "bg-red-50/80 dark:bg-red-950/20"
+                          : "bg-amber-50/50 dark:bg-amber-950/10"
+                      }`}
+                    >
+                      <td className="p-3 font-mono text-slate-600 dark:text-slate-400">
+                        {p.codigo || "—"}
+                      </td>
+                      <td className="p-3 font-medium dark:text-white">
+                        {p.marca} {p.modelo}
+                      </td>
+                      <td className="p-3">{p.categoria || "—"}</td>
+                      <td className="p-3 text-right font-bold text-red-600">
+                        {p.stock}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-bold ${
+                            agotado
+                              ? "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100"
+                              : "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
+                          }`}
+                        >
+                          {etiquetaEstadoStock(p.stock)}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right">S/ {p.precio}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

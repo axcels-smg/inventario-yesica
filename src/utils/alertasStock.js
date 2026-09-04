@@ -3,7 +3,7 @@ import { db } from "../firebase"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 
 /**
- * Registra los productos con stock bajo (0-2) para un día y tienda específicos
+ * Registra los productos con stock bajo (0-3) para un día y tienda específicos
  * Solo guarda si hay productos con stock bajo
  */
 export async function registrarAlertaDiaria(productos, tiendaId) {
@@ -30,6 +30,8 @@ export async function registrarAlertaDiaria(productos, tiendaId) {
       nombre: `${p.marca || ""} ${p.modelo || ""}`.trim(),
       marca: p.marca || "",
       modelo: p.modelo || "",
+      codigo: p.codigo || "",
+      categoria: p.categoria || "",
       stock: p.stock,
       precio: p.precio,
     })),

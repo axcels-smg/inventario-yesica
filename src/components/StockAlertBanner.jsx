@@ -2,7 +2,7 @@ import { Link } from "react-router-dom"
 import { AlertTriangle } from "lucide-react"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 
-function StockAlertBanner({ cantidad }) {
+function StockAlertBanner({ cantidad, agotados = 0, poco = 0, tienda = "" }) {
   if (cantidad <= 0) return null
 
   return (
@@ -13,9 +13,12 @@ function StockAlertBanner({ cantidad }) {
       <AlertTriangle size={22} className="shrink-0" />
       <div>
         <p className="font-bold">
-          {cantidad} producto{cantidad !== 1 ? "s" : ""} con stock bajo (≤ {STOCK_BAJO_UMBRAL})
+          {cantidad} producto{cantidad !== 1 ? "s" : ""} con poco stock
+          {tienda ? ` en ${tienda}` : ""} (≤ {STOCK_BAJO_UMBRAL} u.)
         </p>
-        <p className="text-sm opacity-80">Ver detalle en Reportes</p>
+        <p className="text-sm opacity-80">
+          {agotados} agotado{agotados !== 1 ? "s" : ""} · {poco} con poco stock · Ver detalle en Reportes
+        </p>
       </div>
     </Link>
   )

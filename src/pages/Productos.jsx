@@ -32,7 +32,8 @@ import {
   claveModeloProducto,
 } from "../utils/productos"
 import { registrarMovimiento } from "../utils/movimientos"
-import { TIPOS_MOVIMIENTO } from "../constants/inventario"
+import { TIPOS_MOVIMIENTO, STOCK_BAJO_UMBRAL } from "../constants/inventario"
+import { esStockBajo, esStockAgotado, etiquetaEstadoStock, resumenStockBajo } from "../utils/stock"
 import { useTienda } from "../context/TiendaContext"
 import { listarPorTienda } from "../utils/consultasTienda"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
@@ -419,6 +420,8 @@ function Productos() {
     [productos]
   )
 
+  const pocoStock = useMemo(() => resumenStockBajo(productos), [productos])
+
   const resumenPorCategoria = useMemo(() => {
     const mapa = new Map()
     productos.forEach((p) => {
@@ -512,7 +515,7 @@ function Productos() {
       </div>
 
       {/* BTN + STATS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
 
         <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl">
           <p className="text-slate-500 dark:text-slate-400">Total</p>
@@ -524,6 +527,16 @@ function Productos() {
           <h2 className="text-3xl font-black dark:text-white">
             {productos.reduce((a, b) => a + Number(b.stock || 0), 0)}
           </h2>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-red-100 dark:border-red-900">
+          <p className="text-red-600 dark:text-red-300">Poco stock (≤{STOCK_BAJO_UMBRAL})</p>
+          <h2 className="text-3xl font-black text-red-700 dark:text-red-200">
+            {pocoStock.total}
+          </h2>
+          <p className="text-xs text-red-500 mt-1">
+            {pocoStock.agotados} agotados · {pocoStock.poco} poco
+          </p>
         </div>
 
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 rounded-3xl flex justify-between items-center text-white">
@@ -619,12 +632,18 @@ function Productos() {
             {productosPagina.map((p) => {
               const veces = conteoModelos.get(claveModeloProducto(p)) || 1
               const esDuplicado = veces > 1
+              const poco = esStockBajo(p.stock)
+              const agotado = esStockAgotado(p.stock)
 
               return (
               <tr
                 key={p.id}
                 className={`border-t ${
-                  esDuplicado
+                  agotado
+                    ? "bg-red-50/80 dark:bg-red-950/20"
+                    : poco
+                    ? "bg-amber-50/70 dark:bg-amber-950/15"
+                    : esDuplicado
                     ? "bg-amber-50/80 dark:bg-amber-950/20"
                     : ""
                 }`}
@@ -658,7 +677,24 @@ function Productos() {
 
                 <td className="p-4 font-bold dark:text-white">S/ {p.precio}</td>
 
-                <td className="p-4 dark:text-white">{p.stock}</td>
+                <td className="p-4 dark:text-white">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={poco ? "font-bold text-red-600" : ""}>
+                      {p.stock}
+                    </span>
+                    {poco && (
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                          agotado
+                            ? "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100"
+                            : "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
+                        }`}
+                      >
+                        {etiquetaEstadoStock(p.stock)}
+                      </span>
+                    )}
+                  </div>
+                </td>
 
                 <td className="p-4 flex gap-2">
 

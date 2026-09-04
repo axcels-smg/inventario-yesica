@@ -3,10 +3,13 @@ import { Menu, X } from "lucide-react"
 import { useState } from "react"
 import Sidebar from "../components/Sidebar"
 import { useStockBajo } from "../hooks/useStockBajo"
+import { useTienda } from "../context/TiendaContext"
+import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 
 function MainLayout() {
   const [menuAbierto, setMenuAbierto] = useState(false)
-  const { cantidad: alertasStock } = useStockBajo()
+  const { tiendaActual } = useTienda()
+  const { cantidad: alertasStock } = useStockBajo(tiendaActual?.id)
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 transition-colors duration-300">
@@ -60,9 +63,9 @@ function MainLayout() {
             {alertasStock > 0 && (
               <span
                 className="bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full"
-                title="Productos con stock bajo"
+                title={`Productos con poco stock en ${tiendaActual?.nombre || "esta tienda"} (≤ ${STOCK_BAJO_UMBRAL} u.)`}
               >
-                {alertasStock} stock bajo
+                {alertasStock} poco stock
               </span>
             )}
             <div>

@@ -1,4 +1,4 @@
-export const STOCK_BAJO_UMBRAL = 2
+export const STOCK_BAJO_UMBRAL = 3
 
 export const DATOS_NEGOCIO = {
   nombre: "INVENTARIO G.R.L.",

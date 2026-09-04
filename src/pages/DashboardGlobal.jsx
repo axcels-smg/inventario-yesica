@@ -21,6 +21,7 @@ import {
 } from "recharts"
 import { db } from "../firebase"
 import { useTienda } from "../context/TiendaContext"
+import { esStockBajo, esStockAgotado } from "../utils/stock"
 
 function DashboardGlobal() {
   const { tiendas } = useTienda()
@@ -64,6 +65,10 @@ function DashboardGlobal() {
           nombre: tienda.nombre,
           productos: productosTienda.length,
           stockTotal: productosTienda.reduce((sum, p) => sum + Number(p.stock || 0), 0),
+          pocoStock: productosTienda.filter(
+            (p) => esStockBajo(p.stock) && !esStockAgotado(p.stock)
+          ).length,
+          agotados: productosTienda.filter((p) => esStockAgotado(p.stock)).length,
         }
       })
 
@@ -257,6 +262,8 @@ function DashboardGlobal() {
                     <th className="text-left p-4 dark:text-white">Tienda</th>
                     <th className="text-right p-4 dark:text-white">Productos</th>
                     <th className="text-right p-4 dark:text-white">Stock Total</th>
+                    <th className="text-right p-4 dark:text-white">Poco stock</th>
+                    <th className="text-right p-4 dark:text-white">Agotados</th>
                     <th className="text-right p-4 dark:text-white">Ventas</th>
                     <th className="text-right p-4 dark:text-white">Ingresos</th>
                   </tr>
@@ -281,6 +288,12 @@ function DashboardGlobal() {
                         </td>
                         <td className="p-4 text-right dark:text-slate-300">
                           {productosTienda?.stockTotal || 0}
+                        </td>
+                        <td className="p-4 text-right font-semibold text-amber-700 dark:text-amber-300">
+                          {productosTienda?.pocoStock || 0}
+                        </td>
+                        <td className="p-4 text-right font-semibold text-red-600 dark:text-red-300">
+                          {productosTienda?.agotados || 0}
                         </td>
                         <td className="p-4 text-right dark:text-slate-300">
                           {ventasTienda?.ventas || 0}
