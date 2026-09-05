@@ -13,6 +13,7 @@ const COLORES_TIPO = {
   venta: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
   anulacion: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
   reposicion: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
+  ajuste_stock: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
   edicion_stock: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300",
   importacion: "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300",
   transferencia_salida: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
@@ -68,7 +69,7 @@ function Movimientos() {
           Movimientos
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
-          Historial de ventas, anulaciones, reposiciones y cambios de stock
+          Historial de ventas, anulaciones, ajustes de stock y transferencias
         </p>
       </div>
 

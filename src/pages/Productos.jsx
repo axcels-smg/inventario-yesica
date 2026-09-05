@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import Modal from "../components/Modal"
 import Swal from "sweetalert2"
 
@@ -6,9 +6,9 @@ import {
   Pencil,
   Trash2,
   PackageSearch,
-  PackagePlus,
   Package,
   ChevronDown,
+  SlidersHorizontal,
 } from "lucide-react"
 
 import { db } from "../firebase"
@@ -19,7 +19,6 @@ import {
   deleteDoc,
   updateDoc,
   doc,
-  runTransaction,
 } from "firebase/firestore"
 
 import {
@@ -31,12 +30,14 @@ import {
   conteoPorClaveModelo,
   claveModeloProducto,
 } from "../utils/productos"
-import { registrarMovimiento } from "../utils/movimientos"
-import { TIPOS_MOVIMIENTO, STOCK_BAJO_UMBRAL } from "../constants/inventario"
+import { aplicarAjusteStock } from "../utils/ajusteStock"
+import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { esStockBajo, esStockAgotado, etiquetaEstadoStock, resumenStockBajo } from "../utils/stock"
 import { useTienda } from "../context/TiendaContext"
 import { listarPorTienda } from "../utils/consultasTienda"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
+
+const ESPERA_GUARDADO_MS = 1200
 
 function Productos() {
   const { tiendaActual, esTiendaPropia } = useTienda()
@@ -64,15 +65,31 @@ function Productos() {
   const [editandoId, setEditandoId] = useState(null)
 
   const [modalAbierto, setModalAbierto] = useState(false)
-  const [modalReponerAbierto, setModalReponerAbierto] = useState(false)
-  const [productoReponer, setProductoReponer] = useState(null)
-  const [cantidadReponer, setCantidadReponer] = useState("")
-  const [reponiendo, setReponiendo] = useState(false)
+  const [modalAjusteAbierto, setModalAjusteAbierto] = useState(false)
+  const [productoAjuste, setProductoAjuste] = useState(null)
+  const [cantidadAjuste, setCantidadAjuste] = useState("")
+  const [ajustandoId, setAjustandoId] = useState("")
+  const [idsPendientes, setIdsPendientes] = useState(() => new Set())
   const [resumenAbierto, setResumenAbierto] = useState(false)
+  const pendientesRef = useRef(new Map())
+  const timersRef = useRef(new Map())
 
   useEffect(() => {
     if (tiendaActual) {
       obtenerProductos()
+    }
+
+    return () => {
+      timersRef.current.forEach((t) => clearTimeout(t))
+      timersRef.current.clear()
+      pendientesRef.current.forEach((pend) => {
+        if (pend.delta && tiendaActual?.id) {
+          aplicarAjusteStock(pend.producto, pend.delta, tiendaActual.id).catch(
+            () => {}
+          )
+        }
+      })
+      pendientesRef.current.clear()
     }
   }, [tiendaActual?.id])
 
@@ -123,96 +140,153 @@ function Productos() {
     }
   }
 
-  function cambiarCantidadReponer(valor) {
-    if (/^\d*$/.test(valor)) {
-      setCantidadReponer(valor)
+  function cambiarCantidadAjuste(valor) {
+    if (/^-?\d*$/.test(valor)) {
+      setCantidadAjuste(valor)
     }
   }
 
-  function abrirReponer(producto) {
-    setProductoReponer(producto)
-    setCantidadReponer("")
-    setModalReponerAbierto(true)
+  function marcarPendiente(id, activo) {
+    setIdsPendientes((prev) => {
+      const next = new Set(prev)
+      if (activo) next.add(id)
+      else next.delete(id)
+      return next
+    })
   }
 
-  function cerrarReponer() {
-    setModalReponerAbierto(false)
-    setProductoReponer(null)
-    setCantidadReponer("")
+  async function flushPendiente(id) {
+    const timer = timersRef.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      timersRef.current.delete(id)
+    }
+
+    const pend = pendientesRef.current.get(id)
+    pendientesRef.current.delete(id)
+    marcarPendiente(id, false)
+
+    if (!pend || pend.delta === 0 || !tiendaActual) return true
+
+    const ok = await aplicarDelta(pend.producto, pend.delta, { silencioso: true })
+    if (!ok) {
+      setProductos((lista) =>
+        lista.map((p) =>
+          p.id === id ? { ...p, stock: pend.stockBase } : p
+        )
+      )
+    }
+    return ok
   }
 
-  async function confirmarReponer(e) {
-    e.preventDefault()
-    if (!esTiendaPropia) return
+  function ajusteRapido(producto, delta) {
+    if (!esTiendaPropia || !tiendaActual) return
 
-    if (!productoReponer) return
+    const id = producto.id
+    const prev = pendientesRef.current.get(id)
+    const stockBase = prev ? prev.stockBase : Number(producto.stock)
+    const deltaAcum = (prev?.delta || 0) + delta
 
-    const cantidad = Number(cantidadReponer)
-
-    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+    if (stockBase + deltaAcum < 0) {
       Swal.fire({
         icon: "warning",
-        title: "Cantidad inválida",
-        text: "Ingresa un número entero mayor a 0",
+        title: "No alcanza",
+        text: `Hay ${stockBase} u. No se puede restar ${Math.abs(deltaAcum)}.`,
       })
       return
     }
 
+    pendientesRef.current.set(id, {
+      producto: { ...producto, stock: stockBase },
+      stockBase,
+      delta: deltaAcum,
+    })
+    marcarPendiente(id, true)
+
+    setProductos((lista) =>
+      lista.map((p) =>
+        p.id === id ? { ...p, stock: stockBase + deltaAcum } : p
+      )
+    )
+
+    const anterior = timersRef.current.get(id)
+    if (anterior) clearTimeout(anterior)
+    timersRef.current.set(
+      id,
+      setTimeout(() => {
+        flushPendiente(id)
+      }, ESPERA_GUARDADO_MS)
+    )
+  }
+
+  async function abrirAjuste(producto) {
+    await flushPendiente(producto.id)
+    setProductoAjuste({
+      ...producto,
+      stock:
+        productos.find((p) => p.id === producto.id)?.stock ?? producto.stock,
+    })
+    setCantidadAjuste("")
+    setModalAjusteAbierto(true)
+  }
+
+  function cerrarAjuste() {
+    setModalAjusteAbierto(false)
+    setProductoAjuste(null)
+    setCantidadAjuste("")
+  }
+
+  async function aplicarDelta(producto, delta, { silencioso } = {}) {
+    if (!esTiendaPropia || !tiendaActual) return false
+
     try {
-      setReponiendo(true)
+      setAjustandoId(producto.id)
+      const { stockDespues, cambio } = await aplicarAjusteStock(
+        producto,
+        delta,
+        tiendaActual.id
+      )
 
-      await runTransaction(db, async (transaction) => {
-        const productoRef = doc(db, "productos", productoReponer.id)
-        const productoSnap = await transaction.get(productoRef)
+      setProductos((lista) =>
+        lista.map((p) =>
+          p.id === producto.id ? { ...p, stock: stockDespues } : p
+        )
+      )
 
-        if (!productoSnap.exists()) {
-          throw new Error("El producto ya no existe")
-        }
+      if (productoAjuste?.id === producto.id) {
+        setProductoAjuste((p) => (p ? { ...p, stock: stockDespues } : p))
+      }
 
-        const stockActual = Number(productoSnap.data().stock)
-
-        if (!Number.isFinite(stockActual) || stockActual < 0) {
-          throw new Error("Stock inválido en el producto")
-        }
-
-        transaction.update(productoRef, {
-          stock: stockActual + cantidad,
+      if (!silencioso) {
+        const signo = cambio > 0 ? "+" : ""
+        Swal.fire({
+          icon: "success",
+          title: `Stock ${signo}${cambio}`,
+          text: `Ahora: ${stockDespues} u.`,
+          timer: 1200,
+          showConfirmButton: false,
         })
-      })
+      }
 
-      await registrarMovimiento({
-        tipo: TIPOS_MOVIMIENTO.REPOSICION,
-        productoId: productoReponer.id,
-        productoNombre: `${productoReponer.marca} ${productoReponer.modelo}`.trim(),
-        cantidad,
-        stockAntes: Number(productoReponer.stock),
-        stockDespues: Number(productoReponer.stock) + cantidad,
-        detalle: `Reposición +${cantidad} unidades`,
-        tiendaId: tiendaActual.id,
-      })
-
-      Swal.fire({
-        icon: "success",
-        title: "Stock repuesto",
-        text: `+${cantidad} unidades. Nuevo stock: ${Number(productoReponer.stock) + cantidad}`,
-        timer: 2000,
-        showConfirmButton: false,
-      })
-
-      cerrarReponer()
-      obtenerProductos()
-
+      return true
     } catch (error) {
-      console.log(error)
-
       Swal.fire({
         icon: "error",
-        title: "Error al reponer",
+        title: "No se pudo ajustar",
         text: error.message,
       })
+      return false
     } finally {
-      setReponiendo(false)
+      setAjustandoId("")
     }
+  }
+
+  async function confirmarAjuste(e) {
+    e.preventDefault()
+    if (!productoAjuste) return
+
+    const ok = await aplicarDelta(productoAjuste, Number(cantidadAjuste))
+    if (ok) cerrarAjuste()
   }
 
   // GUARDAR / EDITAR
@@ -227,7 +301,13 @@ function Productos() {
     const precioNumero = Number(precio)
     const stockNumero = Number(stock)
 
-    if (!marcaLimpia || !categoriaLimpia || !modeloLimpio || precio === "" || stock === "") {
+    if (
+      !marcaLimpia ||
+      !categoriaLimpia ||
+      !modeloLimpio ||
+      precio === "" ||
+      (!editandoId && stock === "")
+    ) {
       Swal.fire({
         icon: "warning",
         title: "Campos incompletos",
@@ -244,7 +324,7 @@ function Productos() {
       return
     }
 
-    if (!Number.isInteger(stockNumero) || stockNumero < 0) {
+    if (!editandoId && (!Number.isInteger(stockNumero) || stockNumero < 0)) {
       Swal.fire({
         icon: "warning",
         title: "Stock inválido",
@@ -272,30 +352,15 @@ function Productos() {
     try {
 
       if (editandoId) {
-        const productoAnterior = productos.find((p) => p.id === editandoId)
-        const stockAnterior = Number(productoAnterior?.stock)
-
-        await updateDoc(doc(db, "productos", editandoId), {
+        const datos = {
           marca: marcaLimpia,
           categoria: categoriaLimpia,
           modelo: modeloLimpio,
           codigo: codigoLimpio,
           precio: precioNumero,
-          stock: stockNumero,
-        })
-
-        if (stockAnterior !== stockNumero) {
-          await registrarMovimiento({
-            tipo: TIPOS_MOVIMIENTO.EDICION_STOCK,
-            productoId: editandoId,
-            productoNombre: `${marcaLimpia} ${modeloLimpio}`.trim(),
-            cantidad: stockNumero - stockAnterior,
-            stockAntes: stockAnterior,
-            stockDespues: stockNumero,
-            detalle: "Edición manual de stock",
-            tiendaId: tiendaActual.id,
-          })
         }
+
+        await updateDoc(doc(db, "productos", editandoId), datos)
 
         Swal.fire({
           icon: "success",
@@ -606,7 +671,12 @@ function Productos() {
               <th className="p-4 text-left dark:text-white">Categoría</th>
               <th className="p-4 text-left dark:text-white">Modelo</th>
               <th className="p-4 text-left dark:text-white">Precio</th>
-              <th className="p-4 text-left dark:text-white">Stock</th>
+              <th className="p-4 text-left dark:text-white">
+                Stock
+                <span className="block text-xs font-normal text-slate-400">
+                  −1/+1 se guardan juntos (~1 s)
+                </span>
+              </th>
               <th className="p-4 text-left dark:text-white">Acciones</th>
             </tr>
           </thead>
@@ -678,40 +748,70 @@ function Productos() {
                 <td className="p-4 font-bold dark:text-white">S/ {p.precio}</td>
 
                 <td className="p-4 dark:text-white">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={poco ? "font-bold text-red-600" : ""}>
-                      {p.stock}
-                    </span>
-                    {poco && (
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                          agotado
-                            ? "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100"
-                            : "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
-                        }`}
-                      >
-                        {etiquetaEstadoStock(p.stock)}
+                  <div className="flex flex-col gap-2 min-w-[168px]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={poco ? "font-bold text-red-600" : "font-bold"}>
+                        {p.stock}
                       </span>
+                      {poco && (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                            agotado
+                              ? "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100"
+                              : "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
+                          }`}
+                        >
+                          {etiquetaEstadoStock(p.stock)}
+                        </span>
+                      )}
+                    </div>
+                    {idsPendientes.has(p.id) && (
+                      <span className="text-xs text-slate-400">guardando…</span>
+                    )}
+                    {puedeEditar && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={ajustandoId === p.id || Number(p.stock) <= 0}
+                          onClick={() => ajusteRapido(p, -1)}
+                          className="px-2 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold hover:bg-red-200 disabled:opacity-40"
+                          title="Restar 1"
+                        >
+                          −1
+                        </button>
+                        <button
+                          type="button"
+                          disabled={ajustandoId === p.id}
+                          onClick={() => ajusteRapido(p, 1)}
+                          className="px-2 py-1 rounded-lg bg-green-100 text-green-800 text-xs font-bold hover:bg-green-200 disabled:opacity-40"
+                          title="Sumar 1"
+                        >
+                          +1
+                        </button>
+                      </div>
                     )}
                   </div>
                 </td>
 
                 <td className="p-4 flex gap-2">
 
-                  {puedeEditar && <button
-                    onClick={() => abrirReponer(p)}
-                    className="bg-green-600 text-white p-2 rounded-xl hover:bg-green-700"
-                    title="Reponer stock"
-                    aria-label="Reponer stock"
-                  >
-                    <PackagePlus size={18} />
-                  </button>}
+                  {puedeEditar && (
+                    <button
+                      type="button"
+                      onClick={() => abrirAjuste(p)}
+                      className="bg-slate-700 text-white p-2 rounded-xl hover:bg-slate-800"
+                      title="Ajustar otra cantidad"
+                      aria-label="Ajustar stock"
+                    >
+                      <SlidersHorizontal size={18} />
+                    </button>
+                  )}
 
                   {puedeEditar && (
                     <button
                       onClick={() => editarProducto(p)}
                       className="bg-yellow-500 text-white p-2 rounded-xl"
-                      title="Editar"
+                      title="Editar datos"
                       aria-label="Editar producto"
                     >
                       <Pencil size={18} />
@@ -901,14 +1001,20 @@ function Productos() {
             type="text"
             className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
-          <input
-            value={stock}
-            onChange={(e) => cambiarStock(e.target.value)}
-            placeholder="Stock"
-            inputMode="numeric"
-            type="text"
-            className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-          />
+          {editandoId ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              El stock se cambia con −1 / +1 o Ajustar. No se edita aquí.
+            </p>
+          ) : (
+            <input
+              value={stock}
+              onChange={(e) => cambiarStock(e.target.value)}
+              placeholder="Stock inicial"
+              inputMode="numeric"
+              type="text"
+              className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+          )}
 
           {puedeEditar && (
             <button className="bg-blue-600 text-white py-3 rounded-xl">
@@ -920,38 +1026,71 @@ function Productos() {
 
       </Modal>
 
-      <Modal isOpen={modalReponerAbierto} onClose={cerrarReponer}>
+      <Modal isOpen={modalAjusteAbierto} onClose={cerrarAjuste}>
 
         <h2 className="text-2xl font-bold mb-2 dark:text-white">
-          Reponer stock
+          Ajustar stock
         </h2>
 
-        {productoReponer && (
+        {productoAjuste && (
           <p className="text-slate-500 dark:text-slate-400 mb-4">
-            {productoReponer.marca} — {productoReponer.modelo}
+            {productoAjuste.marca} — {productoAjuste.modelo}
             <br />
-            Stock actual: <strong>{productoReponer.stock}</strong>
+            Stock actual: <strong>{productoAjuste.stock}</strong>
+            {Number.isInteger(Number(cantidadAjuste)) && Number(cantidadAjuste) !== 0 && (
+              <>
+                {" "}→{" "}
+                {Number(productoAjuste.stock) + Number(cantidadAjuste) < 0 ? (
+                  <strong className="text-red-600">no alcanza</strong>
+                ) : (
+                  <strong>{Number(productoAjuste.stock) + Number(cantidadAjuste)}</strong>
+                )}
+              </>
+            )}
           </p>
         )}
 
-        <form onSubmit={confirmarReponer} className="flex flex-col gap-3">
+        <div className="flex flex-wrap gap-2 mb-4">
+          {[-4, -2, -1, 1, 2, 5, 10].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setCantidadAjuste(String(n))}
+              className={`px-3 py-2 rounded-xl text-sm font-bold ${
+                n < 0
+                  ? "bg-red-100 text-red-700 hover:bg-red-200"
+                  : "bg-green-100 text-green-800 hover:bg-green-200"
+              }`}
+            >
+              {n > 0 ? `+${n}` : n}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={confirmarAjuste} className="flex flex-col gap-3">
 
           <input
-            value={cantidadReponer}
-            onChange={(e) => cambiarCantidadReponer(e.target.value)}
-            placeholder="Cantidad a sumar"
-            inputMode="numeric"
+            value={cantidadAjuste}
+            onChange={(e) => cambiarCantidadAjuste(e.target.value)}
+            placeholder="Otra cantidad, ej. -4 o +12"
+            inputMode="text"
             type="text"
             className="p-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
 
           <button
-            disabled={reponiendo}
+            disabled={ajustandoId === productoAjuste?.id}
             className={`py-3 rounded-xl text-white font-bold ${
-              reponiendo ? "bg-slate-400" : "bg-green-600 hover:bg-green-700"
+              ajustandoId === productoAjuste?.id
+                ? "bg-slate-400"
+                : Number(cantidadAjuste) < 0
+                ? "bg-red-600 hover:bg-red-700"
+                : "bg-green-600 hover:bg-green-700"
             }`}
           >
-            {reponiendo ? "Guardando..." : "Confirmar reposición"}
+            {ajustandoId === productoAjuste?.id
+              ? "Guardando..."
+              : "Confirmar ajuste"}
           </button>
 
         </form>
