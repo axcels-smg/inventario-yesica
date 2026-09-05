@@ -1088,6 +1088,7 @@ function Productos() {
           />
 
           <button
+            type="submit"
             disabled={ajustandoId === productoAjuste?.id}
             className={`py-3 rounded-xl text-white font-bold ${
               ajustandoId === productoAjuste?.id
