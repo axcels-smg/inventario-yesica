@@ -596,9 +596,9 @@ function Productos() {
           <h2 className="text-3xl font-black dark:text-white">{productos.length}</h2>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-emerald-200 dark:border-emerald-900">
           <p className="text-slate-500 dark:text-slate-400">Stock total</p>
-          <h2 className="text-3xl font-black dark:text-white">
+          <h2 className="text-3xl font-black text-emerald-700 dark:text-emerald-300 tabular-nums">
             {productos.reduce((a, b) => a + Number(b.stock || 0), 0)}
           </h2>
         </div>
@@ -680,10 +680,10 @@ function Productos() {
               <th className="p-4 text-left dark:text-white">Categoría</th>
               <th className="p-4 text-left dark:text-white">Modelo</th>
               <th className="p-4 text-left dark:text-white">Precio</th>
-              <th className="p-4 text-left dark:text-white">
+              <th className="p-4 text-left dark:text-white min-w-[160px]">
                 Stock
                 <span className="block text-xs font-normal text-slate-400">
-                  −1/+1 se guardan juntos (~1 s)
+                  −1 / +1
                 </span>
               </th>
               <th className="p-4 text-left dark:text-white">Acciones</th>
@@ -756,18 +756,34 @@ function Productos() {
 
                 <td className="p-4 font-bold dark:text-white">S/ {p.precio}</td>
 
-                <td className="p-4 dark:text-white">
-                  <div className="flex flex-col gap-2 min-w-[168px]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={poco ? "font-bold text-red-600" : "font-bold"}>
+                <td className="p-3 dark:text-white">
+                  <div
+                    className={`rounded-xl px-2.5 py-2 border min-w-[140px] ${
+                      agotado
+                        ? "bg-red-100 border-red-300 dark:bg-red-950/50 dark:border-red-700"
+                        : poco
+                        ? "bg-amber-50 border-amber-300 dark:bg-amber-950/40 dark:border-amber-600"
+                        : "bg-emerald-50/80 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={`text-2xl font-black leading-none tabular-nums ${
+                          agotado
+                            ? "text-red-700 dark:text-red-200"
+                            : poco
+                            ? "text-amber-800 dark:text-amber-200"
+                            : "text-emerald-700 dark:text-emerald-200"
+                        }`}
+                      >
                         {p.stock}
                       </span>
                       {poco && (
                         <span
-                          className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                          className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                             agotado
-                              ? "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100"
-                              : "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
+                              ? "bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-100"
+                              : "bg-amber-200 text-amber-900 dark:bg-amber-800 dark:text-amber-100"
                           }`}
                         >
                           {etiquetaEstadoStock(p.stock)}
@@ -775,15 +791,17 @@ function Productos() {
                       )}
                     </div>
                     {idsPendientes.has(p.id) && (
-                      <span className="text-xs text-slate-400">guardando…</span>
+                      <span className="text-xs text-slate-400 mt-1 block">
+                        guardando…
+                      </span>
                     )}
                     {puedeEditar && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5 mt-2">
                         <button
                           type="button"
                           disabled={ajustandoId === p.id || Number(p.stock) <= 0}
                           onClick={() => ajusteRapido(p, -1)}
-                          className="px-2 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold hover:bg-red-200 disabled:opacity-40"
+                          className="flex-1 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold hover:bg-red-200 disabled:opacity-40 dark:bg-red-950 dark:text-red-200"
                           title="Restar 1"
                         >
                           −1
@@ -792,7 +810,7 @@ function Productos() {
                           type="button"
                           disabled={ajustandoId === p.id}
                           onClick={() => ajusteRapido(p, 1)}
-                          className="px-2 py-1 rounded-lg bg-green-100 text-green-800 text-xs font-bold hover:bg-green-200 disabled:opacity-40"
+                          className="flex-1 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-40"
                           title="Sumar 1"
                         >
                           +1
@@ -1045,7 +1063,10 @@ function Productos() {
           <p className="text-slate-500 dark:text-slate-400 mb-4">
             {productoAjuste.marca} — {productoAjuste.modelo}
             <br />
-            Stock actual: <strong>{productoAjuste.stock}</strong>
+            Stock actual:{" "}
+            <strong className="text-xl font-black tabular-nums">
+              {productoAjuste.stock}
+            </strong>
             {Number.isInteger(Number(cantidadAjuste)) && Number(cantidadAjuste) !== 0 && (
               <>
                 {" "}→{" "}
