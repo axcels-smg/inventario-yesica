@@ -16,7 +16,8 @@ import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
-import { listarPorTienda } from "../utils/consultasTienda"
+import { listarPorTienda, invalidarCacheTienda } from "../utils/consultasTienda"
+import { errorOperacion } from "../utils/erroresUi"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 import {
@@ -28,7 +29,7 @@ import {
 
 function Ventas() {
   const { tiendaActual, esTiendaPropia } = useTienda()
-  const { productos, cargando: cargandoProductos } = useProductosLive()
+  const { productos, setProductos, cargando: cargandoProductos } = useProductosLive()
   const [clientes, setClientes] = useState([])
 
   const [clienteSeleccionado, setClienteSeleccionado] = useState("")
@@ -57,11 +58,7 @@ function Ventas() {
       setClientes(lista)
 
     } catch (error) {
-      console.log(error)
-      Swal.fire({
-        icon: "error",
-        title: "Error cargando clientes",
-      })
+      errorOperacion(error, "Error cargando clientes")
     }
   }
 
@@ -315,6 +312,15 @@ function Ventas() {
 
       setCarrito([])
       setClienteSeleccionado("")
+      setProductos((lista) =>
+        lista.map((p) => {
+          const item = productosVenta.find((i) => i.id === p.id)
+          if (!item) return p
+          return { ...p, stock: Number(p.stock) - item.cantidad }
+        })
+      )
+      invalidarCacheTienda("ventas", tiendaActual.id)
+      invalidarCacheTienda("productos", tiendaActual.id)
 
       const envio = await Swal.fire({
         icon: "success",
@@ -334,13 +340,7 @@ function Ventas() {
       }
 
     } catch (error) {
-      console.log(error)
-
-      Swal.fire({
-        icon: "error",
-        title: "Error al vender",
-        text: error.message,
-      })
+      errorOperacion(error, "Error al vender")
     } finally {
       setVendiendo(false)
     }

@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import Swal from "sweetalert2"
+import { errorOperacion } from "../utils/erroresUi"
 import { Store, Lock, Mail, ArrowRight } from "lucide-react"
 
 function Login() {
@@ -47,19 +48,10 @@ function Login() {
           })
         }
       } else {
-        Swal.fire({
-          icon: "error",
-          title: "Error de autenticación",
-          text: resultado.error,
-        })
+        errorOperacion({ message: resultado.error }, "Error de autenticación")
       }
     } catch (error) {
-      console.error("Error en login:", error)
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Ocurrió un error al iniciar sesión",
-      })
+      errorOperacion(error, "Error")
     } finally {
       setCargando(false)
     }
@@ -93,11 +85,7 @@ function Login() {
           text: "Revisa tu bandeja de entrada para restablecer tu contraseña",
         })
       } else {
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: resultado.error,
-        })
+        errorOperacion({ message: resultado.error }, "Error")
       }
     }
   }

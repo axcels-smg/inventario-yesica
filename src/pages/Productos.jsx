@@ -32,25 +32,25 @@ import {
 } from "../utils/productos"
 import { aplicarAjusteStock } from "../utils/ajusteStock"
 import { esErrorCuota } from "../utils/cuotaFirebase"
+import { errorOperacion } from "../utils/erroresUi"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { esStockBajo, esStockAgotado, etiquetaEstadoStock, resumenStockBajo } from "../utils/stock"
 import { useTienda } from "../context/TiendaContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
-const ESPERA_GUARDADO_MS = 1200
+const ESPERA_GUARDADO_MS = 80
 
 function Productos() {
-  const { tiendaActual, esTiendaPropia } = useTienda()
+  const { tiendaActual, tiendaPropia, esTiendaPropia } = useTienda()
   const {
     productos: productosLive,
     setProductos: setProductosLive,
     cargando: cargandoLive,
   } = useProductosLive()
   const puedeEditar = esTiendaPropia
-
-  // PRODUCTOS
-  const [productos, setProductos] = useState([])
+  const [parpadeoIds, setParpadeoIds] = useState(() => new Set())
+  const stockAnteriorRef = useRef({})
 
   // FORMULARIO
   const [marca, setMarca] = useState("")
@@ -80,14 +80,33 @@ function Productos() {
   const pendientesRef = useRef(new Map())
   const timersRef = useRef(new Map())
 
-  useEffect(() => {
-    setProductos((prev) => {
-      if (pendientesRef.current.size === 0) return productosLive
-      return productosLive.map((p) => {
+  const productos = useMemo(
+    () =>
+      productosLive.map((p) => {
         const pend = pendientesRef.current.get(p.id)
         return pend ? { ...p, stock: pend.stockBase + pend.delta } : p
-      })
+      }),
+    [productosLive, idsPendientes]
+  )
+
+  useEffect(() => {
+    const cambiaron = []
+    productosLive.forEach((p) => {
+      const actual = Number(p.stock)
+      const antes = stockAnteriorRef.current[p.id]
+      if (
+        antes !== undefined &&
+        antes !== actual &&
+        !pendientesRef.current.has(p.id)
+      ) {
+        cambiaron.push(p.id)
+      }
+      stockAnteriorRef.current[p.id] = actual
     })
+    if (cambiaron.length === 0) return undefined
+    setParpadeoIds(new Set(cambiaron))
+    const t = setTimeout(() => setParpadeoIds(new Set()), 2500)
+    return () => clearTimeout(t)
   }, [productosLive])
 
   useEffect(() => {
@@ -155,11 +174,11 @@ function Productos() {
     pendientesRef.current.delete(id)
     marcarPendiente(id, false)
 
-    if (!pend || pend.delta === 0 || !tiendaActual) return true
+    if (!pend || pend.delta === 0 || !tiendaPropia) return true
 
     const ok = await aplicarDelta(pend.producto, pend.delta, { silencioso: true })
     if (!ok) {
-      setProductos((lista) =>
+      setProductosLive((lista) =>
         lista.map((p) =>
           p.id === id ? { ...p, stock: pend.stockBase } : p
         )
@@ -169,7 +188,8 @@ function Productos() {
   }
 
   function ajusteRapido(producto, delta) {
-    if (!esTiendaPropia || !tiendaActual) return
+    if (!esTiendaPropia || !tiendaPropia) return
+    if (producto.tiendaId && producto.tiendaId !== tiendaPropia.id) return
 
     const id = producto.id
     const prev = pendientesRef.current.get(id)
@@ -192,11 +212,6 @@ function Productos() {
     })
     marcarPendiente(id, true)
 
-    setProductos((lista) =>
-      lista.map((p) =>
-        p.id === id ? { ...p, stock: stockBase + deltaAcum } : p
-      )
-    )
     setProductosLive((lista) =>
       lista.map((p) =>
         p.id === id ? { ...p, stock: stockBase + deltaAcum } : p
@@ -231,7 +246,8 @@ function Productos() {
   }
 
   async function aplicarDelta(producto, delta, { silencioso } = {}) {
-    if (!esTiendaPropia || !tiendaActual) return false
+    if (!esTiendaPropia || !tiendaPropia) return false
+    if (producto.tiendaId && producto.tiendaId !== tiendaPropia.id) return false
 
     try {
       setAjustandoId(producto.id)
@@ -240,12 +256,11 @@ function Productos() {
         delta
       )
 
-      const aplicarLocal = (lista) =>
+      setProductosLive((lista) =>
         lista.map((p) =>
           p.id === producto.id ? { ...p, stock: stockDespues } : p
         )
-      setProductos(aplicarLocal)
-      setProductosLive(aplicarLocal)
+      )
 
       if (productoAjuste?.id === producto.id) {
         setProductoAjuste((p) => (p ? { ...p, stock: stockDespues } : p))
@@ -265,11 +280,7 @@ function Productos() {
       return true
     } catch (error) {
       if (esErrorCuota(error)) return true
-      Swal.fire({
-        icon: "error",
-        title: "No se pudo ajustar",
-        text: error.message,
-      })
+      errorOperacion(error, "No se pudo ajustar")
       return false
     } finally {
       setAjustandoId("")
@@ -407,10 +418,7 @@ function Productos() {
     } catch (error) {
       console.log(error)
 
-      Swal.fire({
-        icon: "error",
-        title: "Error guardando producto",
-      })
+      errorOperacion(error, "Error guardando producto")
     }
   }
 
@@ -428,15 +436,19 @@ function Productos() {
 
       if (result.isConfirmed) {
 
-        await deleteDoc(doc(db, "productos", id))
-        setProductosLive((lista) => lista.filter((p) => p.id !== id))
+        try {
+          await deleteDoc(doc(db, "productos", id))
+          setProductosLive((lista) => lista.filter((p) => p.id !== id))
 
-        Swal.fire({
-          icon: "success",
-          title: "Eliminado",
-          timer: 1200,
-          showConfirmButton: false,
-        })
+          Swal.fire({
+            icon: "success",
+            title: "Eliminado",
+            timer: 1200,
+            showConfirmButton: false,
+          })
+        } catch (error) {
+          errorOperacion(error, "No se pudo eliminar")
+        }
       }
     })
   }
@@ -545,7 +557,8 @@ function Productos() {
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2">
             {tiendaActual?.nombre ? `${tiendaActual.nombre} · ` : ""}
-            {productosFiltrados.length} de {productos.length} productos — {PRODUCTOS_POR_PAGINA} por página
+            {productosFiltrados.length} de {productos.length} productos
+            {!puedeEditar ? " · solo lectura" : ""}
           </p>
         </div>
 
@@ -682,9 +695,11 @@ function Productos() {
               <th className="p-4 text-left dark:text-white">Precio</th>
               <th className="p-4 text-left dark:text-white min-w-[160px]">
                 Stock
-                <span className="block text-xs font-normal text-slate-400">
-                  −1 / +1
-                </span>
+                {puedeEditar && (
+                  <span className="block text-xs font-normal text-slate-400">
+                    −1 / +1
+                  </span>
+                )}
               </th>
               <th className="p-4 text-left dark:text-white">Acciones</th>
             </tr>
@@ -713,6 +728,7 @@ function Productos() {
               const esDuplicado = veces > 1
               const poco = esStockBajo(p.stock)
               const agotado = esStockAgotado(p.stock)
+              const cambioEnVivo = parpadeoIds.has(p.id)
 
               return (
               <tr
@@ -759,6 +775,8 @@ function Productos() {
                 <td className="p-3 dark:text-white">
                   <div
                     className={`rounded-xl px-2.5 py-2 border min-w-[140px] ${
+                      cambioEnVivo ? "ring-2 ring-emerald-400 animate-pulse" : ""
+                    } ${
                       agotado
                         ? "bg-red-100 border-red-300 dark:bg-red-950/50 dark:border-red-700"
                         : poco
@@ -820,42 +838,40 @@ function Productos() {
                   </div>
                 </td>
 
-                <td className="p-4 flex gap-2">
-
-                  {puedeEditar && (
-                    <button
-                      type="button"
-                      onClick={() => abrirAjuste(p)}
-                      className="bg-slate-700 text-white p-2 rounded-xl hover:bg-slate-800"
-                      title="Ajustar otra cantidad"
-                      aria-label="Ajustar stock"
-                    >
-                      <SlidersHorizontal size={18} />
-                    </button>
+                <td className="p-4">
+                  {puedeEditar ? (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => abrirAjuste(p)}
+                        className="bg-slate-700 text-white p-2 rounded-xl hover:bg-slate-800"
+                        title="Ajustar otra cantidad"
+                        aria-label="Ajustar stock"
+                      >
+                        <SlidersHorizontal size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => editarProducto(p)}
+                        className="bg-yellow-500 text-white p-2 rounded-xl"
+                        title="Editar datos"
+                        aria-label="Editar producto"
+                      >
+                        <Pencil size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => eliminarProducto(p.id)}
+                        className="bg-red-500 text-white p-2 rounded-xl"
+                        title="Eliminar"
+                        aria-label="Eliminar producto"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-400">Solo ver</span>
                   )}
-
-                  {puedeEditar && (
-                    <button
-                      onClick={() => editarProducto(p)}
-                      className="bg-yellow-500 text-white p-2 rounded-xl"
-                      title="Editar datos"
-                      aria-label="Editar producto"
-                    >
-                      <Pencil size={18} />
-                    </button>
-                  )}
-
-                  {puedeEditar && (
-                    <button
-                      onClick={() => eliminarProducto(p.id)}
-                      className="bg-red-500 text-white p-2 rounded-xl"
-                      title="Eliminar"
-                      aria-label="Eliminar producto"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  )}
-
                 </td>
 
               </tr>

@@ -1,6 +1,7 @@
 import { collection, doc, setDoc, getDocs, query, where, Timestamp } from "firebase/firestore"
 import { db } from "../firebase"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
+import { esErrorCuota } from "./cuotaFirebase"
 
 /**
  * Registra los productos con stock bajo (0-3) para un día y tienda específicos
@@ -21,23 +22,28 @@ export async function registrarAlertaDiaria(productos, tiendaId) {
 
   const alertaRef = doc(db, "alertas_stock", docId)
 
-  await setDoc(alertaRef, {
-    fecha: Timestamp.fromDate(hoy),
-    fechaKey,
-    tiendaId: tiendaId || null,
-    productos: productosBajoStock.map((p) => ({
-      id: p.id,
-      nombre: `${p.marca || ""} ${p.modelo || ""}`.trim(),
-      marca: p.marca || "",
-      modelo: p.modelo || "",
-      codigo: p.codigo || "",
-      categoria: p.categoria || "",
-      stock: p.stock,
-      precio: p.precio,
-    })),
-    cantidad: productosBajoStock.length,
-    createdAt: Timestamp.now(),
-  })
+  try {
+    await setDoc(alertaRef, {
+      fecha: Timestamp.fromDate(hoy),
+      fechaKey,
+      tiendaId: tiendaId || null,
+      productos: productosBajoStock.map((p) => ({
+        id: p.id,
+        nombre: `${p.marca || ""} ${p.modelo || ""}`.trim(),
+        marca: p.marca || "",
+        modelo: p.modelo || "",
+        codigo: p.codigo || "",
+        categoria: p.categoria || "",
+        stock: p.stock,
+        precio: p.precio,
+      })),
+      cantidad: productosBajoStock.length,
+      createdAt: Timestamp.now(),
+    })
+  } catch (error) {
+    if (esErrorCuota(error)) return null
+    throw error
+  }
 
   return docId
 }
@@ -56,20 +62,25 @@ export async function obtenerHistorialAlertas(tiendaId) {
     q = collection(db, "alertas_stock")
   }
 
-  const snapshot = await getDocs(q)
+  try {
+    const snapshot = await getDocs(q)
 
-  const alertas = []
-  snapshot.forEach((doc) => {
-    alertas.push({ id: doc.id, ...doc.data() })
-  })
+    const alertas = []
+    snapshot.forEach((docu) => {
+      alertas.push({ id: docu.id, ...docu.data() })
+    })
 
-  alertas.sort((a, b) => {
-    const fechaA = a.fecha?.toDate?.() || new Date(a.fechaKey)
-    const fechaB = b.fecha?.toDate?.() || new Date(b.fechaKey)
-    return fechaB - fechaA
-  })
+    alertas.sort((a, b) => {
+      const fechaA = a.fecha?.toDate?.() || new Date(a.fechaKey)
+      const fechaB = b.fecha?.toDate?.() || new Date(b.fechaKey)
+      return fechaB - fechaA
+    })
 
-  return alertas
+    return alertas
+  } catch (error) {
+    if (esErrorCuota(error)) return []
+    throw error
+  }
 }
 
 /**
@@ -118,6 +129,11 @@ export async function existeAlertaHoy(tiendaId) {
     where("tiendaId", "==", tiendaId || null)
   )
 
-  const snapshot = await getDocs(q)
-  return !snapshot.empty
+  try {
+    const snapshot = await getDocs(q)
+    return !snapshot.empty
+  } catch (error) {
+    if (esErrorCuota(error)) return true
+    throw error
+  }
 }

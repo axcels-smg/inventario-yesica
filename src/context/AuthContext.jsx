@@ -3,6 +3,7 @@ import { auth } from "../firebase"
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
+import { esErrorCuota } from "../utils/cuotaFirebase"
 
 const AuthContext = createContext()
 
@@ -33,8 +34,9 @@ export function AuthProvider({ children }) {
       setTienda(null)
       return null
     } catch (error) {
-      console.error("Error cargando tienda:", error)
-      setTienda(null)
+      if (!esErrorCuota(error)) {
+        setTienda(null)
+      }
       return null
     }
   }

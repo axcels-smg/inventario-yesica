@@ -23,6 +23,7 @@ import { imprimirBoleta } from "../utils/impresion"
 import { enlaceWhatsAppTexto, textoReciboVenta } from "../utils/reciboCliente"
 import { useTienda } from "../context/TiendaContext"
 import { listarPorTienda } from "../utils/consultasTienda"
+import { errorOperacion } from "../utils/erroresUi"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 function HistorialVentas() {
@@ -62,11 +63,7 @@ function HistorialVentas() {
       setPaginaActual(1) // Resetear a la primera página al cargar
 
     } catch (error) {
-      console.log(error)
-      Swal.fire({
-        icon: "error",
-        title: "Error cargando ventas",
-      })
+      errorOperacion(error, "Error cargando ventas")
     }
   }
 
@@ -194,13 +191,7 @@ function HistorialVentas() {
       })
 
     } catch (error) {
-      console.log(error)
-
-      Swal.fire({
-        icon: "error",
-        title: "Error al anular",
-        text: error.message,
-      })
+      errorOperacion(error, "Error al anular")
     } finally {
       setProcesandoId(null)
     }
@@ -238,13 +229,7 @@ function HistorialVentas() {
       })
 
     } catch (error) {
-      console.log(error)
-
-      Swal.fire({
-        icon: "error",
-        title: "Error al eliminar",
-        text: error.message,
-      })
+      errorOperacion(error, "Error al eliminar")
     } finally {
       setProcesandoId(null)
     }

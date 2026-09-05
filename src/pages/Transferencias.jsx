@@ -22,6 +22,7 @@ import {
 } from "firebase/firestore"
 import { db } from "../firebase"
 import { useTienda } from "../context/TiendaContext"
+import { useProductosLive } from "../context/ProductosLiveContext"
 import { registrarMovimiento } from "../utils/movimientos"
 import {
   ESTADOS_TRANSFERENCIA,
@@ -29,6 +30,7 @@ import {
   TIPOS_MOVIMIENTO,
 } from "../constants/inventario"
 import { claveModeloProducto } from "../utils/productos"
+import { errorOperacion } from "../utils/erroresUi"
 
 function nombreExactoProducto(item) {
   const partes = [item.marca, item.categoria, item.modelo].filter((p) => String(p || "").trim())
@@ -51,8 +53,8 @@ function resumenTransferencia(transferencia) {
 
 function Transferencias() {
   const { tiendaPropia: tiendaActual, tiendas } = useTienda()
+  const { productosPropios: productosOrigen } = useProductosLive()
   const [transferencias, setTransferencias] = useState([])
-  const [productosOrigen, setProductosOrigen] = useState([])
   const [modalAbierto, setModalAbierto] = useState(false)
   const [cargando, setCargando] = useState(true)
   const [pestana, setPestana] = useState("enviadas")
@@ -88,27 +90,11 @@ function Transferencias() {
     }
   }, [tiendaActual])
 
-  const cargarProductosOrigen = useCallback(async () => {
-    if (!tiendaActual) return
-    try {
-      const snap = await getDocs(query(
-        collection(db, "productos"),
-        where("tiendaId", "==", tiendaActual.id)
-      ))
-      const lista = []
-      snap.forEach((d) => lista.push({ id: d.id, ...d.data() }))
-      setProductosOrigen(lista)
-    } catch (error) {
-      console.error("Error cargando productos:", error)
-    }
-  }, [tiendaActual])
-
   useEffect(() => {
     if (tiendaActual) {
       cargarTransferencias()
-      cargarProductosOrigen()
     }
-  }, [tiendaActual, cargarTransferencias, cargarProductosOrigen])
+  }, [tiendaActual, cargarTransferencias])
 
   async function crearTransferencia(e) {
     e.preventDefault()
@@ -193,8 +179,7 @@ function Transferencias() {
       setBusquedaProducto("")
       cargarTransferencias()
     } catch (error) {
-      console.error("Error creando transferencia:", error)
-      Swal.fire({ icon: "error", title: "Error al crear transferencia" })
+      errorOperacion(error, "Error al crear transferencia")
     }
   }
 
@@ -289,10 +274,8 @@ function Transferencias() {
         showConfirmButton: false,
       })
       cargarTransferencias()
-      cargarProductosOrigen()
     } catch (error) {
-      console.error("Error enviando transferencia:", error)
-      Swal.fire({ icon: "error", title: "No se pudo enviar", text: error.message })
+      errorOperacion(error, "No se pudo enviar")
     }
   }
 
@@ -397,8 +380,7 @@ function Transferencias() {
       })
       cargarTransferencias()
     } catch (error) {
-      console.error("Error completando transferencia:", error)
-      Swal.fire({ icon: "error", title: "No se pudo recibir", text: error.message })
+      errorOperacion(error, "No se pudo recibir")
     }
   }
 
@@ -473,10 +455,8 @@ function Transferencias() {
         showConfirmButton: false,
       })
       cargarTransferencias()
-      cargarProductosOrigen()
     } catch (error) {
-      console.error("Error cancelando transferencia:", error)
-      Swal.fire({ icon: "error", title: "Error al cancelar", text: error.message })
+      errorOperacion(error, "Error al cancelar")
     }
   }
 

@@ -15,6 +15,7 @@ import {
 import { useTienda } from "../context/TiendaContext"
 import { listarPorTienda } from "../utils/consultasTienda"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
+import { errorOperacion } from "../utils/erroresUi"
 
 function Clientes() {
   const { tiendaActual, esTiendaPropia } = useTienda()
@@ -113,12 +114,7 @@ function Clientes() {
       cargarClientes()
 
     } catch (error) {
-      console.log(error)
-
-      Swal.fire({
-        icon: "error",
-        title: "Error al guardar",
-      })
+      errorOperacion(error, "Error al guardar")
     }
   }
 
@@ -149,7 +145,7 @@ function Clientes() {
       cargarClientes()
 
     } catch (error) {
-      console.log(error)
+      errorOperacion(error, "Error al eliminar")
     }
   }
 

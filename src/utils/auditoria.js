@@ -1,5 +1,6 @@
 import { collection, addDoc, serverTimestamp, getDocs, query, where } from "firebase/firestore"
 import { db } from "../firebase"
+import { esErrorCuota } from "./cuotaFirebase"
 
 export async function registrarAuditoria({
   accion,
@@ -23,6 +24,7 @@ export async function registrarAuditoria({
       fechaTexto: new Date().toLocaleString("es-PE"),
     })
   } catch (error) {
+    if (esErrorCuota(error)) return
     console.error("Error registrando auditoría:", error)
   }
 }
@@ -51,6 +53,7 @@ export async function obtenerHistorialAuditoria({
 
     return lista.slice(0, limite)
   } catch (error) {
+    if (esErrorCuota(error)) return []
     console.error("Error obteniendo historial de auditoría:", error)
     return []
   }

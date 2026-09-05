@@ -22,6 +22,7 @@ import { NavLink, useNavigate } from "react-router-dom"
 import { useState } from "react"
 import ThemeButton from "./ThemeButton"
 import Swal from "sweetalert2"
+import { errorOperacion } from "../utils/erroresUi"
 
 function Sidebar({ onNavigate }) {
   const { tiendaActual, tiendaPropia, esTiendaPropia, tiendas, seleccionarTienda, cargando } = useTienda()
@@ -94,7 +95,7 @@ function Sidebar({ onNavigate }) {
         text: "La próxima vez entra con la nueva. Nada de tu inventario se perdió.",
       })
     } else {
-      Swal.fire({ icon: "error", title: "No se pudo cambiar", text: resultado.error })
+      errorOperacion({ message: resultado.error }, "No se pudo cambiar")
     }
   }
 

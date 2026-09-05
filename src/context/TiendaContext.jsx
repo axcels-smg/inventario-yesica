@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from "react"
 import { collection, getDocs, doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { useAuth } from "./AuthContext"
+import { esErrorCuota } from "../utils/cuotaFirebase"
 
 const TiendaContext = createContext()
 
@@ -48,7 +49,9 @@ export function TiendaProvider({ children }) {
       })
       setTiendas(lista)
     } catch (error) {
-      console.error("Error cargando tiendas:", error)
+      if (!esErrorCuota(error)) {
+        console.error("Error cargando tiendas:", error)
+      }
     } finally {
       setCargando(false)
     }

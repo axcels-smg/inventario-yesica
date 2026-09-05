@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
-import { collection, getDocs } from "firebase/firestore"
+import { useEffect, useState } from "react"
 import {
   Package,
   ShoppingCart,
@@ -19,87 +18,82 @@ import {
   Pie,
   Cell,
 } from "recharts"
-import { db } from "../firebase"
 import { useTienda } from "../context/TiendaContext"
+import { useProductosLive } from "../context/ProductosLiveContext"
 import { esStockBajo, esStockAgotado } from "../utils/stock"
+import { listarPorTienda } from "../utils/consultasTienda"
+import { esErrorCuota } from "../utils/cuotaFirebase"
 
 function DashboardGlobal() {
   const { tiendas } = useTienda()
-  const [datosConsolidados, setDatosConsolidados] = useState({
-    totalProductos: 0,
-    totalVentas: 0,
-    totalIngresos: 0,
-    ventasPorTienda: [],
-    productosPorTienda: [],
-    ingresosPorTienda: [],
-  })
+  const { todosLosProductos } = useProductosLive()
+  const [ventas, setVentas] = useState([])
   const [cargando, setCargando] = useState(true)
 
-  const cargarDatosConsolidados = useCallback(async () => {
-    try {
-      setCargando(true)
+  useEffect(() => {
+    let cancelado = false
 
-      const [snapVentas, snapProductos] = await Promise.all([
-        getDocs(collection(db, "ventas")),
-        getDocs(collection(db, "productos")),
-      ])
-
-      const ventas = []
-      snapVentas.forEach((d) => ventas.push({ id: d.id, ...d.data() }))
-
-      const productos = []
-      snapProductos.forEach((d) => productos.push({ id: d.id, ...d.data() }))
-
-      const ventasPorTienda = tiendas.map((tienda) => {
-        const ventasTienda = ventas.filter((v) => v.tiendaId === tienda.id && !v.anulada)
-        return {
-          nombre: tienda.nombre,
-          ventas: ventasTienda.length,
-          ingresos: ventasTienda.reduce((sum, v) => sum + Number(v.total || 0), 0),
+    async function cargarVentas() {
+      try {
+        setCargando(true)
+        const listas = await Promise.all(
+          tiendas.map((tienda) => listarPorTienda("ventas", tienda.id))
+        )
+        if (!cancelado) setVentas(listas.flat())
+      } catch (error) {
+        if (!esErrorCuota(error)) {
+          console.error("Error cargando datos consolidados:", error)
         }
-      })
+      } finally {
+        if (!cancelado) setCargando(false)
+      }
+    }
 
-      const productosPorTienda = tiendas.map((tienda) => {
-        const productosTienda = productos.filter((p) => p.tiendaId === tienda.id)
-        return {
-          nombre: tienda.nombre,
-          productos: productosTienda.length,
-          stockTotal: productosTienda.reduce((sum, p) => sum + Number(p.stock || 0), 0),
-          pocoStock: productosTienda.filter(
-            (p) => esStockBajo(p.stock) && !esStockAgotado(p.stock)
-          ).length,
-          agotados: productosTienda.filter((p) => esStockAgotado(p.stock)).length,
-        }
-      })
+    if (tiendas.length) cargarVentas()
+    else setCargando(false)
 
-      const ingresosPorTienda = tiendas.map((tienda) => {
-        const ventasTienda = ventas.filter((v) => v.tiendaId === tienda.id && !v.anulada)
-        return {
-          nombre: tienda.nombre,
-          ingresos: ventasTienda.reduce((sum, v) => sum + Number(v.total || 0), 0),
-        }
-      })
-
-      setDatosConsolidados({
-        totalProductos: productos.length,
-        totalVentas: ventas.filter((v) => !v.anulada).length,
-        totalIngresos: ventas
-          .filter((v) => !v.anulada)
-          .reduce((sum, v) => sum + Number(v.total || 0), 0),
-        ventasPorTienda,
-        productosPorTienda,
-        ingresosPorTienda,
-      })
-    } catch (error) {
-      console.error("Error cargando datos consolidados:", error)
-    } finally {
-      setCargando(false)
+    return () => {
+      cancelado = true
     }
   }, [tiendas])
 
-  useEffect(() => {
-    cargarDatosConsolidados()
-  }, [cargarDatosConsolidados])
+  const ventasActivas = ventas.filter((v) => !v.anulada)
+
+  const ventasPorTienda = tiendas.map((tienda) => {
+    const ventasTienda = ventasActivas.filter((v) => v.tiendaId === tienda.id)
+    return {
+      nombre: tienda.nombre,
+      ventas: ventasTienda.length,
+      ingresos: ventasTienda.reduce((sum, v) => sum + Number(v.total || 0), 0),
+    }
+  })
+
+  const productosPorTienda = tiendas.map((tienda) => {
+    const productosTienda = todosLosProductos.filter((p) => p.tiendaId === tienda.id)
+    return {
+      nombre: tienda.nombre,
+      productos: productosTienda.length,
+      stockTotal: productosTienda.reduce((sum, p) => sum + Number(p.stock || 0), 0),
+      pocoStock: productosTienda.filter(
+        (p) => esStockBajo(p.stock) && !esStockAgotado(p.stock)
+      ).length,
+      agotados: productosTienda.filter((p) => esStockAgotado(p.stock)).length,
+    }
+  })
+
+  const ingresosPorTienda = ventasPorTienda.map((t) => ({
+    nombre: t.nombre,
+    ingresos: t.ingresos,
+  }))
+
+  const datosConsolidados = {
+    totalProductos: todosLosProductos.length,
+    totalVentas: ventasActivas.length,
+    totalIngresos: ventasActivas.reduce((sum, v) => sum + Number(v.total || 0), 0),
+    ventasPorTienda,
+    productosPorTienda,
+    ingresosPorTienda,
+  }
 
   const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"]
 

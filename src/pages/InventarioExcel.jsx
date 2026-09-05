@@ -14,6 +14,7 @@ import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
+import { errorOperacion } from "../utils/erroresUi"
 import {
   claveModeloProducto,
 } from "../utils/productos"
@@ -48,7 +49,7 @@ function InventarioExcel() {
         showConfirmButton: false,
       })
     } catch (error) {
-      Swal.fire({ icon: "error", title: "Error al exportar", text: error.message })
+      errorOperacion(error, "Error al exportar")
     }
   }
 
@@ -160,7 +161,7 @@ function InventarioExcel() {
       setVistaPrevia([])
       if (inputRef.current) inputRef.current.value = ""
     } catch (error) {
-      Swal.fire({ icon: "error", title: "Error al importar", text: error.message })
+      errorOperacion(error, "Error al importar")
     } finally {
       setImportando(false)
     }

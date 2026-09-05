@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app"
-import { getFirestore } from "firebase/firestore"
+import { getFirestore, initializeFirestore } from "firebase/firestore"
 import { getAuth } from "firebase/auth"
 
 const firebaseConfig = {
@@ -20,8 +20,15 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig)
 
-// Firestore DB
-export const db = getFirestore(app)
+let db
+try {
+  db = initializeFirestore(app, {
+    experimentalAutoDetectLongPolling: true,
+  })
+} catch {
+  db = getFirestore(app)
+}
+export { db }
 
 // Firebase Authentication
 export const auth = getAuth(app)

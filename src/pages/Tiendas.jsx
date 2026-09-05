@@ -18,6 +18,7 @@ const firebaseConfig = {
 const secondaryApp = getApps().find((a) => a.name === "secondary") || initializeApp(firebaseConfig, "secondary")
 const authSecundario = getAuth(secondaryApp)
 import { useTienda } from "../context/TiendaContext"
+import { errorOperacion } from "../utils/erroresUi"
 
 function Tiendas() {
   const [tiendas, setTiendas] = useState([])
@@ -50,12 +51,7 @@ function Tiendas() {
       })
       setTiendas(lista)
     } catch (error) {
-      console.error("Error cargando tiendas:", error)
-      Swal.fire({
-        icon: "error",
-        title: "Error al cargar tiendas",
-        text: error.message || "Error de conexión con Firebase",
-      })
+      errorOperacion(error, "Error al cargar tiendas")
     } finally {
       setCargando(false)
     }
@@ -149,8 +145,6 @@ function Tiendas() {
       cargarTiendasLista()
       cargarTiendas()
     } catch (error) {
-      console.error("Error guardando tienda:", error)
-
       if (error.code === "auth/email-already-in-use") {
         Swal.fire({
           icon: "error",
@@ -170,11 +164,7 @@ function Tiendas() {
           text: "Email inválido",
         })
       } else {
-        Swal.fire({
-          icon: "error",
-          title: "Error al guardar",
-          text: error.message,
-        })
+        errorOperacion(error, "Error al guardar")
       }
     }
   }
@@ -223,12 +213,7 @@ function Tiendas() {
         showConfirmButton: false,
       })
     } catch (error) {
-      console.error("Error eliminando tienda:", error)
-      Swal.fire({
-        icon: "error",
-        title: "Error al eliminar",
-        text: error.message,
-      })
+      errorOperacion(error, "Error al eliminar")
     }
   }
 

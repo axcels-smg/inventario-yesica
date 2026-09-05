@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { obtenerHistorialAlertas, generarListaAcumulativa } from "../utils/alertasStock"
+import { esErrorCuota } from "../utils/cuotaFirebase"
 
 export function useAlertasStockHistorial(tiendaId) {
   const [alertas, setAlertas] = useState([])
@@ -22,9 +23,11 @@ export function useAlertasStockHistorial(tiendaId) {
       setAlertas(historial)
       setListaAcumulativa(acumulativa)
     } catch (error) {
-      console.error("Error al cargar alertas:", error)
-      setAlertas([])
-      setListaAcumulativa([])
+      if (!esErrorCuota(error)) {
+        console.error("Error al cargar alertas:", error)
+        setAlertas([])
+        setListaAcumulativa([])
+      }
     } finally {
       setCargando(false)
     }

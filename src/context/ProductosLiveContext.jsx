@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react"
-import { collection, onSnapshot, query, where } from "firebase/firestore"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { collection, onSnapshot } from "firebase/firestore"
 import { db } from "../firebase"
 import { useTienda } from "./TiendaContext"
 import { filtrarProductosStockBajo } from "../utils/stock"
@@ -7,6 +7,7 @@ import { iniciarReintentoAjustes } from "../utils/ajusteStock"
 import { esErrorCuota } from "../utils/cuotaFirebase"
 
 const ProductosLiveContext = createContext(null)
+const STORAGE_TODOS = "inventario_productos_todas"
 
 export function useProductosLive() {
   const ctx = useContext(ProductosLiveContext)
@@ -16,62 +17,52 @@ export function useProductosLive() {
   return ctx
 }
 
-function claveStorage(tiendaId) {
-  return `inventario_productos_${tiendaId}`
-}
-
-function leerLocal(tiendaId) {
+function leerTodosLocal() {
   try {
-    const raw = sessionStorage.getItem(claveStorage(tiendaId))
+    const raw = sessionStorage.getItem(STORAGE_TODOS)
     return raw ? JSON.parse(raw) : []
   } catch {
     return []
   }
 }
 
-function guardarLocal(tiendaId, productos) {
+function guardarTodosLocal(productos) {
   try {
-    sessionStorage.setItem(claveStorage(tiendaId), JSON.stringify(productos))
+    sessionStorage.setItem(STORAGE_TODOS, JSON.stringify(productos))
   } catch {
-    /* ignore quota on storage */
+    /* ignore */
   }
 }
 
+function agruparPorTienda(lista) {
+  const mapa = {}
+  lista.forEach((p) => {
+    const id = p.tiendaId || ""
+    if (!mapa[id]) mapa[id] = []
+    mapa[id].push(p)
+  })
+  return mapa
+}
+
 export function ProductosLiveProvider({ children }) {
-  const { tiendaActual } = useTienda()
-  const [productos, setProductos] = useState([])
-  const [cargando, setCargando] = useState(true)
+  const { tiendaActual, tiendaPropia } = useTienda()
+  const [todos, setTodos] = useState(() => leerTodosLocal())
+  const [cargando, setCargando] = useState(() => leerTodosLocal().length === 0)
+
+  const tiendaVistaId = tiendaActual?.id || ""
+  const tiendaPropiaId = tiendaPropia?.id || ""
 
   useEffect(() => {
     iniciarReintentoAjustes()
   }, [])
 
   useEffect(() => {
-    if (!tiendaActual?.id) {
-      setProductos([])
-      setCargando(false)
-      return
-    }
-
-    const locales = leerLocal(tiendaActual.id)
-    if (locales.length) {
-      setProductos(locales)
-      setCargando(false)
-    } else {
-      setCargando(true)
-    }
-
-    const q = query(
-      collection(db, "productos"),
-      where("tiendaId", "==", tiendaActual.id)
-    )
-
     const unsub = onSnapshot(
-      q,
+      collection(db, "productos"),
       (snap) => {
         const lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-        setProductos(lista)
-        guardarLocal(tiendaActual.id, lista)
+        setTodos(lista)
+        guardarTodosLocal(lista)
         setCargando(false)
       },
       (error) => {
@@ -83,7 +74,24 @@ export function ProductosLiveProvider({ children }) {
     )
 
     return unsub
-  }, [tiendaActual?.id])
+  }, [])
+
+  const porTienda = useMemo(() => agruparPorTienda(todos), [todos])
+  const productos = porTienda[tiendaVistaId] || []
+  const productosPropios = porTienda[tiendaPropiaId] || productos
+
+  const setProductos = useCallback(
+    (updater) => {
+      if (!tiendaVistaId) return
+      setTodos((prev) => {
+        const deEsta = prev.filter((p) => p.tiendaId === tiendaVistaId)
+        const resto = prev.filter((p) => p.tiendaId !== tiendaVistaId)
+        const nextEsta = typeof updater === "function" ? updater(deEsta) : updater
+        return [...resto, ...nextEsta]
+      })
+    },
+    [tiendaVistaId]
+  )
 
   const stockBajo = useMemo(
     () => filtrarProductosStockBajo(productos),
@@ -92,6 +100,8 @@ export function ProductosLiveProvider({ children }) {
 
   const value = {
     productos,
+    productosPropios,
+    todosLosProductos: todos,
     setProductos,
     cargando,
     cantidadStockBajo: stockBajo.length,
