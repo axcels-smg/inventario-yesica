@@ -40,13 +40,14 @@ import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { enlaceWhatsAppStockBajo, enlaceEmailStockBajo, obtenerTelefonoWhatsApp, guardarTelefonoWhatsApp } from "../utils/whatsapp"
 import AlertasStockAcumulativas from "../components/AlertasStockAcumulativas"
 import { useTienda } from "../context/TiendaContext"
+import { useProductosLive } from "../context/ProductosLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { listarPorTienda } from "../utils/consultasTienda"
 
 function Reportes() {
   const { tiendaActual, esTiendaPropia } = useTienda()
+  const { productos } = useProductosLive()
   const [ventas, setVentas] = useState([])
-  const [productos, setProductos] = useState([])
   const [clientes, setClientes] = useState([])
 
   const [fechaDesde, setFechaDesde] = useState("")
@@ -68,9 +69,8 @@ function Reportes() {
   async function cargarDatos() {
     if (!tiendaActual) return
 
-    const [listaVentas, listaProductos, listaClientes] = await Promise.all([
+    const [listaVentas, listaClientes] = await Promise.all([
       listarPorTienda("ventas", tiendaActual.id),
-      listarPorTienda("productos", tiendaActual.id),
       listarPorTienda("clientes", tiendaActual.id),
     ])
 
@@ -79,7 +79,6 @@ function Reportes() {
     )
 
     setVentas(listaVentas)
-    setProductos(listaProductos)
     setClientes(listaClientes)
   }
 

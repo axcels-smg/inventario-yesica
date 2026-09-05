@@ -15,6 +15,7 @@ import { enlaceWhatsAppTexto, textoReciboVenta } from "../utils/reciboCliente"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
+import { useProductosLive } from "../context/ProductosLiveContext"
 import { listarPorTienda } from "../utils/consultasTienda"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
@@ -27,10 +28,8 @@ import {
 
 function Ventas() {
   const { tiendaActual, esTiendaPropia } = useTienda()
-
-  const [productos, setProductos] = useState([])
+  const { productos, cargando: cargandoProductos } = useProductosLive()
   const [clientes, setClientes] = useState([])
-  const [cargandoProductos, setCargandoProductos] = useState(true)
 
   const [clienteSeleccionado, setClienteSeleccionado] = useState("")
   const [carrito, setCarrito] = useState([])
@@ -41,28 +40,9 @@ function Ventas() {
 
   useEffect(() => {
     if (tiendaActual) {
-      cargarProductos()
       cargarClientes()
     }
   }, [tiendaActual?.id])
-
-  async function cargarProductos() {
-    if (!tiendaActual) return
-
-    try {
-      setCargandoProductos(true)
-      setProductos(await listarPorTienda("productos", tiendaActual.id))
-
-    } catch (error) {
-      console.log(error)
-      Swal.fire({
-        icon: "error",
-        title: "Error cargando productos",
-      })
-    } finally {
-      setCargandoProductos(false)
-    }
-  }
 
   async function cargarClientes() {
     if (!tiendaActual) return
@@ -335,7 +315,6 @@ function Ventas() {
 
       setCarrito([])
       setClienteSeleccionado("")
-      cargarProductos()
 
       const envio = await Swal.fire({
         icon: "success",

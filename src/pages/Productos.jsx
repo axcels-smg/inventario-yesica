@@ -31,16 +31,22 @@ import {
   claveModeloProducto,
 } from "../utils/productos"
 import { aplicarAjusteStock } from "../utils/ajusteStock"
+import { esErrorCuota } from "../utils/cuotaFirebase"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { esStockBajo, esStockAgotado, etiquetaEstadoStock, resumenStockBajo } from "../utils/stock"
 import { useTienda } from "../context/TiendaContext"
-import { listarPorTienda } from "../utils/consultasTienda"
+import { useProductosLive } from "../context/ProductosLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 const ESPERA_GUARDADO_MS = 1200
 
 function Productos() {
   const { tiendaActual, esTiendaPropia } = useTienda()
+  const {
+    productos: productosLive,
+    setProductos: setProductosLive,
+    cargando: cargandoLive,
+  } = useProductosLive()
   const puedeEditar = esTiendaPropia
 
   // PRODUCTOS
@@ -59,7 +65,7 @@ function Productos() {
   const [filtroMarca, setFiltroMarca] = useState("")
   const [filtroCategoria, setFiltroCategoria] = useState("")
   const [paginaActual, setPaginaActual] = useState(1)
-  const [cargando, setCargando] = useState(true)
+  const cargando = cargandoLive
 
   // EDITAR
   const [editandoId, setEditandoId] = useState(null)
@@ -75,44 +81,27 @@ function Productos() {
   const timersRef = useRef(new Map())
 
   useEffect(() => {
-    if (tiendaActual) {
-      obtenerProductos()
-    }
+    setProductos((prev) => {
+      if (pendientesRef.current.size === 0) return productosLive
+      return productosLive.map((p) => {
+        const pend = pendientesRef.current.get(p.id)
+        return pend ? { ...p, stock: pend.stockBase + pend.delta } : p
+      })
+    })
+  }, [productosLive])
 
+  useEffect(() => {
     return () => {
       timersRef.current.forEach((t) => clearTimeout(t))
       timersRef.current.clear()
       pendientesRef.current.forEach((pend) => {
-        if (pend.delta && tiendaActual?.id) {
-          aplicarAjusteStock(pend.producto, pend.delta, tiendaActual.id).catch(
-            () => {}
-          )
+        if (pend.delta) {
+          aplicarAjusteStock(pend.producto, pend.delta).catch(() => {})
         }
       })
       pendientesRef.current.clear()
     }
   }, [tiendaActual?.id])
-
-  // OBTENER
-  async function obtenerProductos() {
-    if (!tiendaActual) return
-
-    try {
-      setCargando(true)
-      const lista = await listarPorTienda("productos", tiendaActual.id)
-      setProductos(lista)
-
-    } catch (error) {
-      console.log(error)
-
-      Swal.fire({
-        icon: "error",
-        title: "Error cargando productos",
-      })
-    } finally {
-      setCargando(false)
-    }
-  }
 
   useEffect(() => {
     setPaginaActual(1)
@@ -208,6 +197,11 @@ function Productos() {
         p.id === id ? { ...p, stock: stockBase + deltaAcum } : p
       )
     )
+    setProductosLive((lista) =>
+      lista.map((p) =>
+        p.id === id ? { ...p, stock: stockBase + deltaAcum } : p
+      )
+    )
 
     const anterior = timersRef.current.get(id)
     if (anterior) clearTimeout(anterior)
@@ -241,23 +235,23 @@ function Productos() {
 
     try {
       setAjustandoId(producto.id)
-      const { stockDespues, cambio } = await aplicarAjusteStock(
+      const { stockDespues, cambio, diferido } = await aplicarAjusteStock(
         producto,
-        delta,
-        tiendaActual.id
+        delta
       )
 
-      setProductos((lista) =>
+      const aplicarLocal = (lista) =>
         lista.map((p) =>
           p.id === producto.id ? { ...p, stock: stockDespues } : p
         )
-      )
+      setProductos(aplicarLocal)
+      setProductosLive(aplicarLocal)
 
       if (productoAjuste?.id === producto.id) {
         setProductoAjuste((p) => (p ? { ...p, stock: stockDespues } : p))
       }
 
-      if (!silencioso) {
+      if (!silencioso && !diferido) {
         const signo = cambio > 0 ? "+" : ""
         Swal.fire({
           icon: "success",
@@ -270,6 +264,7 @@ function Productos() {
 
       return true
     } catch (error) {
+      if (esErrorCuota(error)) return true
       Swal.fire({
         icon: "error",
         title: "No se pudo ajustar",
@@ -361,6 +356,9 @@ function Productos() {
         }
 
         await updateDoc(doc(db, "productos", editandoId), datos)
+        setProductosLive((lista) =>
+          lista.map((p) => (p.id === editandoId ? { ...p, ...datos } : p))
+        )
 
         Swal.fire({
           icon: "success",
@@ -371,7 +369,7 @@ function Productos() {
 
       } else {
 
-        await addDoc(collection(db, "productos"), {
+        const creado = await addDoc(collection(db, "productos"), {
           marca: marcaLimpia,
           categoria: categoriaLimpia,
           modelo: modeloLimpio,
@@ -380,6 +378,19 @@ function Productos() {
           stock: stockNumero,
           tiendaId: tiendaActual.id,
         })
+        setProductosLive((lista) => [
+          ...lista,
+          {
+            id: creado.id,
+            marca: marcaLimpia,
+            categoria: categoriaLimpia,
+            modelo: modeloLimpio,
+            codigo: codigoLimpio,
+            precio: precioNumero,
+            stock: stockNumero,
+            tiendaId: tiendaActual.id,
+          },
+        ])
 
         Swal.fire({
           icon: "success",
@@ -389,7 +400,6 @@ function Productos() {
         })
       }
 
-      obtenerProductos()
       limpiarFormulario()
       setEditandoId(null)
       setModalAbierto(false)
@@ -419,8 +429,7 @@ function Productos() {
       if (result.isConfirmed) {
 
         await deleteDoc(doc(db, "productos", id))
-
-        obtenerProductos()
+        setProductosLive((lista) => lista.filter((p) => p.id !== id))
 
         Swal.fire({
           icon: "success",

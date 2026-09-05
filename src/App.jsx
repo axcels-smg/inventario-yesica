@@ -15,6 +15,7 @@ import Login from "./pages/Login"
 
 import MainLayout from "./layout/MainLayout"
 import { TiendaProvider } from "./context/TiendaContext"
+import { ProductosLiveProvider } from "./context/ProductosLiveContext"
 import { AuthProvider, useAuth } from "./context/AuthContext"
 
 function ProtectedRoute({ children }) {
@@ -45,7 +46,9 @@ function App() {
 
             <Route path="/" element={
               <ProtectedRoute>
-                <MainLayout />
+                <ProductosLiveProvider>
+                  <MainLayout />
+                </ProductosLiveProvider>
               </ProtectedRoute>
             }>
               <Route index element={<Dashboard />} />

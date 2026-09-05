@@ -21,40 +21,21 @@ import { agruparVentasPorDia, obtenerRangoPreset } from "../utils/reportesFiltro
 import { resumenStockBajo } from "../utils/stock"
 import StockAlertBanner from "../components/StockAlertBanner"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
-import { registrarAlertaDiaria, existeAlertaHoy } from "../utils/alertasStock"
 import { useTienda } from "../context/TiendaContext"
+import { useProductosLive } from "../context/ProductosLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { listarPorTienda } from "../utils/consultasTienda"
 
 function Dashboard() {
-  const [productos, setProductos] = useState([])
   const [ventas, setVentas] = useState([])
   const { tiendaActual, esTiendaPropia } = useTienda()
+  const { productos } = useProductosLive()
 
   useEffect(() => {
     if (tiendaActual) {
-      cargarProductos()
       cargarVentas()
     }
   }, [tiendaActual?.id])
-
-  useEffect(() => {
-    async function registrarAlertaSiNecesario() {
-      if (productos.length === 0 || !tiendaActual) return
-
-      const yaExiste = await existeAlertaHoy(tiendaActual.id)
-      if (!yaExiste) {
-        await registrarAlertaDiaria(productos, tiendaActual.id)
-      }
-    }
-
-    registrarAlertaSiNecesario()
-  }, [productos, tiendaActual])
-
-  async function cargarProductos() {
-    if (!tiendaActual) return
-    setProductos(await listarPorTienda("productos", tiendaActual.id))
-  }
 
   async function cargarVentas() {
     if (!tiendaActual) return

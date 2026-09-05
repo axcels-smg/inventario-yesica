@@ -12,20 +12,21 @@ import {
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
+import { useProductosLive } from "../context/ProductosLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
-import { listarPorTienda } from "../utils/consultasTienda"
 import {
   claveModeloProducto,
 } from "../utils/productos"
 
 function InventarioExcel() {
   const { tiendaActual, esTiendaPropia } = useTienda()
+  const { productos: productosLive } = useProductosLive()
   const inputRef = useRef(null)
   const [importando, setImportando] = useState(false)
   const [vistaPrevia, setVistaPrevia] = useState([])
 
   async function cargarProductosDeTienda() {
-    return listarPorTienda("productos", tiendaActual?.id)
+    return productosLive
   }
 
   async function exportarInventario() {
