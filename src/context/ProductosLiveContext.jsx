@@ -87,7 +87,16 @@ export function ProductosLiveProvider({ children }) {
         const deEsta = prev.filter((p) => p.tiendaId === tiendaVistaId)
         const resto = prev.filter((p) => p.tiendaId !== tiendaVistaId)
         const nextEsta = typeof updater === "function" ? updater(deEsta) : updater
-        return [...resto, ...nextEsta]
+        const vistos = new Set()
+        const unicos = []
+        for (const p of nextEsta) {
+          if (p?.id) {
+            if (vistos.has(p.id)) continue
+            vistos.add(p.id)
+          }
+          unicos.push(p)
+        }
+        return [...resto, ...unicos]
       })
     },
     [tiendaVistaId]

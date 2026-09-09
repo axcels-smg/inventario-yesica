@@ -90,7 +90,7 @@ export function generarListaAcumulativa(alertas) {
   const productosUnicos = new Map()
 
   alertas.forEach((alerta) => {
-    alerta.productos.forEach((producto) => {
+    (alerta.productos || []).forEach((producto) => {
       if (!productosUnicos.has(producto.id)) {
         productosUnicos.set(producto.id, {
           ...producto,

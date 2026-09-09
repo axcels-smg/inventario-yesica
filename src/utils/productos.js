@@ -1,3 +1,5 @@
+import { filtrarProductosPorEstadoStock } from "./stock"
+
 export const MIN_CARACTERES_BUSQUEDA = 2
 export const MAX_RESULTADOS_VENTAS = 30
 export const PRODUCTOS_POR_PAGINA = 25
@@ -16,7 +18,7 @@ export function textoBusquedaProducto(producto) {
 
 export function filtrarProductos(
   productos,
-  { busqueda = "", marca = "", categoria = "" } = {}
+  { busqueda = "", marca = "", categoria = "", estadoStock = "" } = {}
 ) {
   let lista = productos
 
@@ -26,6 +28,10 @@ export function filtrarProductos(
 
   if (categoria) {
     lista = lista.filter((p) => p.categoria === categoria)
+  }
+
+  if (estadoStock) {
+    lista = filtrarProductosPorEstadoStock(lista, estadoStock)
   }
 
   const terminos = busqueda.toLowerCase().trim().split(/\s+/).filter(Boolean)

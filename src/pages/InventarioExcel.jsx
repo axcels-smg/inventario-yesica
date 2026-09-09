@@ -1,6 +1,6 @@
 import { useRef, useState } from "react"
 import Swal from "sweetalert2"
-import { FileDown, FileUp, Table } from "lucide-react"
+import { FileDown, FileUp, Table, Store } from "lucide-react"
 import { collection, writeBatch, doc } from "firebase/firestore"
 
 import { db } from "../firebase"
@@ -8,6 +8,8 @@ import {
   exportarProductosExcel,
   exportarPlantillaExcel,
   leerProductosDesdeExcel,
+  exportarInventarioDetalladoTienda,
+  exportarInventarioDetalladoTodasLasTiendas,
 } from "../utils/excel"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
@@ -20,33 +22,71 @@ import {
 } from "../utils/productos"
 
 function InventarioExcel() {
-  const { tiendaActual, esTiendaPropia } = useTienda()
-  const { productos: productosLive } = useProductosLive()
+  const { tiendaActual, esTiendaPropia, tiendas } = useTienda()
+  const { productos: productosLive, todosLosProductos } = useProductosLive()
   const inputRef = useRef(null)
   const [importando, setImportando] = useState(false)
   const [vistaPrevia, setVistaPrevia] = useState([])
 
-  async function cargarProductosDeTienda() {
-    return productosLive
-  }
-
-  async function exportarInventario() {
+  function exportarInventarioSimple() {
     try {
-      const productos = await cargarProductosDeTienda()
-
-      if (productos.length === 0) {
+      if (productosLive.length === 0) {
         Swal.fire({ icon: "info", title: "No hay productos para exportar" })
         return
       }
 
-      exportarProductosExcel(productos)
+      exportarProductosExcel(productosLive)
 
       Swal.fire({
         icon: "success",
         title: "Excel exportado",
-        text: `${productos.length} productos`,
+        text: `${productosLive.length} productos en una sola hoja`,
         timer: 2000,
         showConfirmButton: false,
+      })
+    } catch (error) {
+      errorOperacion(error, "Error al exportar")
+    }
+  }
+
+  function exportarDetalladoEstaTienda() {
+    try {
+      if (productosLive.length === 0) {
+        Swal.fire({ icon: "info", title: "No hay productos para exportar" })
+        return
+      }
+
+      const r = exportarInventarioDetalladoTienda(
+        productosLive,
+        tiendaActual?.nombre || "Tienda"
+      )
+
+      Swal.fire({
+        icon: "success",
+        title: "Excel detallado descargado",
+        text: `${tiendaActual?.nombre || "Tienda"}: ${r.modelos} modelos en ${r.categorias} categorías. Abre la hoja «Por modelo». Cada categoría (PANTALLA, LENTE…) lista un renglón por modelo.`,
+      })
+    } catch (error) {
+      errorOperacion(error, "Error al exportar")
+    }
+  }
+
+  function exportarDetalladoTodas() {
+    try {
+      if (!todosLosProductos.length) {
+        Swal.fire({ icon: "info", title: "No hay productos para exportar" })
+        return
+      }
+
+      const r = exportarInventarioDetalladoTodasLasTiendas(
+        todosLosProductos,
+        tiendas
+      )
+
+      Swal.fire({
+        icon: "success",
+        title: "Excel de todas las tiendas",
+        text: `${r.tiendas} tiendas · ${r.modelos} modelos · ${r.categorias} categorías. En «Por modelo» cada modelo tiene una columna de stock por tienda.`,
       })
     } catch (error) {
       errorOperacion(error, "Error al exportar")
@@ -82,7 +122,7 @@ function InventarioExcel() {
 
       setImportando(true)
 
-      const deEstaTienda = await cargarProductosDeTienda()
+      const deEstaTienda = productosLive
       const clavesVistas = new Set(
         deEstaTienda.map((p) => claveModeloProducto(p))
       )
@@ -167,24 +207,54 @@ function InventarioExcel() {
     }
   }
 
-  if (!esTiendaPropia) {
-    return <AvisoOtraTienda modo="bloqueo" />
-  }
-
   return (
     <div className="space-y-8">
+      <AvisoOtraTienda />
+
       <div>
         <h1 className="text-5xl font-black text-slate-800 dark:text-white flex items-center gap-3">
           <Table size={40} />
           Excel — Inventario
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
-          Importa o exporta miles de modelos en tabla organizada
+          {tiendaActual?.nombre ? `${tiendaActual.nombre} · ` : ""}
+          Descarga un cuadro por categoría (PANTALLA, LENTE, BATERIA…) o el de todas las tiendas.
         </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <button
+          type="button"
+          onClick={exportarDetalladoEstaTienda}
+          className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-green-500 transition"
+        >
+          <FileDown className="text-green-600 mb-3" size={32} />
+          <h3 className="font-bold text-lg dark:text-white">
+            Excel detallado de esta tienda
+          </h3>
+          <p className="text-slate-500 text-sm mt-1">
+            {tiendaActual?.nombre || "Tienda actual"}: un renglón por modelo (HONOR X7B, SAMSUNG A16…). Hojas PANTALLA, LENTE, FLEX… con filtro. Primera columna: el modelo.
+          </p>
+        </button>
+
+        <button
+          type="button"
+          onClick={exportarDetalladoTodas}
+          className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-blue-500 transition"
+        >
+          <Store className="text-blue-600 mb-3" size={32} />
+          <h3 className="font-bold text-lg dark:text-white">
+            Excel detallado de todas las tiendas
+          </h3>
+          <p className="text-slate-500 text-sm mt-1">
+            Cada modelo en una sola fila y una columna de stock por tienda. Así ves si el HONOR X7B hay en Plaza Norte y en las demás.
+          </p>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <button
+          type="button"
           onClick={exportarPlantillaExcel}
           className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-blue-500 transition"
         >
@@ -196,16 +266,18 @@ function InventarioExcel() {
         </button>
 
         <button
-          onClick={exportarInventario}
+          type="button"
+          onClick={exportarInventarioSimple}
           className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-green-500 transition"
         >
           <FileDown className="text-green-600 mb-3" size={32} />
-          <h3 className="font-bold text-lg dark:text-white">Exportar inventario</h3>
+          <h3 className="font-bold text-lg dark:text-white">Exportar simple</h3>
           <p className="text-slate-500 text-sm mt-1">
-            Todo el catálogo en .xlsx
+            Una sola hoja, para reimportar
           </p>
         </button>
 
+        {esTiendaPropia ? (
         <label className="bg-blue-600 text-white p-6 rounded-3xl text-left cursor-pointer hover:bg-blue-700 transition">
           <FileUp className="mb-3" size={32} />
           <h3 className="font-bold text-lg">
@@ -223,10 +295,59 @@ function InventarioExcel() {
             className="hidden"
           />
         </label>
+        ) : (
+          <div className="bg-slate-100 dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left">
+            <FileUp className="text-slate-400 mb-3" size={32} />
+            <h3 className="font-bold text-lg dark:text-white">Importar</h3>
+            <p className="text-slate-500 text-sm mt-1">
+              Solo se puede importar en tu propia tienda.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 p-6">
-        <h2 className="text-xl font-bold mb-4 dark:text-white">Columnas del archivo</h2>
+        <h2 className="text-xl font-bold mb-2 dark:text-white">Excel detallado (por modelo)</h2>
+        <p className="text-slate-500 text-sm mb-4">
+          La columna principal es el modelo. En cada hoja puedes filtrar. Orden: categoría → marca → modelo (A10 antes que A16).
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full border dark:border-slate-700 rounded-xl overflow-hidden text-sm">
+            <thead className="bg-slate-100 dark:bg-slate-800">
+              <tr>
+                <th className="p-3 text-left">N°</th>
+                <th className="p-3 text-left">Modelo</th>
+                <th className="p-3 text-left">Marca</th>
+                <th className="p-3 text-left">Categoría</th>
+                <th className="p-3 text-left">Código</th>
+                <th className="p-3 text-left">Precio unit.</th>
+                <th className="p-3 text-left">Stock</th>
+                <th className="p-3 text-left">Estado</th>
+                <th className="p-3 text-left">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t dark:border-slate-700">
+                <td className="p-3">1</td>
+                <td className="p-3 font-medium">X7B</td>
+                <td className="p-3">HONOR</td>
+                <td className="p-3">PANTALLA</td>
+                <td className="p-3">—</td>
+                <td className="p-3">85</td>
+                <td className="p-3">4</td>
+                <td className="p-3">OK</td>
+                <td className="p-3">340</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-slate-500 text-sm mt-4">
+          Hojas: Resumen · Por modelo · Sin stock · Detalle · PANTALLA · LENTE · BATERIA · …
+        </p>
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 p-6">
+        <h2 className="text-xl font-bold mb-4 dark:text-white">Columnas para importar</h2>
         <div className="overflow-x-auto">
           <table className="w-full border dark:border-slate-700 rounded-xl overflow-hidden">
             <thead className="bg-slate-100 dark:bg-slate-800">

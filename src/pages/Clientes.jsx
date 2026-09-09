@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import Swal from "sweetalert2"
 import { Pencil, Search, Trash2, X } from "lucide-react"
 
@@ -28,6 +28,8 @@ function Clientes() {
   const [direccion, setDireccion] = useState("")
   const [busqueda, setBusqueda] = useState("")
   const [editandoId, setEditandoId] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+  const guardandoRef = useRef(false)
 
   useEffect(() => {
     if (tiendaActual) {
@@ -70,6 +72,8 @@ function Clientes() {
 
   async function guardarCliente(e) {
     e.preventDefault()
+    if (!esTiendaPropia) return
+    if (guardandoRef.current) return
 
     const nombreLimpio = nombre.trim()
     const telefonoLimpio = telefono.trim()
@@ -83,6 +87,9 @@ function Clientes() {
       })
       return
     }
+
+    guardandoRef.current = true
+    setGuardando(true)
 
     try {
       if (editandoId) {
@@ -115,6 +122,9 @@ function Clientes() {
 
     } catch (error) {
       errorOperacion(error, "Error al guardar")
+    } finally {
+      guardandoRef.current = false
+      setGuardando(false)
     }
   }
 
@@ -224,8 +234,18 @@ function Clientes() {
             />
 
             {esTiendaPropia && (
-              <button className="bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition">
-                {editandoId ? "Actualizar Cliente" : "Guardar Cliente"}
+              <button
+                type="submit"
+                disabled={guardando}
+                className={`text-white py-4 rounded-2xl font-bold transition ${
+                  guardando ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {guardando
+                  ? "Guardando..."
+                  : editandoId
+                    ? "Actualizar Cliente"
+                    : "Guardar Cliente"}
               </button>
             )}
 

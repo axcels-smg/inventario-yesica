@@ -64,6 +64,7 @@ function Productos() {
   const [busqueda, setBusqueda] = useState("")
   const [filtroMarca, setFiltroMarca] = useState("")
   const [filtroCategoria, setFiltroCategoria] = useState("")
+  const [filtroStock, setFiltroStock] = useState("")
   const [paginaActual, setPaginaActual] = useState(1)
   const cargando = cargandoLive
 
@@ -75,6 +76,8 @@ function Productos() {
   const [productoAjuste, setProductoAjuste] = useState(null)
   const [cantidadAjuste, setCantidadAjuste] = useState("")
   const [ajustandoId, setAjustandoId] = useState("")
+  const [guardando, setGuardando] = useState(false)
+  const guardandoRef = useRef(false)
   const [idsPendientes, setIdsPendientes] = useState(() => new Set())
   const [resumenAbierto, setResumenAbierto] = useState(false)
   const pendientesRef = useRef(new Map())
@@ -124,7 +127,7 @@ function Productos() {
 
   useEffect(() => {
     setPaginaActual(1)
-  }, [busqueda, filtroMarca, filtroCategoria])
+  }, [busqueda, filtroMarca, filtroCategoria, filtroStock])
 
   // LIMPIAR
   function limpiarFormulario() {
@@ -299,13 +302,14 @@ function Productos() {
   async function agregarProducto(e) {
     e.preventDefault()
     if (!esTiendaPropia) return
+    if (guardandoRef.current) return
 
     const marcaLimpia = marca.trim()
     const categoriaLimpia = categoria.trim()
     const modeloLimpio = modelo.trim()
     const codigoLimpio = codigo.trim()
     const precioNumero = Number(precio)
-    const stockNumero = Number(stock)
+    const stockNumeroVal = Number(stock)
 
     if (
       !marcaLimpia ||
@@ -330,7 +334,7 @@ function Productos() {
       return
     }
 
-    if (!editandoId && (!Number.isInteger(stockNumero) || stockNumero < 0)) {
+    if (!editandoId && (!Number.isInteger(stockNumeroVal) || stockNumeroVal < 0)) {
       Swal.fire({
         icon: "warning",
         title: "Stock inválido",
@@ -354,6 +358,9 @@ function Productos() {
       })
       return
     }
+
+    guardandoRef.current = true
+    setGuardando(true)
 
     try {
 
@@ -386,22 +393,25 @@ function Productos() {
           modelo: modeloLimpio,
           codigo: codigoLimpio,
           precio: precioNumero,
-          stock: stockNumero,
+          stock: stockNumeroVal,
           tiendaId: tiendaActual.id,
         })
-        setProductosLive((lista) => [
-          ...lista,
-          {
-            id: creado.id,
-            marca: marcaLimpia,
-            categoria: categoriaLimpia,
-            modelo: modeloLimpio,
-            codigo: codigoLimpio,
-            precio: precioNumero,
-            stock: stockNumero,
-            tiendaId: tiendaActual.id,
-          },
-        ])
+        setProductosLive((lista) => {
+          if (lista.some((p) => p.id === creado.id)) return lista
+          return [
+            ...lista,
+            {
+              id: creado.id,
+              marca: marcaLimpia,
+              categoria: categoriaLimpia,
+              modelo: modeloLimpio,
+              codigo: codigoLimpio,
+              precio: precioNumero,
+              stock: stockNumeroVal,
+              tiendaId: tiendaActual.id,
+            },
+          ]
+        })
 
         Swal.fire({
           icon: "success",
@@ -419,6 +429,9 @@ function Productos() {
       console.log(error)
 
       errorOperacion(error, "Error guardando producto")
+    } finally {
+      guardandoRef.current = false
+      setGuardando(false)
     }
   }
 
@@ -492,8 +505,9 @@ function Productos() {
         busqueda,
         marca: filtroMarca,
         categoria: filtroCategoria,
+        estadoStock: filtroStock,
       }),
-    [productos, busqueda, filtroMarca, filtroCategoria]
+    [productos, busqueda, filtroMarca, filtroCategoria, filtroStock]
   )
 
   const modelosDuplicados = useMemo(
@@ -585,6 +599,18 @@ function Productos() {
             ))}
           </select>
 
+          <select
+            value={filtroStock}
+            onChange={(e) => setFiltroStock(e.target.value)}
+            className="p-3 rounded-2xl border dark:bg-slate-900 dark:text-white min-w-[160px]"
+          >
+            <option value="">Todo el stock</option>
+            <option value="no_hay">No hay (0)</option>
+            <option value="poco">Poco stock (1–{STOCK_BAJO_UMBRAL})</option>
+            <option value="bajo">No hay + poco</option>
+            <option value="ok">Con stock</option>
+          </select>
+
           <div className="relative flex-1 min-w-[220px]">
             <PackageSearch
               className="absolute left-4 top-4 text-slate-400"
@@ -616,15 +642,26 @@ function Productos() {
           </h2>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-red-100 dark:border-red-900">
-          <p className="text-red-600 dark:text-red-300">Poco stock (≤{STOCK_BAJO_UMBRAL})</p>
+        <button
+          type="button"
+          onClick={() => setFiltroStock(filtroStock === "no_hay" ? "" : "no_hay")}
+          className={`text-left p-6 rounded-3xl border ${
+            filtroStock === "no_hay"
+              ? "bg-red-100 border-red-300 dark:bg-red-950/50 dark:border-red-700"
+              : "bg-white dark:bg-slate-900 border-red-100 dark:border-red-900"
+          }`}
+        >
+          <p className="text-red-600 dark:text-red-300">No hay (stock 0)</p>
           <h2 className="text-3xl font-black text-red-700 dark:text-red-200">
-            {pocoStock.total}
+            {pocoStock.agotados}
           </h2>
           <p className="text-xs text-red-500 mt-1">
-            {pocoStock.agotados} agotados · {pocoStock.poco} poco
+            {pocoStock.poco} con poco stock (≤{STOCK_BAJO_UMBRAL})
+            {pocoStock.pantallasSinStock > 0
+              ? ` · ${pocoStock.pantallasSinStock} pantallas`
+              : ""}
           </p>
-        </div>
+        </button>
 
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 rounded-3xl flex justify-between items-center text-white">
 
@@ -718,7 +755,9 @@ function Productos() {
             {!cargando && productosPagina.length === 0 && (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
-                  No hay productos para mostrar
+                  {filtroStock === "no_hay"
+                    ? "No hay productos agotados con este filtro"
+                    : "No hay productos para mostrar"}
                 </td>
               </tr>
             )}
@@ -1060,8 +1099,14 @@ function Productos() {
           )}
 
           {puedeEditar && (
-            <button className="bg-blue-600 text-white py-3 rounded-xl">
-              Guardar
+            <button
+              type="submit"
+              disabled={guardando}
+              className={`text-white py-3 rounded-xl ${
+                guardando ? "bg-slate-400" : "bg-blue-600"
+              }`}
+            >
+              {guardando ? "Guardando..." : "Guardar"}
             </button>
           )}
 

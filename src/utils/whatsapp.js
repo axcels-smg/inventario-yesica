@@ -1,5 +1,6 @@
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
-import { lineaDetalleStock, resumenStockBajo } from "./stock"
+import { resumenStockBajo } from "./stock"
+import { textoStockPorCategoriaMarca } from "./reporteStock"
 
 const CLAVE_WHATSAPP = "inventario_whatsapp"
 
@@ -12,32 +13,33 @@ export function guardarTelefonoWhatsApp(telefono) {
 }
 
 function textoAlertaStock(productos, nombreTienda) {
-  const { lista, total, agotados, poco } = resumenStockBajo(productos)
-  const tienda = nombreTienda ? ` — ${nombreTienda}` : ""
-  const limite = 40
-  const visibles = lista.slice(0, limite)
-  const resto = lista.length - visibles.length
-
-  const lineas = visibles.map((p) => `• ${lineaDetalleStock(p)}`).join("\n")
-  const extra = resto > 0 ? `\n…y ${resto} más` : ""
+  const { total, agotados, poco } = resumenStockBajo(productos)
+  const cuerpo = textoStockPorCategoriaMarca(productos, nombreTienda, 70)
 
   return (
-    `⚠️ *Poco stock* (≤ ${STOCK_BAJO_UMBRAL} u.)${tienda}\n` +
-    `Agotados: ${agotados} · Poco stock: ${poco} · Total: ${total}\n\n` +
-    `${lineas}${extra}\n\n` +
+    `⚠️ *Poco stock* (≤ ${STOCK_BAJO_UMBRAL} u.)\n` +
+    `No hay (0): ${agotados} · Poco stock: ${poco} · Total: ${total}\n` +
+    `${cuerpo}\n\n` +
     `Reponer inventario pronto.`
   )
 }
 
+function numeroWhatsAppPeru(telefono) {
+  const numero = String(telefono || "").replace(/\D/g, "")
+  if (!numero) return ""
+  if (numero.startsWith("51") && numero.length >= 11) return numero
+  return `51${numero}`
+}
+
 export function enlaceWhatsAppStockBajo(productos, telefono, nombreTienda = "") {
-  const numero = (telefono || obtenerTelefonoWhatsApp()).replace(/\D/g, "")
+  const numero = numeroWhatsAppPeru(telefono || obtenerTelefonoWhatsApp())
   const texto = textoAlertaStock(productos, nombreTienda)
 
   if (!numero) {
     return `https://wa.me/?text=${encodeURIComponent(texto)}`
   }
 
-  return `https://wa.me/51${numero}?text=${encodeURIComponent(texto)}`
+  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`
 }
 
 export function enlaceEmailStockBajo(productos, correo = "", nombreTienda = "") {

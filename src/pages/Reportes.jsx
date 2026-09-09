@@ -21,13 +21,14 @@ import {
   FileDown,
 } from "lucide-react"
 
-import { filtrarProductosStockBajo, etiquetaEstadoStock, esStockAgotado, resumenStockBajo } from "../utils/stock"
+import { filtrarProductosStockBajo, resumenStockBajo, filtrarProductosPorEstadoStock } from "../utils/stock"
+import { agruparPorCategoriaMarcaModelo, agruparPocoStockPorTienda } from "../utils/reporteStock"
 import {
   aplicarFiltrosReporte,
   agruparVentasPorDia,
   obtenerRangoPreset,
 } from "../utils/reportesFiltros"
-import { exportarReporteContable } from "../utils/excel"
+import { exportarReporteContable, exportarInventarioDetalladoTienda, exportarInventarioDetalladoTodasLasTiendas, exportarPocoStockEstructurado } from "../utils/excel"
 import {
   enlaceWhatsAppTexto,
   enlaceEmailTexto,
@@ -39,14 +40,15 @@ import {
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { enlaceWhatsAppStockBajo, enlaceEmailStockBajo, obtenerTelefonoWhatsApp, guardarTelefonoWhatsApp } from "../utils/whatsapp"
 import AlertasStockAcumulativas from "../components/AlertasStockAcumulativas"
+import ReporteStockEstructurado from "../components/ReporteStockEstructurado"
 import { useTienda } from "../context/TiendaContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { listarPorTienda } from "../utils/consultasTienda"
 
 function Reportes() {
-  const { tiendaActual, esTiendaPropia } = useTienda()
-  const { productos } = useProductosLive()
+  const { tiendaActual, tiendas } = useTienda()
+  const { productos, todosLosProductos } = useProductosLive()
   const [ventas, setVentas] = useState([])
   const [clientes, setClientes] = useState([])
 
@@ -56,6 +58,10 @@ function Reportes() {
   const [telefonoWhatsApp, setTelefonoWhatsApp] = useState(
     obtenerTelefonoWhatsApp()
   )
+  const [filtroStockReporte, setFiltroStockReporte] = useState("bajo")
+  const [filtroCategoriaStock, setFiltroCategoriaStock] = useState("")
+  const [busquedaStock, setBusquedaStock] = useState("")
+  const [alcanceStock, setAlcanceStock] = useState("tienda")
 
   useEffect(() => {
     if (tiendaActual) {
@@ -102,6 +108,57 @@ function Reportes() {
 
   const productosStockBajo = filtrarProductosStockBajo(productos)
   const resumenPocoStock = resumenStockBajo(productos)
+  const categoriasStock = useMemo(() => {
+    const fuente = alcanceStock === "todas" ? todosLosProductos : productos
+    return [...new Set(fuente.map((p) => p.categoria).filter(Boolean))].sort((a, b) =>
+      String(a).localeCompare(String(b), "es")
+    )
+  }, [alcanceStock, productos, todosLosProductos])
+  const listaStockReporte = useMemo(() => {
+    let lista = filtrarProductosPorEstadoStock(productos, filtroStockReporte)
+    if (filtroCategoriaStock) {
+      lista = lista.filter((p) => p.categoria === filtroCategoriaStock)
+    }
+    const q = busquedaStock.trim().toLowerCase()
+    if (q) {
+      lista = lista.filter((p) =>
+        `${p.codigo || ""} ${p.marca || ""} ${p.modelo || ""} ${p.categoria || ""}`
+          .toLowerCase()
+          .includes(q)
+      )
+    }
+    return lista
+  }, [productos, filtroStockReporte, filtroCategoriaStock, busquedaStock])
+
+  const gruposStockTienda = useMemo(
+    () => agruparPorCategoriaMarcaModelo(listaStockReporte, tiendaActual?.nombre || ""),
+    [listaStockReporte, tiendaActual?.nombre]
+  )
+
+  const reporteStockTodas = useMemo(() => {
+    let lista = filtrarProductosPorEstadoStock(todosLosProductos, filtroStockReporte)
+    if (filtroCategoriaStock) {
+      lista = lista.filter((p) => p.categoria === filtroCategoriaStock)
+    }
+    const q = busquedaStock.trim().toLowerCase()
+    if (q) {
+      lista = lista.filter((p) =>
+        `${p.codigo || ""} ${p.marca || ""} ${p.modelo || ""} ${p.categoria || ""}`
+          .toLowerCase()
+          .includes(q)
+      )
+    }
+    return {
+      lista,
+      tiendas: agruparPocoStockPorTienda(lista, tiendas, { estadoStock: "" }),
+    }
+  }, [todosLosProductos, tiendas, filtroStockReporte, filtroCategoriaStock, busquedaStock])
+
+  const listaAlertaStock =
+    alcanceStock === "todas" ? reporteStockTodas.lista : listaStockReporte
+  const nombreAlertaStock =
+    alcanceStock === "todas" ? "Todas las tiendas" : tiendaActual?.nombre || ""
+
   const ventasPorDia = agruparVentasPorDia(ventasFiltradas).slice(0, 31)
 
   const productosVendidos = useMemo(() => {
@@ -219,12 +276,9 @@ function Reportes() {
     })
   }
 
-  if (!esTiendaPropia) {
-    return <AvisoOtraTienda modo="bloqueo" />
-  }
-
   return (
     <div className="space-y-10">
+      <AvisoOtraTienda />
       <div>
         <h1 className="text-5xl font-black text-slate-800 dark:text-white">
           Reportes
@@ -291,6 +345,7 @@ function Reportes() {
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-3">
         <button
           onClick={() => exportarReporteContable(ventasFiltradas)}
           className="flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-2xl font-bold hover:bg-green-700"
@@ -298,6 +353,49 @@ function Reportes() {
           <Download size={18} />
           Exportar Excel contable (filtro actual)
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!productos.length) {
+              return Swal.fire({ icon: "info", title: "No hay productos" })
+            }
+            const r = exportarInventarioDetalladoTienda(
+              productos,
+              tiendaActual?.nombre || "Tienda"
+            )
+            Swal.fire({
+              icon: "success",
+              title: "Excel detallado",
+              text: `${r.modelos} modelos · ${r.categorias} categorías. Hoja «Por modelo»: un renglón por modelo.`,
+            })
+          }}
+          className="flex items-center gap-2 bg-slate-800 text-white px-5 py-3 rounded-2xl font-bold hover:bg-slate-900"
+        >
+          <FileDown size={18} />
+          Inventario por modelo (esta tienda)
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!todosLosProductos.length) {
+              return Swal.fire({ icon: "info", title: "No hay productos" })
+            }
+            const r = exportarInventarioDetalladoTodasLasTiendas(
+              todosLosProductos,
+              tiendas
+            )
+            Swal.fire({
+              icon: "success",
+              title: "Excel de todas las tiendas",
+              text: `${r.tiendas} tiendas · ${r.modelos} modelos. Cada modelo con stock por tienda.`,
+            })
+          }}
+          className="flex items-center gap-2 bg-blue-700 text-white px-5 py-3 rounded-2xl font-bold hover:bg-blue-800"
+        >
+          <FileDown size={18} />
+          Inventario por modelo (todas las tiendas)
+        </button>
+        </div>
       </div>
 
       {/* RECIBO POR CLIENTE + FECHAS */}
@@ -370,14 +468,22 @@ function Reportes() {
             S/ {Number(ingresosFiltrados).toFixed(2)}
           </h2>
         </div>
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setFiltroStockReporte("bajo")}
+          onKeyDown={(e) => e.key === "Enter" && setFiltroStockReporte("bajo")}
+          className={`bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 cursor-pointer ${
+            filtroStockReporte === "bajo" || filtroStockReporte === "no_hay" ? "ring-2 ring-red-400" : ""
+          }`}
+        >
           <AlertTriangle className="text-red-500" size={38} />
-          <p className="text-slate-500 dark:text-slate-400 mt-4">Poco stock (≤{STOCK_BAJO_UMBRAL})</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-4">No hay (stock 0)</p>
           <h2 className="text-4xl font-black dark:text-white">
-            {resumenPocoStock.total}
+            {resumenPocoStock.agotados}
           </h2>
           <p className="text-xs text-slate-500 mt-2">
-            {resumenPocoStock.agotados} agotados · {resumenPocoStock.poco} poco stock
+            {resumenPocoStock.poco} con poco stock · {resumenPocoStock.pantallasSinStock} pantallas sin stock
           </p>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
@@ -389,14 +495,14 @@ function Reportes() {
       </div>
 
       {/* ALERTAS WHATSAPP / EMAIL */}
-      {productosStockBajo.length > 0 && (
+      {listaAlertaStock.length > 0 && (
         <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-3xl p-6 space-y-4">
           <h2 className="text-xl font-bold text-red-800 dark:text-red-200">
-            Alertas de poco stock — {tiendaActual?.nombre || "esta tienda"}
+            Alertas de stock — {tiendaActual?.nombre || "esta tienda"}
           </h2>
           <p className="text-sm text-red-700 dark:text-red-300">
-            WhatsApp automático requiere abrir el enlace (sin servidor). Guarda tu
-            número con código de Perú sin el +51.
+            El WhatsApp envía la lista agrupada por categoría y marca ({listaAlertaStock.length} ítems).
+            Guarda tu número de Perú; si ya empieza con 51 no se duplica.
           </p>
           <div className="flex flex-wrap gap-3 items-end">
             <input
@@ -413,9 +519,9 @@ function Reportes() {
             </button>
             <a
               href={enlaceWhatsAppStockBajo(
-                productosStockBajo,
+                listaAlertaStock.length > 0 ? listaAlertaStock : productosStockBajo,
                 telefonoWhatsApp,
-                tiendaActual?.nombre || ""
+                nombreAlertaStock
               )}
               target="_blank"
               rel="noreferrer"
@@ -426,9 +532,9 @@ function Reportes() {
             </a>
             <a
               href={enlaceEmailStockBajo(
-                productosStockBajo,
+                listaAlertaStock.length > 0 ? listaAlertaStock : productosStockBajo,
                 "",
-                tiendaActual?.nombre || ""
+                nombreAlertaStock
               )}
               className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 text-white font-bold"
             >
@@ -557,66 +663,112 @@ function Reportes() {
 
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
         <h2 className="text-2xl font-bold mb-2 text-red-500">
-          Poco stock — {tiendaActual?.nombre || "tienda"}
+          Poco stock — categoría, marca y modelo
         </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-          Productos con {STOCK_BAJO_UMBRAL} unidades o menos. Agotado = 0.
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          Cada categoría (PANTALLA, LENTE, BATERIA…) va aparte. Dentro: marca y cada modelo con código, precio, stock y estado. Igual en cada tienda.
         </p>
-        {productosStockBajo.length === 0 ? (
-          <p className="text-slate-500">No hay productos con poco stock en esta tienda.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-100 dark:bg-slate-800">
-                <tr>
-                  <th className="p-3 text-left">Código</th>
-                  <th className="p-3 text-left">Producto</th>
-                  <th className="p-3 text-left">Categoría</th>
-                  <th className="p-3 text-right">Stock</th>
-                  <th className="p-3 text-left">Estado</th>
-                  <th className="p-3 text-right">Precio</th>
-                </tr>
-              </thead>
-              <tbody>
-                {productosStockBajo.map((p) => {
-                  const agotado = esStockAgotado(p.stock)
-                  return (
-                    <tr
-                      key={p.id}
-                      className={`border-t dark:border-slate-800 ${
-                        agotado
-                          ? "bg-red-50/80 dark:bg-red-950/20"
-                          : "bg-amber-50/50 dark:bg-amber-950/10"
-                      }`}
-                    >
-                      <td className="p-3 font-mono text-slate-600 dark:text-slate-400">
-                        {p.codigo || "—"}
-                      </td>
-                      <td className="p-3 font-medium dark:text-white">
-                        {p.marca} {p.modelo}
-                      </td>
-                      <td className="p-3">{p.categoria || "—"}</td>
-                      <td className="p-3 text-right font-bold text-red-600">
-                        {p.stock}
-                      </td>
-                      <td className="p-3">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-bold ${
-                            agotado
-                              ? "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100"
-                              : "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
-                          }`}
-                        >
-                          {etiquetaEstadoStock(p.stock)}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">S/ {p.precio}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+
+        <div className="flex flex-wrap gap-3 mb-6">
+          <div className="flex rounded-2xl border dark:border-slate-700 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setAlcanceStock("tienda")}
+              className={`px-4 py-3 text-sm font-bold ${
+                alcanceStock === "tienda"
+                  ? "bg-slate-800 text-white"
+                  : "bg-white dark:bg-slate-900 dark:text-slate-200"
+              }`}
+            >
+              {tiendaActual?.nombre || "Esta tienda"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAlcanceStock("todas")}
+              className={`px-4 py-3 text-sm font-bold ${
+                alcanceStock === "todas"
+                  ? "bg-slate-800 text-white"
+                  : "bg-white dark:bg-slate-900 dark:text-slate-200"
+              }`}
+            >
+              Todas las tiendas
+            </button>
           </div>
+          <select
+            value={filtroStockReporte}
+            onChange={(e) => setFiltroStockReporte(e.target.value)}
+            className="p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          >
+            <option value="bajo">No hay + poco stock (≤{STOCK_BAJO_UMBRAL})</option>
+            <option value="no_hay">Solo lo que no hay (0)</option>
+            <option value="poco">Solo poco stock (1–{STOCK_BAJO_UMBRAL})</option>
+          </select>
+          <select
+            value={filtroCategoriaStock}
+            onChange={(e) => setFiltroCategoriaStock(e.target.value)}
+            className="p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          >
+            <option value="">Todas las categorías</option>
+            {categoriasStock.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <input
+            value={busquedaStock}
+            onChange={(e) => setBusquedaStock(e.target.value)}
+            placeholder="Buscar modelo, marca, código..."
+            className="p-3 rounded-2xl border flex-1 min-w-[200px] dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const r = exportarPocoStockEstructurado({
+                productos: alcanceStock === "todas" ? reporteStockTodas.lista : listaStockReporte,
+                nombreTienda: tiendaActual?.nombre || "Tienda",
+                tiendas,
+                todas: alcanceStock === "todas",
+                estadoStock: "",
+              })
+              Swal.fire({
+                icon: "success",
+                title: "Excel de poco stock",
+                text: `${r.categorias} categorías · ${r.productos} modelos. Una hoja por categoría.`,
+              })
+            }}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-green-700 text-white font-bold"
+          >
+            <Download size={18} />
+            Excel de este reporte
+          </button>
+        </div>
+
+        {alcanceStock === "todas" ? (
+          reporteStockTodas.tiendas.length === 0 ? (
+            <p className="text-slate-500">Ninguna tienda tiene productos con este filtro.</p>
+          ) : (
+            <div className="space-y-14">
+              {reporteStockTodas.tiendas.map((tienda) => (
+                <div key={tienda.tiendaId}>
+                  <h3 className="text-3xl font-black mb-6 text-slate-900 dark:text-white">
+                    {tienda.nombre}
+                    <span className="block text-base font-medium text-slate-500 mt-1">
+                      {tienda.total} modelos a reponer
+                    </span>
+                  </h3>
+                  <ReporteStockEstructurado grupos={tienda.grupos} />
+                </div>
+              ))}
+            </div>
+          )
+        ) : (
+          <ReporteStockEstructurado
+            grupos={gruposStockTienda}
+            vacio={
+              filtroStockReporte === "no_hay"
+                ? "No hay productos agotados con este filtro. Todo está en stock."
+                : "No hay productos con poco stock en esta tienda."
+            }
+          />
         )}
       </div>
     </div>

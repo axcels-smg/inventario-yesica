@@ -95,7 +95,9 @@ function AlertasStockAcumulativas({ tiendaId }) {
                 <div>
                   <p className="font-semibold text-slate-900 dark:text-white">
                     {producto.codigo ? `[${producto.codigo}] ` : ""}
-                    {producto.nombre}
+                    {producto.nombre ||
+                      `${producto.marca || ""} ${producto.modelo || ""}`.trim() ||
+                      "Producto"}
                   </p>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
                     {producto.categoria ? `${producto.categoria} · ` : ""}
