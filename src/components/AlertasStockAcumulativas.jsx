@@ -1,9 +1,40 @@
-import { AlertTriangle, Calendar, Package } from "lucide-react"
+import { AlertTriangle, Calendar, Package, Download } from "lucide-react"
+import Swal from "sweetalert2"
 import { useAlertasStockHistorial } from "../hooks/useAlertasStockHistorial"
 import { etiquetaEstadoStock, esStockAgotado } from "../utils/stock"
+import { DIAS_CICLO_ALERTAS, formatearFechaKey } from "../utils/alertasStock"
+import { exportarPocoStockCiclo3Dias } from "../utils/excel"
+import { useTienda } from "../context/TiendaContext"
+import { useProductosLive } from "../context/ProductosLiveContext"
 
 function AlertasStockAcumulativas({ tiendaId }) {
-  const { alertas, listaAcumulativa, cargando, recargar } = useAlertasStockHistorial(tiendaId)
+  const { tiendaActual } = useTienda()
+  const { productos, cargando: cargandoProductos } = useProductosLive()
+  const { alertas, listaAcumulativa, cargando, recargar } = useAlertasStockHistorial(
+    tiendaId,
+    productos,
+    !cargandoProductos
+  )
+
+  function descargarExcelCiclo() {
+    if (alertas.length === 0) {
+      Swal.fire({
+        icon: "info",
+        title: "Aún no hay días guardados",
+        text: "Entra a Reportes cada día. Se guardan solo los últimos 3 días.",
+      })
+      return
+    }
+    const r = exportarPocoStockCiclo3Dias(
+      alertas,
+      tiendaActual?.nombre || "Tienda"
+    )
+    Swal.fire({
+      icon: "success",
+      title: "Excel de 3 días",
+      text: `${r.categorias} categorías · ${r.dias} día(s). Cada categoría es un cuadro (PANTALLA, LENTE…).`,
+    })
+  }
 
   if (cargando) {
     return (
@@ -18,17 +49,14 @@ function AlertasStockAcumulativas({ tiendaId }) {
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-3 text-slate-500">
           <Package size={24} />
-          <p>No hay alertas de stock bajo registradas</p>
+          <p>No hay alertas de poco stock en los últimos {DIAS_CICLO_ALERTAS} días</p>
         </div>
       </div>
     )
   }
 
   // Formatear fecha key para mostrar
-  const formatearFecha = (fechaKey) => {
-    const [year, month, day] = fechaKey.split("-")
-    return `${day}/${month}/${year}`
-  }
+  const formatearFecha = (fechaKey) => formatearFechaKey(fechaKey)
 
   return (
     <div className="space-y-6">
@@ -37,15 +65,29 @@ function AlertasStockAcumulativas({ tiendaId }) {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Calendar size={24} className="text-red-500" />
-            Alertas por Día
+            Poco stock — ciclo de {DIAS_CICLO_ALERTAS} días
           </h2>
-          <button
-            onClick={recargar}
-            className="text-sm text-blue-600 hover:text-blue-700"
-          >
-            Actualizar
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={descargarExcelCiclo}
+              className="flex items-center gap-2 text-sm font-bold text-white bg-green-700 px-3 py-2 rounded-xl"
+            >
+              <Download size={16} />
+              Excel (un cuadro por categoría)
+            </button>
+            <button
+              type="button"
+              onClick={recargar}
+              className="text-sm text-blue-600 hover:text-blue-700"
+            >
+              Actualizar
+            </button>
+          </div>
         </div>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          Al entrar a Reportes se guarda el poco stock de hoy. Solo quedan 3 días; el más viejo se borra. El Excel tiene un cuadro por categoría (PANTALLA, LENTE, BATERIA…).
+        </p>
 
         <div className="space-y-3">
           {alertas.map((alerta) => (

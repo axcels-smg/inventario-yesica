@@ -7,6 +7,7 @@ import {
   agruparPorCategoriaMarcaModelo,
   agruparPocoStockPorTienda,
 } from "./reporteStock"
+import { formatearFechaKey } from "./alertasStock"
 
 const COLUMNAS_PRODUCTOS = [
   "codigo",
@@ -808,6 +809,96 @@ export function exportarPocoStockEstructurado({
   return {
     productos: todasLasFilas.length,
     categorias: porCategoria.size,
+  }
+}
+
+export function exportarPocoStockCiclo3Dias(alertas, nombreTienda = "Tienda") {
+  const dias = [...new Set((alertas || []).map((a) => a.fechaKey).filter(Boolean))].sort()
+  const libro = XLSX.utils.book_new()
+  const usados = new Set()
+
+  const porCategoria = new Map()
+
+  ;(alertas || []).forEach((alerta) => {
+    ;(alerta.productos || []).forEach((p) => {
+      const cat = String(p.categoria || "").trim() || "Sin categoría"
+      const clave = p.id || `${p.marca}|${p.modelo}|${p.codigo}`
+      if (!porCategoria.has(cat)) porCategoria.set(cat, new Map())
+      const modelos = porCategoria.get(cat)
+      if (!modelos.has(clave)) {
+        modelos.set(clave, {
+          Marca: p.marca || "—",
+          Modelo: p.modelo || p.nombre || "—",
+          Codigo: p.codigo || "—",
+          "Precio unit.": p.precio ?? "",
+          stockPorDia: {},
+        })
+      }
+      modelos.get(clave).stockPorDia[alerta.fechaKey] = Number(p.stock)
+    })
+  })
+
+  const resumen = [
+    {
+      Tienda: nombreTienda,
+      Ciclo: "3 días",
+      Dias: dias.map(formatearFechaKey).join(" · ") || "—",
+      Categorias: porCategoria.size,
+    },
+  ]
+  XLSX.utils.book_append_sheet(
+    libro,
+    XLSX.utils.json_to_sheet(resumen),
+    nombreHojaExcel("Resumen", usados)
+  )
+
+  ;[...porCategoria.entries()]
+    .sort((a, b) => compararTexto(a[0], b[0]))
+    .forEach(([categoria, modelos]) => {
+      const filas = [...modelos.values()]
+        .sort(
+          (a, b) =>
+            compararTexto(a.Marca, b.Marca) || compararTexto(a.Modelo, b.Modelo)
+        )
+        .map((m) => {
+          const fila = {
+            Categoria: categoria,
+            Marca: m.Marca,
+            Modelo: m.Modelo,
+            Codigo: m.Codigo,
+            "Precio unit.": m["Precio unit."],
+          }
+          dias.forEach((d) => {
+            const v = m.stockPorDia[d]
+            fila[`Stock ${formatearFechaKey(d)}`] = v === undefined ? "" : v
+          })
+          const ultimoDia = [...dias].reverse().find((d) => m.stockPorDia[d] !== undefined)
+          fila.Estado =
+            ultimoDia != null ? etiquetaEstadoStock(m.stockPorDia[ultimoDia]) : ""
+          return fila
+        })
+
+      const hoja = filas.length
+        ? XLSX.utils.json_to_sheet(filas)
+        : XLSX.utils.aoa_to_sheet([["Categoria", "Marca", "Modelo"]])
+      hoja["!cols"] = Object.keys(filas[0] || { Modelo: "" }).map((c) => ({
+        wch: c === "Modelo" ? 32 : 14,
+      }))
+      if (filas.length) {
+        const lastCol = XLSX.utils.encode_col(Object.keys(filas[0]).length - 1)
+        hoja["!autofilter"] = { ref: `A1:${lastCol}${filas.length + 1}` }
+      }
+      XLSX.utils.book_append_sheet(libro, hoja, nombreHojaExcel(categoria, usados))
+    })
+
+  XLSX.writeFile(
+    libro,
+    `poco-stock-3-dias-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`
+  )
+
+  return {
+    categorias: porCategoria.size,
+    dias: dias.length,
   }
 }
 
