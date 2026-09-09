@@ -77,15 +77,38 @@ export function ProductosLiveProvider({ children }) {
   }, [])
 
   const porTienda = useMemo(() => agruparPorTienda(todos), [todos])
-  const productos = porTienda[tiendaVistaId] || []
-  const productosPropios = porTienda[tiendaPropiaId] || productos
+
+  const productos = useMemo(() => {
+    const productosBase = porTienda[tiendaVistaId] || []
+    const sin = porTienda[""] || []
+    if (tiendaVistaId && tiendaVistaId === tiendaPropiaId) {
+      return [
+        ...productosBase,
+        ...sin.filter((p) => !productosBase.some((x) => x.id === p.id)),
+      ]
+    }
+    return productosBase
+  }, [porTienda, tiendaVistaId, tiendaPropiaId])
+
+  const productosPropios = useMemo(() => {
+    const dePropia = porTienda[tiendaPropiaId] || []
+    const sin = porTienda[""] || []
+    if (!tiendaPropiaId) return productos
+    return [
+      ...dePropia,
+      ...sin.filter((p) => !dePropia.some((x) => x.id === p.id)),
+    ]
+  }, [porTienda, tiendaPropiaId, productos])
 
   const setProductos = useCallback(
     (updater) => {
       if (!tiendaVistaId) return
       setTodos((prev) => {
-        const deEsta = prev.filter((p) => p.tiendaId === tiendaVistaId)
-        const resto = prev.filter((p) => p.tiendaId !== tiendaVistaId)
+        const pertenece = (p) =>
+          p.tiendaId === tiendaVistaId ||
+          (!p.tiendaId && tiendaVistaId === tiendaPropiaId)
+        const deEsta = prev.filter(pertenece)
+        const resto = prev.filter((p) => !pertenece(p))
         const nextEsta = typeof updater === "function" ? updater(deEsta) : updater
         const vistos = new Set()
         const unicos = []
@@ -99,7 +122,7 @@ export function ProductosLiveProvider({ children }) {
         return [...resto, ...unicos]
       })
     },
-    [tiendaVistaId]
+    [tiendaVistaId, tiendaPropiaId]
   )
 
   const stockBajo = useMemo(

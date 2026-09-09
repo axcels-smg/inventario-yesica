@@ -33,10 +33,12 @@ import {
 import { aplicarAjusteStock } from "../utils/ajusteStock"
 import { esErrorCuota } from "../utils/cuotaFirebase"
 import { errorOperacion } from "../utils/erroresUi"
-import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
+import { STOCK_BAJO_UMBRAL, TIPOS_MOVIMIENTO } from "../constants/inventario"
+import { registrarMovimiento } from "../utils/movimientos"
 import { esStockBajo, esStockAgotado, etiquetaEstadoStock, resumenStockBajo } from "../utils/stock"
 import { useTienda } from "../context/TiendaContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
+import { useRol } from "../context/RolContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 const ESPERA_GUARDADO_MS = 80
@@ -44,11 +46,21 @@ const ESPERA_GUARDADO_MS = 80
 function Productos() {
   const { tiendaActual, tiendaPropia, esTiendaPropia } = useTienda()
   const {
+    puedeCrearProductos,
+    puedeEditarProductos,
+    puedeEliminarProductos,
+    puedeReponerStock,
+  } = useRol()
+  const {
     productos: productosLive,
     setProductos: setProductosLive,
     cargando: cargandoLive,
   } = useProductosLive()
-  const puedeEditar = esTiendaPropia
+  const puedeCrear = esTiendaPropia && puedeCrearProductos()
+  const puedeEditarDatos = esTiendaPropia && puedeEditarProductos()
+  const puedeStock = esTiendaPropia && puedeReponerStock()
+  const puedeBorrar = esTiendaPropia && puedeEliminarProductos()
+  const puedeEditar = puedeCrear || puedeEditarDatos || puedeStock || puedeBorrar
   const [parpadeoIds, setParpadeoIds] = useState(() => new Set())
   const stockAnteriorRef = useRef({})
 
@@ -83,14 +95,7 @@ function Productos() {
   const pendientesRef = useRef(new Map())
   const timersRef = useRef(new Map())
 
-  const productos = useMemo(
-    () =>
-      productosLive.map((p) => {
-        const pend = pendientesRef.current.get(p.id)
-        return pend ? { ...p, stock: pend.stockBase + pend.delta } : p
-      }),
-    [productosLive, idsPendientes]
-  )
+  const productos = productosLive
 
   useEffect(() => {
     const cambiaron = []
@@ -113,15 +118,17 @@ function Productos() {
   }, [productosLive])
 
   useEffect(() => {
+    const timers = timersRef.current
+    const pendientes = pendientesRef.current
     return () => {
-      timersRef.current.forEach((t) => clearTimeout(t))
-      timersRef.current.clear()
-      pendientesRef.current.forEach((pend) => {
+      timers.forEach((t) => clearTimeout(t))
+      timers.clear()
+      pendientes.forEach((pend) => {
         if (pend.delta) {
           aplicarAjusteStock(pend.producto, pend.delta).catch(() => {})
         }
       })
-      pendientesRef.current.clear()
+      pendientes.clear()
     }
   }, [tiendaActual?.id])
 
@@ -191,7 +198,7 @@ function Productos() {
   }
 
   function ajusteRapido(producto, delta) {
-    if (!esTiendaPropia || !tiendaPropia) return
+    if (!esTiendaPropia || !tiendaPropia || !puedeReponerStock()) return
     if (producto.tiendaId && producto.tiendaId !== tiendaPropia.id) return
 
     const id = producto.id
@@ -250,11 +257,12 @@ function Productos() {
 
   async function aplicarDelta(producto, delta, { silencioso } = {}) {
     if (!esTiendaPropia || !tiendaPropia) return false
+    if (!puedeReponerStock()) return false
     if (producto.tiendaId && producto.tiendaId !== tiendaPropia.id) return false
 
     try {
       setAjustandoId(producto.id)
-      const { stockDespues, cambio, diferido } = await aplicarAjusteStock(
+      const { stockAntes, stockDespues, cambio, diferido } = await aplicarAjusteStock(
         producto,
         delta
       )
@@ -269,7 +277,28 @@ function Productos() {
         setProductoAjuste((p) => (p ? { ...p, stock: stockDespues } : p))
       }
 
-      if (!silencioso && !diferido) {
+      if (!diferido) {
+        await registrarMovimiento({
+          tipo: TIPOS_MOVIMIENTO.AJUSTE_STOCK,
+          productoId: producto.id,
+          productoNombre: `${producto.marca || ""} ${producto.modelo || ""}`.trim(),
+          cantidad: cambio,
+          stockAntes,
+          stockDespues,
+          detalle: `Ajuste ${cambio > 0 ? "+" : ""}${cambio}`,
+          tiendaId: tiendaPropia.id,
+        })
+      }
+
+      if (!silencioso && diferido) {
+        Swal.fire({
+          icon: "info",
+          title: "Stock en espera",
+          text: "Firebase está saturado. El cambio se guardará en cuanto se pueda.",
+          timer: 2200,
+          showConfirmButton: false,
+        })
+      } else if (!silencioso && !diferido) {
         const signo = cambio > 0 ? "+" : ""
         Swal.fire({
           icon: "success",
@@ -302,6 +331,8 @@ function Productos() {
   async function agregarProducto(e) {
     e.preventDefault()
     if (!esTiendaPropia) return
+    if (editandoId && !puedeEditarProductos()) return
+    if (!editandoId && !puedeCrearProductos()) return
     if (guardandoRef.current) return
 
     const marcaLimpia = marca.trim()
@@ -316,7 +347,7 @@ function Productos() {
       !categoriaLimpia ||
       !modeloLimpio ||
       precio === "" ||
-      (!editandoId && stock === "")
+      stock === ""
     ) {
       Swal.fire({
         icon: "warning",
@@ -334,7 +365,7 @@ function Productos() {
       return
     }
 
-    if (!editandoId && (!Number.isInteger(stockNumeroVal) || stockNumeroVal < 0)) {
+    if (!Number.isInteger(stockNumeroVal) || stockNumeroVal < 0) {
       Swal.fire({
         icon: "warning",
         title: "Stock inválido",
@@ -371,12 +402,32 @@ function Productos() {
           modelo: modeloLimpio,
           codigo: codigoLimpio,
           precio: precioNumero,
+          tiendaId: tiendaActual.id,
         }
 
         await updateDoc(doc(db, "productos", editandoId), datos)
         setProductosLive((lista) =>
           lista.map((p) => (p.id === editandoId ? { ...p, ...datos } : p))
         )
+
+        const actual = productos.find((p) => p.id === editandoId)
+        const stockActual = Number(actual?.stock)
+        const deltaStock = stockNumeroVal - stockActual
+        if (Number.isInteger(deltaStock) && deltaStock !== 0) {
+          const ok = await aplicarDelta(
+            { ...(actual || {}), ...datos, id: editandoId, stock: stockActual },
+            deltaStock,
+            { silencioso: true }
+          )
+          if (!ok) {
+            Swal.fire({
+              icon: "warning",
+              title: "Producto actualizado, stock no",
+              text: "Se guardaron marca, modelo y precio. El stock no cambió. Intenta el ajuste otra vez.",
+            })
+            return
+          }
+        }
 
         Swal.fire({
           icon: "success",
@@ -437,7 +488,7 @@ function Productos() {
 
   // ELIMINAR
   async function eliminarProducto(id) {
-    if (!esTiendaPropia) return
+    if (!esTiendaPropia || !puedeEliminarProductos()) return
 
     Swal.fire({
       title: "¿Eliminar producto?",
@@ -566,7 +617,7 @@ function Productos() {
       <div className="flex flex-col lg:flex-row lg:justify-between gap-6">
 
         <div>
-          <h1 className="text-5xl font-black text-slate-800 dark:text-white">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-800 dark:text-white break-words">
             Productos
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2">
@@ -576,11 +627,11 @@ function Productos() {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <select
             value={filtroMarca}
             onChange={(e) => setFiltroMarca(e.target.value)}
-            className="p-3 rounded-2xl border dark:bg-slate-900 dark:text-white min-w-[160px]"
+            className="p-3 rounded-2xl border dark:bg-slate-900 dark:text-white w-full sm:min-w-[160px]"
           >
             <option value="">Todas las marcas</option>
             {marcas.map((m) => (
@@ -591,7 +642,7 @@ function Productos() {
           <select
             value={filtroCategoria}
             onChange={(e) => setFiltroCategoria(e.target.value)}
-            className="p-3 rounded-2xl border dark:bg-slate-900 dark:text-white min-w-[160px]"
+            className="p-3 rounded-2xl border dark:bg-slate-900 dark:text-white w-full sm:min-w-[160px]"
           >
             <option value="">Todas las categorías</option>
             {categorias.map((c) => (
@@ -602,7 +653,7 @@ function Productos() {
           <select
             value={filtroStock}
             onChange={(e) => setFiltroStock(e.target.value)}
-            className="p-3 rounded-2xl border dark:bg-slate-900 dark:text-white min-w-[160px]"
+            className="p-3 rounded-2xl border dark:bg-slate-900 dark:text-white w-full sm:min-w-[160px]"
           >
             <option value="">Todo el stock</option>
             <option value="no_hay">No hay (0)</option>
@@ -611,7 +662,7 @@ function Productos() {
             <option value="ok">Con stock</option>
           </select>
 
-          <div className="relative flex-1 min-w-[220px]">
+          <div className="relative w-full min-w-0 sm:flex-1 sm:min-w-[220px]">
             <PackageSearch
               className="absolute left-4 top-4 text-slate-400"
               size={20}
@@ -670,7 +721,7 @@ function Productos() {
             <h2 className="text-2xl font-black">PRO</h2>
           </div>
 
-          {puedeEditar && (
+          {puedeCrear && (
           <button
             onClick={() => {
               limpiarFormulario()
@@ -721,7 +772,8 @@ function Productos() {
           </p>
         )}
 
-        <table className="w-full">
+        <div className="tabla-scroll">
+        <table className="w-full min-w-[860px]">
 
           <thead className="bg-slate-100 dark:bg-slate-800">
             <tr>
@@ -732,7 +784,7 @@ function Productos() {
               <th className="p-4 text-left dark:text-white">Precio</th>
               <th className="p-4 text-left dark:text-white min-w-[160px]">
                 Stock
-                {puedeEditar && (
+                {puedeStock && (
                   <span className="block text-xs font-normal text-slate-400">
                     −1 / +1
                   </span>
@@ -852,7 +904,7 @@ function Productos() {
                         guardando…
                       </span>
                     )}
-                    {puedeEditar && (
+                    {puedeStock && (
                       <div className="flex items-center gap-1.5 mt-2">
                         <button
                           type="button"
@@ -878,8 +930,9 @@ function Productos() {
                 </td>
 
                 <td className="p-4">
-                  {puedeEditar ? (
+                  {puedeEditarDatos || puedeStock || puedeBorrar ? (
                     <div className="flex gap-2">
+                      {puedeStock && (
                       <button
                         type="button"
                         onClick={() => abrirAjuste(p)}
@@ -889,6 +942,8 @@ function Productos() {
                       >
                         <SlidersHorizontal size={18} />
                       </button>
+                      )}
+                      {puedeEditarDatos && (
                       <button
                         type="button"
                         onClick={() => editarProducto(p)}
@@ -898,6 +953,8 @@ function Productos() {
                       >
                         <Pencil size={18} />
                       </button>
+                      )}
+                      {puedeBorrar && (
                       <button
                         type="button"
                         onClick={() => eliminarProducto(p.id)}
@@ -907,6 +964,7 @@ function Productos() {
                       >
                         <Trash2 size={18} />
                       </button>
+                      )}
                     </div>
                   ) : (
                     <span className="text-xs text-slate-400">Solo ver</span>
@@ -920,6 +978,7 @@ function Productos() {
           </tbody>
 
         </table>
+        </div>
 
         {totalPaginas > 1 && (
           <div className="flex flex-wrap items-center justify-between gap-4 p-4 border-t dark:border-slate-800">
@@ -969,8 +1028,8 @@ function Productos() {
           </button>
 
           {resumenAbierto && (
-          <div className="px-6 pb-6 overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="px-4 sm:px-6 pb-6 tabla-scroll">
+            <table className="w-full text-sm min-w-[480px]">
               <thead>
                 <tr className="border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                   <th className="p-4 text-left dark:text-white">Categoría</th>
@@ -1083,22 +1142,16 @@ function Productos() {
             type="text"
             className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
-          {editandoId ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              El stock se cambia con −1 / +1 o Ajustar. No se edita aquí.
-            </p>
-          ) : (
-            <input
-              value={stock}
-              onChange={(e) => cambiarStock(e.target.value)}
-              placeholder="Stock inicial"
-              inputMode="numeric"
-              type="text"
-              className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-            />
-          )}
+          <input
+            value={stock}
+            onChange={(e) => cambiarStock(e.target.value)}
+            placeholder="Stock"
+            inputMode="numeric"
+            type="text"
+            className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
 
-          {puedeEditar && (
+          {(editandoId ? puedeEditarDatos : puedeCrear) && (
             <button
               type="submit"
               disabled={guardando}

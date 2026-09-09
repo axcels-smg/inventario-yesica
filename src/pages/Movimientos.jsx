@@ -1,8 +1,6 @@
-import { useEffect, useState } from "react"
-import { collection, getDocs } from "firebase/firestore"
+import { useCallback, useEffect, useState } from "react"
 import { History } from "lucide-react"
 
-import { db } from "../firebase"
 import { obtenerTiempoFecha } from "../utils/fechas"
 import { ETIQUETAS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
@@ -26,18 +24,12 @@ function Movimientos() {
   const [filtroTipo, setFiltroTipo] = useState("")
   const [cargando, setCargando] = useState(true)
 
-  useEffect(() => {
-    if (tiendaActual) {
-      cargarMovimientos()
-    }
-  }, [tiendaActual?.id])
-
-  async function cargarMovimientos() {
+  const cargarMovimientos = useCallback(async () => {
     if (!tiendaActual) return
 
     try {
       setCargando(true)
-      const lista = await listarPorTienda("movimientos", tiendaActual.id)
+      const lista = await listarPorTienda("movimientos", tiendaActual.id, { force: true })
 
       lista.sort(
         (a, b) =>
@@ -51,7 +43,13 @@ function Movimientos() {
     } finally {
       setCargando(false)
     }
-  }
+  }, [tiendaActual])
+
+  useEffect(() => {
+    if (tiendaActual) {
+      cargarMovimientos()
+    }
+  }, [tiendaActual, cargarMovimientos])
 
   const listaFiltrada = filtroTipo
     ? movimientos.filter((m) => m.tipo === filtroTipo)
@@ -64,7 +62,7 @@ function Movimientos() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-5xl font-black text-slate-800 dark:text-white flex items-center gap-3">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-800 dark:text-white flex items-center gap-3 break-words">
           <History size={40} />
           Movimientos
         </h1>

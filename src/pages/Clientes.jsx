@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react"
+import { useCallback, useEffect, useState, useRef } from "react"
 import Swal from "sweetalert2"
 import { Pencil, Search, Trash2, X } from "lucide-react"
 
@@ -6,19 +6,20 @@ import { db } from "../firebase"
 import {
   collection,
   addDoc,
-  getDocs,
   deleteDoc,
   doc,
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore"
 import { useTienda } from "../context/TiendaContext"
-import { listarPorTienda } from "../utils/consultasTienda"
+import { useRol } from "../context/RolContext"
+import { listarPorTienda, invalidarCacheTienda } from "../utils/consultasTienda"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { errorOperacion } from "../utils/erroresUi"
 
 function Clientes() {
   const { tiendaActual, esTiendaPropia } = useTienda()
+  const { puedeCrearClientes, puedeEditarClientes, puedeEliminarClientes } = useRol()
 
   const [clientes, setClientes] = useState([])
 
@@ -31,17 +32,11 @@ function Clientes() {
   const [guardando, setGuardando] = useState(false)
   const guardandoRef = useRef(false)
 
-  useEffect(() => {
-    if (tiendaActual) {
-      cargarClientes()
-    }
-  }, [tiendaActual?.id])
-
-  async function cargarClientes() {
+  const cargarClientes = useCallback(async () => {
     if (!tiendaActual) return
 
     try {
-      const lista = await listarPorTienda("clientes", tiendaActual.id)
+      const lista = await listarPorTienda("clientes", tiendaActual.id, { force: true })
 
       lista.sort((a, b) =>
         String(a.nombre || "").localeCompare(String(b.nombre || ""))
@@ -52,7 +47,13 @@ function Clientes() {
     } catch (error) {
       console.log(error)
     }
-  }
+  }, [tiendaActual])
+
+  useEffect(() => {
+    if (tiendaActual) {
+      cargarClientes()
+    }
+  }, [tiendaActual, cargarClientes])
 
   function limpiarFormulario() {
     setNombre("")
@@ -73,6 +74,8 @@ function Clientes() {
   async function guardarCliente(e) {
     e.preventDefault()
     if (!esTiendaPropia) return
+    if (editandoId && !puedeEditarClientes()) return
+    if (!editandoId && !puedeCrearClientes()) return
     if (guardandoRef.current) return
 
     const nombreLimpio = nombre.trim()
@@ -117,8 +120,9 @@ function Clientes() {
         title: editandoId ? "Cliente actualizado" : "Cliente agregado",
       })
 
+      invalidarCacheTienda("clientes", tiendaActual.id)
       limpiarFormulario()
-      cargarClientes()
+      await cargarClientes()
 
     } catch (error) {
       errorOperacion(error, "Error al guardar")
@@ -129,6 +133,7 @@ function Clientes() {
   }
 
   async function eliminarCliente(id) {
+    if (!esTiendaPropia || !puedeEliminarClientes()) return
     const result = await Swal.fire({
       title: "¿Eliminar cliente?",
       icon: "warning",
@@ -148,11 +153,12 @@ function Clientes() {
         title: "Cliente eliminado",
       })
 
+      invalidarCacheTienda("clientes", tiendaActual.id)
       if (editandoId === id) {
         limpiarFormulario()
       }
 
-      cargarClientes()
+      await cargarClientes()
 
     } catch (error) {
       errorOperacion(error, "Error al eliminar")
@@ -186,7 +192,7 @@ function Clientes() {
     <div className="space-y-8">
 
       <div>
-        <h1 className="text-5xl font-black text-slate-800 dark:text-white">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-800 dark:text-white break-words">
           Clientes
         </h1>
 
@@ -199,7 +205,7 @@ function Clientes() {
 
         <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
 
-          <h2 className="text-3xl font-black mb-6 dark:text-white">
+          <h2 className="text-2xl sm:text-3xl font-black mb-6 dark:text-white">
             {editandoId ? "Editar Cliente" : "Nuevo Cliente"}
           </h2>
 
@@ -233,7 +239,8 @@ function Clientes() {
               className="p-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
 
-            {esTiendaPropia && (
+            {esTiendaPropia &&
+              (editandoId ? puedeEditarClientes() : puedeCrearClientes()) && (
               <button
                 type="submit"
                 disabled={guardando}
@@ -265,7 +272,7 @@ function Clientes() {
 
         <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
 
-          <h2 className="text-3xl font-black mb-6 dark:text-white">
+          <h2 className="text-2xl sm:text-3xl font-black mb-6 dark:text-white">
             Lista de Clientes
           </h2>
 
@@ -308,7 +315,7 @@ function Clientes() {
                 </div>
 
                 <div className="flex gap-2 self-end sm:self-auto">
-                  {esTiendaPropia && (
+                  {esTiendaPropia && puedeEditarClientes() && (
                     <button
                       onClick={() => editarCliente(cliente)}
                       className="flex items-center gap-2 bg-yellow-500 text-white px-4 py-3 rounded-2xl hover:bg-yellow-600 transition"
@@ -318,7 +325,7 @@ function Clientes() {
                     </button>
                   )}
 
-                  {esTiendaPropia && (
+                  {esTiendaPropia && puedeEliminarClientes() && (
                     <button
                       onClick={() => eliminarCliente(cliente.id)}
                       className="flex items-center gap-2 bg-red-500 text-white px-4 py-3 rounded-2xl hover:bg-red-600 transition"

@@ -19,6 +19,7 @@ import {
   Cell,
 } from "recharts"
 import { useTienda } from "../context/TiendaContext"
+import { useRol } from "../context/RolContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import { esStockBajo, esStockAgotado } from "../utils/stock"
 import { listarPorTienda } from "../utils/consultasTienda"
@@ -26,6 +27,8 @@ import { esErrorCuota } from "../utils/cuotaFirebase"
 
 function DashboardGlobal() {
   const { tiendas } = useTienda()
+  const { esSuperAdmin } = useRol()
+  const permitido = esSuperAdmin()
   const { todosLosProductos } = useProductosLive()
   const [ventas, setVentas] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -34,10 +37,14 @@ function DashboardGlobal() {
     let cancelado = false
 
     async function cargarVentas() {
+      if (!permitido) {
+        setCargando(false)
+        return
+      }
       try {
         setCargando(true)
         const listas = await Promise.all(
-          tiendas.map((tienda) => listarPorTienda("ventas", tienda.id))
+          tiendas.map((tienda) => listarPorTienda("ventas", tienda.id, { force: true }))
         )
         if (!cancelado) setVentas(listas.flat())
       } catch (error) {
@@ -55,7 +62,7 @@ function DashboardGlobal() {
     return () => {
       cancelado = true
     }
-  }, [tiendas])
+  }, [tiendas, permitido])
 
   const ventasActivas = ventas.filter((v) => !v.anulada)
 
@@ -100,7 +107,7 @@ function DashboardGlobal() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-5xl font-black text-slate-800 dark:text-white">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-800 dark:text-white break-words">
           Dashboard Global
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
@@ -173,7 +180,8 @@ function DashboardGlobal() {
                 <ShoppingCart size={20} />
                 Ventas por Tienda
               </h3>
-              <ResponsiveContainer width="100%" height={300}>
+              <div className="h-[200px] sm:h-[280px] w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={datosConsolidados.ventasPorTienda}>
                   <XAxis dataKey="nombre" />
                   <YAxis />
@@ -181,6 +189,7 @@ function DashboardGlobal() {
                   <Bar dataKey="ventas" fill="#3b82f6" />
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             </div>
 
             {/* Ingresos por Tienda */}
@@ -189,7 +198,8 @@ function DashboardGlobal() {
                 <DollarSign size={20} />
                 Ingresos por Tienda
               </h3>
-              <ResponsiveContainer width="100%" height={300}>
+              <div className="h-[200px] sm:h-[280px] w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={datosConsolidados.ingresosPorTienda}>
                   <XAxis dataKey="nombre" />
                   <YAxis />
@@ -197,6 +207,7 @@ function DashboardGlobal() {
                   <Bar dataKey="ingresos" fill="#10b981" />
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             </div>
 
             {/* Productos por Tienda */}
@@ -205,7 +216,8 @@ function DashboardGlobal() {
                 <Package size={20} />
                 Productos por Tienda
               </h3>
-              <ResponsiveContainer width="100%" height={300}>
+              <div className="h-[200px] sm:h-[280px] w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={datosConsolidados.productosPorTienda}>
                   <XAxis dataKey="nombre" />
                   <YAxis />
@@ -213,6 +225,7 @@ function DashboardGlobal() {
                   <Bar dataKey="productos" fill="#f59e0b" />
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             </div>
 
             {/* Distribución de Ingresos */}
@@ -221,7 +234,8 @@ function DashboardGlobal() {
                 <PieChartIcon size={20} />
                 Distribución de Ingresos
               </h3>
-              <ResponsiveContainer width="100%" height={300}>
+              <div className="h-[200px] sm:h-[280px] w-full min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={datosConsolidados.ingresosPorTienda}
@@ -240,6 +254,7 @@ function DashboardGlobal() {
                   <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
+              </div>
             </div>
           </div>
 
@@ -249,7 +264,7 @@ function DashboardGlobal() {
               <BarChart3 size={20} />
               Resumen por Tienda
             </h3>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto tabla-scroll">
               <table className="w-full">
                 <thead>
                   <tr className="border-b dark:border-slate-700">

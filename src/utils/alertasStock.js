@@ -155,8 +155,11 @@ export async function obtenerHistorialAlertas(tiendaId) {
 /**
  * Genera una lista acumulativa de productos sin stock
  */
-export function generarListaAcumulativa(alertas) {
+export function generarListaAcumulativa(alertas, productosActuales = []) {
   const productosUnicos = new Map()
+  const actuales = new Map(
+    (productosActuales || []).filter((p) => p?.id).map((p) => [p.id, p])
+  )
 
   alertas.forEach((alerta) => {
     (alerta.productos || []).forEach((producto) => {
@@ -171,13 +174,25 @@ export function generarListaAcumulativa(alertas) {
     })
   })
 
-  return Array.from(productosUnicos.values())
+  return Array.from(productosUnicos.values()).map((producto) => {
+    const vivo = actuales.get(producto.id)
+    if (!vivo) return producto
+    return {
+      ...producto,
+      stock: vivo.stock,
+      precio: vivo.precio ?? producto.precio,
+      marca: vivo.marca || producto.marca,
+      modelo: vivo.modelo || producto.modelo,
+      categoria: vivo.categoria || producto.categoria,
+      nombre:
+        `${vivo.marca || ""} ${vivo.modelo || ""}`.trim() || producto.nombre,
+    }
+  })
 }
 
 export async function existeAlertaHoy(tiendaId) {
   const hoy = new Date()
   const fechaKey = obtenerFechaKey(hoy)
-  const docId = tiendaId ? `${tiendaId}_${fechaKey}` : fechaKey
 
   const q = query(
     collection(db, "alertas_stock"),

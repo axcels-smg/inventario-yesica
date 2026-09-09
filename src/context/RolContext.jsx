@@ -143,8 +143,13 @@ export function RolProvider({ children }) {
     return tienePermiso("ventas")
   }
 
+  function cambiarRol() {
+    return undefined
+  }
+
   const value = {
     rolActual,
+    cambiarRol,
     tienePermiso,
     esSuperAdmin,
     esAdminTienda,

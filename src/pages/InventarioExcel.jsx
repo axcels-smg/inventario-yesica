@@ -1,7 +1,7 @@
 import { useRef, useState } from "react"
 import Swal from "sweetalert2"
 import { FileDown, FileUp, Table, Store } from "lucide-react"
-import { collection, writeBatch, doc } from "firebase/firestore"
+import { collection, writeBatch, doc, runTransaction } from "firebase/firestore"
 
 import { db } from "../firebase"
 import {
@@ -94,6 +94,7 @@ function InventarioExcel() {
   }
 
   async function manejarArchivo(e) {
+    if (!esTiendaPropia) return
     const archivo = e.target.files?.[0]
     if (!archivo) return
 
@@ -111,8 +112,8 @@ function InventarioExcel() {
       }
 
       const confirmacion = await Swal.fire({
-        title: `¿Importar ${productos.length} productos?`,
-        text: "Se agregarán como registros nuevos en Firebase",
+        title: `¿Importar ${productos.length} filas?`,
+        text: "Si ya existe la misma marca, categoría y modelo, se actualiza el stock y el precio. Si no existe, se crea.",
         icon: "question",
         showCancelButton: true,
         confirmButtonText: "Importar",
@@ -122,35 +123,53 @@ function InventarioExcel() {
 
       setImportando(true)
 
-      const deEstaTienda = productosLive
-      const clavesVistas = new Set(
-        deEstaTienda.map((p) => claveModeloProducto(p))
-      )
+      const porClave = new Map()
+      productosLive.forEach((p) => {
+        const clave = claveModeloProducto(p)
+        if (!clave || clave === "||||" || porClave.has(clave)) return
+        porClave.set(clave, p)
+      })
 
-      const nuevos = []
-      let omitidos = 0
+      const actualizaciones = new Map()
+      const nuevos = new Map()
+      let invalidos = 0
 
       for (const p of productos) {
         const clave = claveModeloProducto(p)
         if (!clave || clave === "||||") {
-          omitidos += 1
+          invalidos += 1
           continue
         }
-        if (clavesVistas.has(clave)) {
-          omitidos += 1
-          continue
+        const existente = porClave.get(clave)
+        if (existente?.id) {
+          actualizaciones.set(existente.id, {
+            id: existente.id,
+            codigo: p.codigo || existente.codigo || "",
+            marca: p.marca,
+            categoria: p.categoria,
+            modelo: p.modelo,
+            precio: p.tienePrecio ? p.precio : existente.precio,
+            stock: p.tieneStock ? p.stock : existente.stock,
+            stockOrigen: Number(existente.stock) || 0,
+            tienePrecio: p.tienePrecio,
+            tieneStock: p.tieneStock,
+          })
+        } else {
+          nuevos.set(clave, p)
+          porClave.set(clave, p)
         }
-        clavesVistas.add(clave)
-        nuevos.push(p)
       }
 
-      if (nuevos.length === 0) {
+      const listaNuevos = [...nuevos.values()]
+      const listaUpdates = [...actualizaciones.values()]
+
+      if (listaNuevos.length === 0 && listaUpdates.length === 0) {
         Swal.fire({
           icon: "info",
           title: "Nada que importar",
           text:
-            omitidos > 0
-              ? `Se omitieron ${omitidos} porque ya existe la misma marca, categoría y modelo, o faltan datos.`
+            invalidos > 0
+              ? `${invalidos} filas sin marca/categoría/modelo válidos.`
               : "No hay productos válidos en el archivo",
         })
         return
@@ -158,9 +177,57 @@ function InventarioExcel() {
 
       const LOTE = 400
       let importados = 0
+      let actualizados = 0
 
-      for (let i = 0; i < nuevos.length; i += LOTE) {
-        const trozo = nuevos.slice(i, i + LOTE)
+      for (const p of listaUpdates) {
+        if (!p.tieneStock) continue
+        await runTransaction(db, async (transaction) => {
+          const ref = doc(db, "productos", p.id)
+          const snap = await transaction.get(ref)
+          if (!snap.exists()) return
+          const actual = Number(snap.data().stock)
+          const origen = Number(p.stockOrigen)
+          const base = Number.isFinite(origen) ? origen : actual
+          const delta = p.stock - base
+          const nuevo = (Number.isFinite(actual) ? actual : 0) + delta
+          if (nuevo < 0) {
+            throw new Error(
+              `El stock de ${p.marca} ${p.modelo} quedaría en ${nuevo}. Revisa el Excel.`
+            )
+          }
+          const datos = {
+            codigo: p.codigo || "",
+            marca: p.marca,
+            categoria: p.categoria,
+            modelo: p.modelo,
+            stock: nuevo,
+          }
+          if (p.tienePrecio) datos.precio = p.precio
+          transaction.update(ref, datos)
+        })
+        actualizados += 1
+      }
+
+      const soloDatos = listaUpdates.filter((p) => !p.tieneStock)
+      for (let i = 0; i < soloDatos.length; i += LOTE) {
+        const trozo = soloDatos.slice(i, i + LOTE)
+        const batch = writeBatch(db)
+        trozo.forEach((p) => {
+          const datos = {
+            codigo: p.codigo || "",
+            marca: p.marca,
+            categoria: p.categoria,
+            modelo: p.modelo,
+          }
+          if (p.tienePrecio) datos.precio = p.precio
+          batch.update(doc(db, "productos", p.id), datos)
+        })
+        await batch.commit()
+        actualizados += trozo.length
+      }
+
+      for (let i = 0; i < listaNuevos.length; i += LOTE) {
+        const trozo = listaNuevos.slice(i, i + LOTE)
         const batch = writeBatch(db)
 
         trozo.forEach((p) => {
@@ -170,8 +237,8 @@ function InventarioExcel() {
             marca: p.marca,
             categoria: p.categoria,
             modelo: p.modelo,
-            precio: p.precio,
-            stock: p.stock,
+            precio: p.tienePrecio ? p.precio : 0,
+            stock: p.tieneStock ? p.stock : 0,
             tiendaId: tiendaActual.id,
           })
         })
@@ -182,20 +249,17 @@ function InventarioExcel() {
 
       await registrarMovimiento({
         tipo: TIPOS_MOVIMIENTO.IMPORTACION,
-        detalle: `Importados ${importados} productos desde Excel${
-          omitidos ? ` (${omitidos} omitidos por duplicado marca/categoría/modelo)` : ""
+        detalle: `Excel: ${importados} nuevos, ${actualizados} actualizados${
+          invalidos ? `, ${invalidos} filas inválidas` : ""
         }`,
-        cantidad: importados,
+        cantidad: importados + actualizados,
         tiendaId: tiendaActual.id,
       })
 
       Swal.fire({
         icon: "success",
         title: "Importación completa",
-        text:
-          omitidos > 0
-            ? `${importados} agregados. ${omitidos} omitidos (misma marca, categoría y modelo).`
-            : `${importados} productos agregados`,
+        text: `${importados} agregados. ${actualizados} con stock/precio actualizado.`,
       })
 
       setVistaPrevia([])
@@ -212,7 +276,7 @@ function InventarioExcel() {
       <AvisoOtraTienda />
 
       <div>
-        <h1 className="text-5xl font-black text-slate-800 dark:text-white flex items-center gap-3">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-800 dark:text-white flex items-center gap-3 break-words">
           <Table size={40} />
           Excel — Inventario
         </h1>
@@ -273,7 +337,7 @@ function InventarioExcel() {
           <FileDown className="text-green-600 mb-3" size={32} />
           <h3 className="font-bold text-lg dark:text-white">Exportar simple</h3>
           <p className="text-slate-500 text-sm mt-1">
-            Una sola hoja, para reimportar
+            Una sola hoja. Al reimportar se actualiza el stock de lo que ya existe.
           </p>
         </button>
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Swal from "sweetalert2"
 import { Minus, PackageSearch, Plus, Trash2 } from "lucide-react"
 
@@ -10,14 +10,16 @@ import {
 } from "firebase/firestore"
 
 import { db } from "../firebase"
-import { obtenerSiguienteNumeroBoleta, formatearNumeroBoleta } from "../utils/boleta"
+import { formatearNumeroBoleta } from "../utils/boleta"
 import { enlaceWhatsAppTexto, textoReciboVenta } from "../utils/reciboCliente"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
+import { useRol } from "../context/RolContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import { listarPorTienda, invalidarCacheTienda } from "../utils/consultasTienda"
 import { errorOperacion } from "../utils/erroresUi"
+import { sincronizarCicloDescuentos } from "../utils/reportePantallas"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 import {
@@ -29,6 +31,7 @@ import {
 
 function Ventas() {
   const { tiendaActual, esTiendaPropia } = useTienda()
+  const { puedeVender } = useRol()
   const { productos, setProductos, cargando: cargandoProductos } = useProductosLive()
   const [clientes, setClientes] = useState([])
 
@@ -38,18 +41,13 @@ function Ventas() {
   const [filtroMarca, setFiltroMarca] = useState("")
   const [filtroCategoria, setFiltroCategoria] = useState("")
   const [vendiendo, setVendiendo] = useState(false)
+  const vendiendoRef = useRef(false)
 
-  useEffect(() => {
-    if (tiendaActual) {
-      cargarClientes()
-    }
-  }, [tiendaActual?.id])
-
-  async function cargarClientes() {
+  const cargarClientes = useCallback(async () => {
     if (!tiendaActual) return
 
     try {
-      const lista = await listarPorTienda("clientes", tiendaActual.id)
+      const lista = await listarPorTienda("clientes", tiendaActual.id, { force: true })
 
       lista.sort((a, b) =>
         String(a.nombre || "").localeCompare(String(b.nombre || ""))
@@ -60,7 +58,13 @@ function Ventas() {
     } catch (error) {
       errorOperacion(error, "Error cargando clientes")
     }
-  }
+  }, [tiendaActual])
+
+  useEffect(() => {
+    if (tiendaActual) {
+      cargarClientes()
+    }
+  }, [tiendaActual, cargarClientes])
 
   function obtenerStockProducto(id) {
     const producto = productos.find((p) => p.id === id)
@@ -179,6 +183,7 @@ function Ventas() {
   )
 
   async function finalizarVenta() {
+    if (vendiendoRef.current) return
 
     if (!clienteSeleccionado) {
       return Swal.fire({
@@ -216,10 +221,12 @@ function Ventas() {
     })
 
     if (!confirmacion.isConfirmed) return
+    if (vendiendoRef.current) return
+
+    vendiendoRef.current = true
+    setVendiendo(true)
 
     try {
-      setVendiendo(true)
-
       const clienteData = clientes.find(
         (c) => c.id === clienteSeleccionado
       )
@@ -229,12 +236,19 @@ function Ventas() {
         cantidad: Number(item.cantidad),
       }))
 
-      const numeroBoleta = await obtenerSiguienteNumeroBoleta()
       const ventaRef = doc(collection(db, "ventas"))
-      const movimientosPendientes = []
+      const contadorRef = doc(db, "config", `boleta_${tiendaActual.id}`)
+      let numeroBoleta = 0
+      let movimientosPendientes = []
 
       await runTransaction(db, async (transaction) => {
+        movimientosPendientes = []
         const productosActuales = []
+
+        const contadorSnap = await transaction.get(contadorRef)
+        numeroBoleta = contadorSnap.exists()
+          ? Number(contadorSnap.data().numeroBoleta || 0) + 1
+          : 1
 
         for (const item of productosVenta) {
           const productoRef = doc(db, "productos", item.id)
@@ -245,6 +259,9 @@ function Ventas() {
           }
 
           const productoActual = productoSnap.data()
+          if (productoActual.tiendaId && productoActual.tiendaId !== tiendaActual.id) {
+            throw new Error(`${item.marca} no pertenece a esta tienda`)
+          }
           const stockActual = Number(productoActual.stock)
 
           if (!Number.isFinite(stockActual)) {
@@ -269,6 +286,8 @@ function Ventas() {
             stockDespues: stockActual - item.cantidad,
           })
         }
+
+        transaction.set(contadorRef, { numeroBoleta }, { merge: true })
 
         productosActuales.forEach(({ ref, stock, item }) => {
           transaction.update(ref, {
@@ -321,6 +340,7 @@ function Ventas() {
       )
       invalidarCacheTienda("ventas", tiendaActual.id)
       invalidarCacheTienda("productos", tiendaActual.id)
+      sincronizarCicloDescuentos(tiendaActual.id, tiendaActual.nombre).catch(() => {})
 
       const envio = await Swal.fire({
         icon: "success",
@@ -342,6 +362,7 @@ function Ventas() {
     } catch (error) {
       errorOperacion(error, "Error al vender")
     } finally {
+      vendiendoRef.current = false
       setVendiendo(false)
     }
   }
@@ -365,7 +386,7 @@ function Ventas() {
 
   const hayMasResultados = totalCoincidencias > MAX_RESULTADOS_VENTAS
 
-  if (!esTiendaPropia) {
+  if (!esTiendaPropia || !puedeVender()) {
     return <AvisoOtraTienda modo="bloqueo" />
   }
 
@@ -373,7 +394,7 @@ function Ventas() {
     <div className="space-y-8">
 
       <div>
-        <h1 className="text-5xl font-black text-slate-800 dark:text-white">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-800 dark:text-white break-words">
           Ventas
         </h1>
 
@@ -385,10 +406,10 @@ function Ventas() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 min-w-0">
 
           <div className="flex flex-col gap-4 mb-6">
-            <h2 className="text-3xl font-bold dark:text-white">
+            <h2 className="text-2xl sm:text-3xl font-bold dark:text-white">
               Buscar producto
             </h2>
 
@@ -513,9 +534,9 @@ function Ventas() {
 
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 min-w-0">
 
-          <h2 className="text-3xl font-bold mb-6 dark:text-white">
+          <h2 className="text-2xl sm:text-3xl font-bold mb-6 dark:text-white">
             Carrito
           </h2>
 

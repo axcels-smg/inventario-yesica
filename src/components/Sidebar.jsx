@@ -17,6 +17,7 @@ import {
 import { useStockBajo } from "../hooks/useStockBajo"
 import { useTienda } from "../context/TiendaContext"
 import { useAuth } from "../context/AuthContext"
+import { useRol } from "../context/RolContext"
 
 import { NavLink, useNavigate } from "react-router-dom"
 import { useState } from "react"
@@ -28,6 +29,7 @@ function Sidebar({ onNavigate }) {
   const { tiendaActual, tiendaPropia, esTiendaPropia, tiendas, seleccionarTienda, cargando } = useTienda()
   const { cantidad: stockBajoCantidad } = useStockBajo(tiendaActual?.id)
   const { logout, cambiarPassword } = useAuth()
+  const { esSuperAdmin, puedeHacerTransferencias } = useRol()
   const navigate = useNavigate()
   const [selectorAbierto, setSelectorAbierto] = useState(false)
 
@@ -155,16 +157,22 @@ function Sidebar({ onNavigate }) {
       path: "/transferencias",
       icon: <ArrowRight size={22} />,
     },
-  ]
+  ].filter((link) => {
+    if (link.path === "/global") return esSuperAdmin()
+    if (link.path === "/transferencias") return puedeHacerTransferencias()
+    return true
+  })
 
   return (
     <div
       className="
-        w-[300px]
+        w-full
         h-full
+        min-h-0
         flex
         flex-col
-        p-6
+        p-4
+        sm:p-6
         pt-14
         lg:pt-6
         text-white
@@ -178,7 +186,7 @@ function Sidebar({ onNavigate }) {
     >
 
       <div className="shrink-0 mb-6 pb-6 border-b border-slate-800">
-        <h1 className="text-3xl lg:text-4xl font-black leading-tight">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-tight">
           <span className="text-blue-500">Inventario</span>
           <br />
           G.R.L.
@@ -202,7 +210,7 @@ function Sidebar({ onNavigate }) {
                 <p className="text-xs text-slate-400">
                   {esTiendaPropia ? "Tu tienda" : "Solo lectura"}
                 </p>
-                <p className="text-sm font-semibold text-white">
+                <p className="text-sm font-semibold text-white truncate max-w-[180px] sm:max-w-[200px]">
                   {cargando ? "Cargando..." : tiendaActual?.nombre || "Seleccionar tienda"}
                 </p>
               </div>

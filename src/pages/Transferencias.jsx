@@ -22,6 +22,7 @@ import {
 } from "firebase/firestore"
 import { db } from "../firebase"
 import { useTienda } from "../context/TiendaContext"
+import { useRol } from "../context/RolContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import { registrarMovimiento } from "../utils/movimientos"
 import {
@@ -29,8 +30,9 @@ import {
   ETIQUETAS_ESTADOS_TRANSFERENCIA,
   TIPOS_MOVIMIENTO,
 } from "../constants/inventario"
-import { claveModeloProducto } from "../utils/productos"
+import { claveModeloProducto, idProductoPorTienda } from "../utils/productos"
 import { errorOperacion } from "../utils/erroresUi"
+import { sincronizarCicloDescuentos } from "../utils/reportePantallas"
 
 function nombreExactoProducto(item) {
   const partes = [item.marca, item.categoria, item.modelo].filter((p) => String(p || "").trim())
@@ -53,6 +55,7 @@ function resumenTransferencia(transferencia) {
 
 function Transferencias() {
   const { tiendaPropia: tiendaActual, tiendas } = useTienda()
+  const { puedeHacerTransferencias } = useRol()
   const { productosPropios: productosOrigen } = useProductosLive()
   const [transferencias, setTransferencias] = useState([])
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -98,6 +101,7 @@ function Transferencias() {
 
   async function crearTransferencia(e) {
     e.preventDefault()
+    if (!puedeHacerTransferencias()) return
 
     if (!destinoTienda || !productoSeleccionado || !cantidad) {
       return Swal.fire({ icon: "warning", title: "Campos incompletos", text: "Completa todos los campos" })
@@ -108,11 +112,11 @@ function Transferencias() {
       return Swal.fire({ icon: "warning", title: "Producto no válido", text: "Selecciona un producto de la lista" })
     }
 
-    const cantidadNum = Number(cantidad)
+    const cantidadNum = Number.parseInt(String(cantidad).trim(), 10)
     const destino = tiendas.find((t) => t.id === destinoTienda)
 
-    if (cantidadNum <= 0) {
-      return Swal.fire({ icon: "warning", title: "Cantidad inválida", text: "La cantidad debe ser mayor a 0" })
+    if (!Number.isInteger(cantidadNum) || cantidadNum <= 0) {
+      return Swal.fire({ icon: "warning", title: "Cantidad inválida", text: "La cantidad debe ser un número entero mayor a 0" })
     }
 
     if (cantidadNum > Number(producto.stock || 0)) {
@@ -184,9 +188,8 @@ function Transferencias() {
   }
 
   async function enviarTransferencia(transferencia) {
+    if (!puedeHacerTransferencias()) return
     const r = resumenTransferencia(transferencia)
-    const yaDescontado = transferencia.estado === ESTADOS_TRANSFERENCIA.APROBADA
-
     const confirmacion = await Swal.fire({
       title: "¿Enviar ahora?",
       html: `
@@ -195,9 +198,7 @@ function Transferencias() {
           <p><b>De:</b> ${r.de}</p>
           <p><b>Para:</b> ${r.para}</p>
           <hr/>
-          <p>${yaDescontado
-            ? "El stock ya estaba reservado. Solo se marca como enviado."
-            : `Se descontará el stock de <b>${r.de}</b> ahora. En <b>${r.para}</b> se sumará cuando confirmen la recepción.`}</p>
+          <p>Se descontará el stock de <b>${r.de}</b> ahora. En <b>${r.para}</b> se sumará cuando confirmen la recepción.</p>
         </div>
       `,
       icon: "question",
@@ -215,34 +216,30 @@ function Transferencias() {
 
         const data = transSnap.data()
         const estado = data.estado
-        if (
-          estado !== ESTADOS_TRANSFERENCIA.PENDIENTE &&
-          estado !== ESTADOS_TRANSFERENCIA.APROBADA
-        ) {
+        if (estado !== ESTADOS_TRANSFERENCIA.PENDIENTE) {
           throw new Error("Esta transferencia ya no se puede enviar")
         }
 
         const lecturas = []
-        if (estado === ESTADOS_TRANSFERENCIA.PENDIENTE) {
-          for (const item of data.productos) {
-            const productoRef = doc(db, "productos", item.productoId)
-            const snap = await transaction.get(productoRef)
-            lecturas.push({ item, productoRef, snap })
+        for (const item of data.productos) {
+          const cantidadItem = Number(item.cantidad)
+          if (!Number.isInteger(cantidadItem) || cantidadItem <= 0) {
+            throw new Error(`Cantidad inválida en ${nombreExactoProducto(item)}`)
           }
+          const productoRef = doc(db, "productos", item.productoId)
+          const snap = await transaction.get(productoRef)
+          lecturas.push({ item, cantidadItem, productoRef, snap })
         }
 
-        if (estado === ESTADOS_TRANSFERENCIA.PENDIENTE) {
-          for (const { item, productoRef, snap } of lecturas) {
-            if (!snap.exists()) throw new Error(`No se encontró ${nombreExactoProducto(item)} en ${r.de}`)
-            const stockActual = Number(snap.data().stock || 0)
-            if (stockActual < item.cantidad) {
-              throw new Error(`Stock insuficiente de ${nombreExactoProducto(item)} en ${r.de}. Hay ${stockActual}, se necesitan ${item.cantidad}`)
-            }
-            transaction.update(productoRef, {
-              stock: stockActual - item.cantidad,
-              stockReservado: Math.max(0, Number(snap.data().stockReservado || 0)),
-            })
+        for (const { item, cantidadItem, productoRef, snap } of lecturas) {
+          if (!snap.exists()) throw new Error(`No se encontró ${nombreExactoProducto(item)} en ${r.de}`)
+          const stockActual = Number(snap.data().stock || 0)
+          if (stockActual < cantidadItem) {
+            throw new Error(`Stock insuficiente de ${nombreExactoProducto(item)} en ${r.de}. Hay ${stockActual}, se necesitan ${cantidadItem}`)
           }
+          transaction.update(productoRef, {
+            stock: stockActual - cantidadItem,
+          })
         }
 
         transaction.update(transRef, {
@@ -251,35 +248,33 @@ function Transferencias() {
         })
       })
 
-      if (!yaDescontado) {
-        for (const item of transferencia.productos) {
-          await registrarMovimiento({
-            tipo: TIPOS_MOVIMIENTO.TRANSFERENCIA_SALIDA,
-            productoId: item.productoId,
-            productoNombre: nombreExactoProducto(item),
-            cantidad: item.cantidad,
-            detalle: `Salida: ${item.cantidad} × ${nombreExactoProducto(item)} de ${r.de} hacia ${r.para}`,
-            tiendaId: transferencia.origenTiendaId,
-          })
-        }
+      for (const item of transferencia.productos) {
+        await registrarMovimiento({
+          tipo: TIPOS_MOVIMIENTO.TRANSFERENCIA_SALIDA,
+          productoId: item.productoId,
+          productoNombre: nombreExactoProducto(item),
+          cantidad: item.cantidad,
+          detalle: `Salida: ${item.cantidad} × ${nombreExactoProducto(item)} de ${r.de} hacia ${r.para}`,
+          tiendaId: transferencia.origenTiendaId,
+        })
       }
 
       Swal.fire({
         icon: "success",
         title: "Enviado",
-        text: yaDescontado
-          ? `En camino a ${r.para}.`
-          : `Se descontó de ${r.de}. ${r.para} debe confirmar la recepción para que se agregue el stock.`,
+        text: `Se descontó de ${r.de}. ${r.para} debe confirmar la recepción para que se agregue el stock.`,
         timer: 2500,
         showConfirmButton: false,
       })
       cargarTransferencias()
+      sincronizarCicloDescuentos(tiendaActual.id, tiendaActual.nombre).catch(() => {})
     } catch (error) {
       errorOperacion(error, "No se pudo enviar")
     }
   }
 
   async function completarTransferencia(transferencia) {
+    if (!puedeHacerTransferencias()) return
     const r = resumenTransferencia(transferencia)
     const confirmacion = await Swal.fire({
       title: "¿Confirmar recepción?",
@@ -307,40 +302,40 @@ function Transferencias() {
       const productosDestino = []
       snapDestino.forEach((d) => productosDestino.push({ id: d.id, ...d.data() }))
 
-      const coincidencias = (transferencia.productos || []).map((item) => {
-        const clave = claveModeloProducto(item)
-        const encontrado = productosDestino.find((p) => claveModeloProducto(p) === clave)
-        return {
-          item,
-          destinoId: encontrado?.id || null,
-          nuevoRef: encontrado ? null : doc(collection(db, "productos")),
-        }
-      })
+      let movimientosEntrada = []
 
       await runTransaction(db, async (transaction) => {
+        movimientosEntrada = []
         const transRef = doc(db, "transferencias", transferencia.id)
         const transSnap = await transaction.get(transRef)
         if (!transSnap.exists()) throw new Error("Transferencia no encontrada")
-        if (transSnap.data().estado !== ESTADOS_TRANSFERENCIA.EN_TRANSITO) {
+        const data = transSnap.data()
+        if (data.estado !== ESTADOS_TRANSFERENCIA.EN_TRANSITO) {
           throw new Error("Esta transferencia no está en tránsito")
         }
 
         const lecturasDestino = []
-        for (const c of coincidencias) {
-          if (c.destinoId) {
-            const ref = doc(db, "productos", c.destinoId)
-            const snap = await transaction.get(ref)
-            lecturasDestino.push({ ...c, ref, snap })
-          } else {
-            lecturasDestino.push({ ...c, ref: c.nuevoRef, snap: null })
+        for (const item of data.productos || []) {
+          const qty = Number(item.cantidad)
+          if (!Number.isInteger(qty) || qty <= 0) {
+            throw new Error(`Cantidad inválida en ${nombreExactoProducto(item)}`)
           }
+          const clave = claveModeloProducto(item)
+          const encontrado = productosDestino.find((p) => claveModeloProducto(p) === clave)
+          const ref = encontrado?.id
+            ? doc(db, "productos", encontrado.id)
+            : doc(db, "productos", idProductoPorTienda(transferencia.destinoTiendaId, item))
+          const snap = await transaction.get(ref)
+          lecturasDestino.push({ item, qty, ref, snap })
         }
 
         for (const c of lecturasDestino) {
-          if (c.destinoId) {
-            if (!c.snap.exists()) throw new Error(`El producto destino de ${nombreExactoProducto(c.item)} ya no existe`)
+          if (c.snap.exists()) {
             const stockActual = Number(c.snap.data().stock || 0)
-            transaction.update(c.ref, { stock: stockActual + c.item.cantidad })
+            if (!Number.isFinite(stockActual)) {
+              throw new Error(`Stock inválido en destino para ${nombreExactoProducto(c.item)}`)
+            }
+            transaction.update(c.ref, { stock: stockActual + c.qty })
           } else {
             transaction.set(c.ref, {
               marca: c.item.marca || "",
@@ -348,10 +343,15 @@ function Transferencias() {
               modelo: c.item.modelo || "",
               codigo: c.item.codigo || "",
               precio: c.item.precio || 0,
-              stock: c.item.cantidad,
+              stock: c.qty,
               tiendaId: transferencia.destinoTiendaId,
             })
           }
+          movimientosEntrada.push({
+            productoId: c.ref.id,
+            item: c.item,
+            qty: c.qty,
+          })
         }
 
         transaction.update(transRef, {
@@ -360,13 +360,13 @@ function Transferencias() {
         })
       })
 
-      for (const item of transferencia.productos) {
+      for (const mov of movimientosEntrada) {
         await registrarMovimiento({
           tipo: TIPOS_MOVIMIENTO.TRANSFERENCIA_ENTRADA,
-          productoId: item.productoId,
-          productoNombre: nombreExactoProducto(item),
-          cantidad: item.cantidad,
-          detalle: `Entrada: ${item.cantidad} × ${nombreExactoProducto(item)} de ${r.de} hacia ${r.para}`,
+          productoId: mov.productoId,
+          productoNombre: nombreExactoProducto(mov.item),
+          cantidad: mov.qty,
+          detalle: `Entrada: ${mov.qty} × ${nombreExactoProducto(mov.item)} de ${r.de} hacia ${r.para}`,
           tiendaId: transferencia.destinoTiendaId,
         })
       }
@@ -385,9 +385,9 @@ function Transferencias() {
   }
 
   async function cancelarTransferencia(transferencia) {
+    if (!puedeHacerTransferencias()) return
     const r = resumenTransferencia(transferencia)
     const devolverStock =
-      transferencia.estado === ESTADOS_TRANSFERENCIA.APROBADA ||
       transferencia.estado === ESTADOS_TRANSFERENCIA.EN_TRANSITO
 
     const confirmacion = await Swal.fire({
@@ -418,9 +418,7 @@ function Transferencias() {
           throw new Error("Esta transferencia ya no se puede cancelar")
         }
 
-        const hayQueDevolver =
-          estado === ESTADOS_TRANSFERENCIA.APROBADA ||
-          estado === ESTADOS_TRANSFERENCIA.EN_TRANSITO
+        const hayQueDevolver = estado === ESTADOS_TRANSFERENCIA.EN_TRANSITO
 
         const lecturas = []
         if (hayQueDevolver) {
@@ -433,14 +431,20 @@ function Transferencias() {
 
         if (hayQueDevolver) {
           for (const { item, productoRef, snap } of lecturas) {
-            if (snap.exists()) {
-              const stockActual = Number(snap.data().stock || 0)
-              const reservado = Number(snap.data().stockReservado || 0)
-              transaction.update(productoRef, {
-                stock: stockActual + item.cantidad,
-                stockReservado: Math.max(0, reservado - item.cantidad),
-              })
+            if (!snap.exists()) {
+              throw new Error(`No se encontró ${nombreExactoProducto(item)} en origen. No se cancela para no perder el stock.`)
             }
+            const qty = Number(item.cantidad)
+            if (!Number.isInteger(qty) || qty <= 0) {
+              throw new Error(`Cantidad inválida en ${nombreExactoProducto(item)}`)
+            }
+            const stockActual = Number(snap.data().stock || 0)
+            if (!Number.isFinite(stockActual)) {
+              throw new Error(`Stock inválido para ${nombreExactoProducto(item)}`)
+            }
+            transaction.update(productoRef, {
+              stock: stockActual + qty,
+            })
           }
         }
 
@@ -455,6 +459,7 @@ function Transferencias() {
         showConfirmButton: false,
       })
       cargarTransferencias()
+      sincronizarCicloDescuentos(tiendaActual.id, tiendaActual.nombre).catch(() => {})
     } catch (error) {
       errorOperacion(error, "Error al cancelar")
     }
@@ -471,6 +476,14 @@ function Transferencias() {
   const transferenciasEnviadas = transferencias.filter((t) => t.origenTiendaId === tiendaActual?.id)
   const transferenciasRecibidas = transferencias.filter((t) => t.destinoTiendaId === tiendaActual?.id)
   const listaVisible = pestana === "enviadas" ? transferenciasEnviadas : transferenciasRecibidas
+
+  if (!puedeHacerTransferencias()) {
+    return (
+      <div className="p-8 text-slate-600 dark:text-slate-300 text-lg">
+        No tienes permiso para transferencias.
+      </div>
+    )
+  }
 
   const estadoColor = {
     pendiente: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300",
@@ -494,13 +507,14 @@ function Transferencias() {
     <div className="space-y-8">
       <div className="flex justify-between items-center gap-4 flex-wrap">
         <div>
-          <h1 className="text-5xl font-black text-slate-800 dark:text-white">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-800 dark:text-white break-words">
             Transferencias de Stock
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
             Envías un producto de tu tienda a otra: al enviar se descuenta, al recibir se agrega.
           </p>
         </div>
+        {puedeHacerTransferencias() && (
         <button
           onClick={() => setModalAbierto(true)}
           className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 transition"
@@ -508,6 +522,7 @@ function Transferencias() {
           <Plus size={20} />
           Nueva Transferencia
         </button>
+        )}
       </div>
 
       <div className="flex gap-3">
@@ -591,8 +606,7 @@ function Transferencias() {
                 <div className="flex gap-2 pt-4 border-t dark:border-slate-700 flex-wrap">
                   {transferencia.origenTiendaId === tiendaActual?.id && (
                     <>
-                      {(transferencia.estado === ESTADOS_TRANSFERENCIA.PENDIENTE ||
-                        transferencia.estado === ESTADOS_TRANSFERENCIA.APROBADA) && (
+                      {transferencia.estado === ESTADOS_TRANSFERENCIA.PENDIENTE && (
                         <>
                           <button
                             onClick={() => enviarTransferencia(transferencia)}
@@ -637,8 +651,8 @@ function Transferencias() {
       </div>
 
       {modalAbierto && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-3xl p-4 sm:p-6 w-full max-w-lg max-h-[92dvh] overflow-y-auto">
             <h2 className="text-2xl font-bold mb-6 dark:text-white">Nueva Transferencia</h2>
 
             <form onSubmit={crearTransferencia} className="space-y-4">

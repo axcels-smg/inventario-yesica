@@ -8,6 +8,7 @@ import {
   agruparPocoStockPorTienda,
 } from "./reporteStock"
 import { formatearFechaKey } from "./alertasStock"
+import { filasExcelDescuentos } from "./reportePantallas"
 
 const COLUMNAS_PRODUCTOS = [
   "codigo",
@@ -41,13 +42,20 @@ function mapearFilaProducto(fila) {
     return ""
   }
 
+  const precioTexto = leer("precio", "price", "precio unit.", "precio unit")
+  const stockTexto = leer("stock", "inventario", "stock total")
+  const precioNum = precioTexto === "" ? null : Number(precioTexto)
+  const stockNum = stockTexto === "" ? null : Number.parseInt(stockTexto, 10)
+
   return {
     codigo: leer("codigo", "sku", "code"),
     marca: leer("marca", "brand"),
-    categoria: leer("categoria", "category"),
+    categoria: leer("categoria", "category") || "Sin categoria",
     modelo: leer("modelo", "model"),
-    precio: Number(leer("precio", "price")) || 0,
-    stock: Number.parseInt(leer("stock", "inventario"), 10) || 0,
+    precio: Number.isFinite(precioNum) ? precioNum : null,
+    stock: Number.isInteger(stockNum) && stockNum >= 0 ? stockNum : null,
+    tienePrecio: precioTexto !== "" && Number.isFinite(precioNum),
+    tieneStock: stockTexto !== "" && Number.isInteger(stockNum) && stockNum >= 0,
   }
 }
 
@@ -106,12 +114,25 @@ export function leerProductosDesdeExcel(archivo) {
       try {
         const data = new Uint8Array(e.target.result)
         const libro = XLSX.read(data, { type: "array" })
-        const hoja = libro.Sheets[libro.SheetNames[0]]
+        const preferidas = ["plantilla", "inventario", "detalle", "por modelo"]
+        const nombreHoja =
+          libro.SheetNames.find((n) =>
+            preferidas.includes(String(n).toLowerCase())
+          ) || libro.SheetNames[0]
+        const hoja = libro.Sheets[nombreHoja]
         const filas = XLSX.utils.sheet_to_json(hoja)
 
         const productos = filas
           .map(mapearFilaProducto)
-          .filter((p) => p.marca && p.modelo && p.categoria)
+          .filter((p) => {
+            const marca = String(p.marca || "").trim()
+            const modelo = String(p.modelo || "").trim()
+            if (!marca || !modelo) return false
+            if (marca === "—" || modelo === "—") return false
+            const bajo = `${marca} ${modelo}`.toLowerCase()
+            if (bajo.includes("total") || bajo === "n°") return false
+            return true
+          })
 
         resolve(productos)
       } catch (error) {
@@ -899,6 +920,109 @@ export function exportarPocoStockCiclo3Dias(alertas, nombreTienda = "Tienda") {
   return {
     categorias: porCategoria.size,
     dias: dias.length,
+  }
+}
+
+const COLUMNAS_DESCUENTOS = [
+  "Fecha",
+  "Tienda",
+  "Tipo",
+  "Categoria",
+  "Marca",
+  "Modelo",
+  "Codigo",
+  "Cantidad",
+  "Precio unit.",
+  "Subtotal",
+  "Cliente",
+  "Telefono",
+  "Boleta",
+  "Destino",
+  "EsPantalla",
+]
+
+export function exportarDescuentosCiclo7Dias(dias, nombreTienda = "Tienda") {
+  const todas = filasExcelDescuentos(dias)
+  const pantallas = todas.filter((f) => f.EsPantalla === "Sí")
+  const libro = XLSX.utils.book_new()
+  const usados = new Set()
+
+  const resumen = (dias || []).map((d) => ({
+    Fecha: formatearFechaKey(d.fechaKey),
+    Tienda: d.tiendaNombre || nombreTienda,
+    "Líneas (todo)": d.lineas || (d.items || []).length,
+    "Unidades (todo)": d.unidades || 0,
+    "Pantallas (líneas)": Array.isArray(d.pantallas) ? d.pantallas.length : d.pantallasLineas || 0,
+    "Pantallas (unid.)": d.unidadesPantallas || 0,
+    Total: d.total || 0,
+    Clientes: (d.clientes || []).join(", ") || "—",
+  }))
+
+  const hojaResumen = resumen.length
+    ? XLSX.utils.json_to_sheet(resumen)
+    : XLSX.utils.aoa_to_sheet([["Fecha", "Tienda"]])
+  hojaResumen["!cols"] = [
+    { wch: 14 },
+    { wch: 22 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 12 },
+    { wch: 36 },
+  ]
+  XLSX.utils.book_append_sheet(libro, hojaResumen, nombreHojaExcel("Resumen 7 días", usados))
+
+  function hojaDeFilas(filas, nombre) {
+    const data = filas.map((fila) => {
+      const copia = { ...fila }
+      delete copia.fechaKey
+      return copia
+    })
+    const hoja = data.length
+      ? XLSX.utils.json_to_sheet(data, { header: COLUMNAS_DESCUENTOS })
+      : XLSX.utils.aoa_to_sheet([COLUMNAS_DESCUENTOS])
+    hoja["!cols"] = COLUMNAS_DESCUENTOS.map((c) => ({
+      wch: c === "Modelo" || c === "Cliente" ? 28 : c === "Categoria" ? 16 : 12,
+    }))
+    if (data.length) {
+      const lastCol = XLSX.utils.encode_col(COLUMNAS_DESCUENTOS.length - 1)
+      hoja["!autofilter"] = { ref: `A1:${lastCol}${data.length + 1}` }
+      hoja["!views"] = [{ state: "frozen", ySplit: 1, topLeftCell: "A2" }]
+    }
+    XLSX.utils.book_append_sheet(libro, hoja, nombreHojaExcel(nombre, usados))
+  }
+
+  hojaDeFilas(pantallas, "Pantallas")
+  hojaDeFilas(todas, "Todo descontado")
+
+  const porCategoria = new Map()
+  pantallas.forEach((fila) => {
+    const cat = fila.Categoria || "Sin categoría"
+    if (!porCategoria.has(cat)) porCategoria.set(cat, [])
+    porCategoria.get(cat).push(fila)
+  })
+  ;[...porCategoria.entries()]
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0]), "es"))
+    .forEach(([categoria, lista]) => hojaDeFilas(lista, categoria))
+
+  ;(dias || [])
+    .slice()
+    .sort((a, b) => String(a.fechaKey).localeCompare(String(b.fechaKey)))
+    .forEach((dia) => {
+      const delDia = todas.filter((f) => f.fechaKey === dia.fechaKey)
+      hojaDeFilas(delDia, formatearFechaKey(dia.fechaKey))
+    })
+
+  XLSX.writeFile(
+    libro,
+    `pantallas-descontadas-7-dias-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`
+  )
+
+  return {
+    dias: (dias || []).length,
+    pantallas: pantallas.length,
+    lineas: todas.length,
   }
 }
 

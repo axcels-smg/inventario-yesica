@@ -36,17 +36,30 @@ function respaldo(clave) {
   return leerSesion(clave) || []
 }
 
+function borrarSesion(clave) {
+  try {
+    sessionStorage.removeItem(claveSesion(clave))
+  } catch {
+    /* ignore */
+  }
+}
+
 export function invalidarCacheTienda(coleccion, tiendaId) {
   if (!tiendaId) {
     cache.clear()
     return
   }
   if (coleccion) {
-    cache.delete(claveCache(coleccion, tiendaId))
+    const clave = claveCache(coleccion, tiendaId)
+    cache.delete(clave)
+    borrarSesion(clave)
     return
   }
   for (const clave of [...cache.keys()]) {
-    if (clave.endsWith(`:${tiendaId}`)) cache.delete(clave)
+    if (clave.endsWith(`:${tiendaId}`)) {
+      cache.delete(clave)
+      borrarSesion(clave)
+    }
   }
 }
 

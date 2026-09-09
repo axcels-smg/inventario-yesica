@@ -21,6 +21,19 @@ export default defineConfig([
     rules: {
       'react-hooks/immutability': 'off',
       'react-hooks/set-state-in-effect': 'off',
+      'react-refresh/only-export-components': [
+        'error',
+        {
+          allowConstantExport: true,
+          allowExportNames: [
+            'useAuth',
+            'useTienda',
+            'useRol',
+            'useProductosLive',
+            'useTheme',
+          ],
+        },
+      ],
     },
   },
   {

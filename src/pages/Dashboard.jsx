@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   Package,
@@ -15,7 +15,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { esFechaDeHoy } from "../utils/fechas"
+import { esFechaDeHoy, obtenerTiempoFecha } from "../utils/fechas"
 import { filtrarVentasActivas } from "../utils/ventas"
 import { agruparVentasPorDia, obtenerRangoPreset } from "../utils/reportesFiltros"
 import { resumenStockBajo } from "../utils/stock"
@@ -31,16 +31,16 @@ function Dashboard() {
   const { tiendaActual, esTiendaPropia } = useTienda()
   const { productos } = useProductosLive()
 
+  const cargarVentas = useCallback(async () => {
+    if (!tiendaActual) return
+    setVentas(await listarPorTienda("ventas", tiendaActual.id, { force: true }))
+  }, [tiendaActual])
+
   useEffect(() => {
     if (tiendaActual) {
       cargarVentas()
     }
-  }, [tiendaActual?.id])
-
-  async function cargarVentas() {
-    if (!tiendaActual) return
-    setVentas(await listarPorTienda("ventas", tiendaActual.id))
-  }
+  }, [tiendaActual, cargarVentas])
 
   const ventasActivas = filtrarVentasActivas(ventas)
   const stockBajo = resumenStockBajo(productos)
@@ -49,9 +49,7 @@ function Dashboard() {
   const ventasSemana = ventasActivas.filter((v) => {
     const t = new Date(`${fechaDesde}T00:00:00`).getTime()
     const h = new Date(`${fechaHasta}T23:59:59`).getTime()
-    const vt = v.fecha?.toDate?.()
-      ? v.fecha.toDate().getTime()
-      : Date.parse(String(v.fechaTexto)) || 0
+    const vt = obtenerTiempoFecha(v.fecha || v.fechaTexto)
     return vt >= t && vt <= h
   })
 
@@ -74,7 +72,7 @@ function Dashboard() {
   return (
     <div className="text-slate-900 dark:text-white transition-all duration-300">
       <div className="mb-6">
-        <h1 className="text-5xl font-black dark:text-white">Dashboard</h1>
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black dark:text-white break-words">Dashboard</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
           {tiendaActual?.nombre
             ? `Resumen de ${tiendaActual.nombre}`
@@ -94,7 +92,7 @@ function Dashboard() {
           <div className="flex justify-between items-center">
             <div>
               <p className="text-slate-500 dark:text-slate-400">Productos</p>
-              <h2 className="text-4xl font-black mt-2">{totalProductos}</h2>
+              <h2 className="text-2xl sm:text-4xl font-black mt-2 break-all">{totalProductos}</h2>
             </div>
             <Package size={40} className="text-blue-500" />
           </div>
@@ -104,7 +102,7 @@ function Dashboard() {
           <div className="flex justify-between items-center">
             <div>
               <p className="text-slate-500 dark:text-slate-400">Ventas</p>
-              <h2 className="text-4xl font-black mt-2">{totalVentas}</h2>
+              <h2 className="text-2xl sm:text-4xl font-black mt-2 break-all">{totalVentas}</h2>
             </div>
             <ShoppingCart size={40} className="text-green-500" />
           </div>
@@ -114,7 +112,7 @@ function Dashboard() {
           <div className="flex justify-between items-center">
             <div>
               <p className="text-slate-500 dark:text-slate-400">Ingresos</p>
-              <h2 className="text-4xl font-black mt-2">S/ {ingresosTotales}</h2>
+              <h2 className="text-2xl sm:text-4xl font-black mt-2 break-all">S/ {ingresosTotales}</h2>
             </div>
             <DollarSign size={40} className="text-yellow-500" />
           </div>
@@ -153,7 +151,7 @@ function Dashboard() {
         <h2 className="text-2xl font-bold mb-2 dark:text-white">Ingresos últimos 7 días</h2>
         <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Ventas activas por día</p>
 
-        <div className="h-[400px]">
+        <div className="h-[220px] sm:h-[320px] lg:h-[400px]">
           {dataGrafico.length === 0 ? (
             <p className="text-center text-slate-500 dark:text-slate-400 py-20">
               Sin ventas esta semana

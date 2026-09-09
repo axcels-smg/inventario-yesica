@@ -12,29 +12,35 @@ export function normalizarFecha(fecha) {
     return fecha.toDate()
   }
 
+  // Timestamp serializado { seconds, nanoseconds }
+  if (typeof fecha?.seconds === "number") {
+    return new Date(fecha.seconds * 1000)
+  }
+
   // Ya es un Date object
   if (fecha instanceof Date) {
-    return fecha
+    return Number.isNaN(fecha.getTime()) ? null : fecha
   }
 
   // Timestamp numérico
   if (typeof fecha === "number") {
-    return new Date(fecha)
+    const d = new Date(fecha)
+    return Number.isNaN(d.getTime()) ? null : d
   }
 
-  // String
+  // String: primero DD/MM/YYYY (es-PE), luego parseo genérico
   const texto = String(fecha)
+  const partes = texto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (partes) {
+    const [, dia, mes, anio] = partes
+    const d = new Date(Number(anio), Number(mes) - 1, Number(dia))
+    if (!Number.isNaN(d.getTime())) return d
+  }
+
   const directo = Date.parse(texto)
 
   if (!Number.isNaN(directo)) {
     return new Date(directo)
-  }
-
-  // Formato DD/MM/YYYY
-  const partes = texto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
-  if (partes) {
-    const [, dia, mes, anio] = partes
-    return new Date(Number(anio), Number(mes) - 1, Number(dia))
   }
 
   return null

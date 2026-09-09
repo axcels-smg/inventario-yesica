@@ -5,8 +5,8 @@ export function formatearNumeroBoleta(numero) {
   return String(numero).padStart(6, "0")
 }
 
-export async function obtenerSiguienteNumeroBoleta() {
-  const ref = doc(db, "config", "contadores")
+export async function obtenerSiguienteNumeroBoleta(tiendaId) {
+  const ref = doc(db, "config", tiendaId ? `boleta_${tiendaId}` : "contadores")
 
   const numero = await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(ref)

@@ -58,12 +58,12 @@ function Modal({ isOpen, onClose, children }) {
       role="dialog"
       aria-modal="true"
       onClick={() => onCloseRef.current?.()}
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
     >
       <div
         ref={panelRef}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-lg shadow-2xl transition-all duration-200"
+        className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 w-full max-w-lg max-h-[92dvh] overflow-y-auto shadow-2xl transition-all duration-200"
       >
         <div className="flex justify-end mb-4">
           <button

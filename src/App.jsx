@@ -17,6 +17,7 @@ import MainLayout from "./layout/MainLayout"
 import { TiendaProvider } from "./context/TiendaContext"
 import { ProductosLiveProvider } from "./context/ProductosLiveContext"
 import { AuthProvider, useAuth } from "./context/AuthContext"
+import { RolProvider, useRol } from "./context/RolContext"
 
 function ProtectedRoute({ children }) {
   const { usuario, cargando } = useAuth()
@@ -36,9 +37,20 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function SuperAdminRoute({ children }) {
+  const { esSuperAdmin } = useRol()
+
+  if (!esSuperAdmin()) {
+    return <Navigate to="/" replace />
+  }
+
+  return children
+}
+
 function App() {
   return (
     <AuthProvider>
+      <RolProvider>
       <TiendaProvider>
         <BrowserRouter>
           <Routes>
@@ -53,7 +65,7 @@ function App() {
             }>
               <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Dashboard />} />
-              <Route path="global" element={<DashboardGlobal />} />
+              <Route path="global" element={<SuperAdminRoute><DashboardGlobal /></SuperAdminRoute>} />
               <Route path="productos" element={<Productos />} />
               <Route path="ventas" element={<Ventas />} />
               <Route path="clientes" element={<Clientes />} />
@@ -67,6 +79,7 @@ function App() {
           </Routes>
         </BrowserRouter>
       </TiendaProvider>
+      </RolProvider>
     </AuthProvider>
   )
 }

@@ -4,6 +4,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordRe
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { esErrorCuota } from "../utils/cuotaFirebase"
+import { ROLES_USUARIO } from "../constants/inventario"
 
 const AuthContext = createContext()
 
@@ -18,6 +19,7 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null)
   const [tienda, setTienda] = useState(null)
+  const [rolFirestore, setRolFirestore] = useState(ROLES_USUARIO.LECTOR)
   const [cargando, setCargando] = useState(true)
 
   async function cargarTiendaPorUID(uid) {
@@ -28,10 +30,12 @@ export function AuthProvider({ children }) {
         const tiendaData = tiendaSnap.data()
         const datos = { id: tiendaSnap.id, ...tiendaData }
         setTienda(datos)
+        setRolFirestore(tiendaData.rol || ROLES_USUARIO.ADMIN_TIENDA)
         return tiendaData
       }
 
       setTienda(null)
+      setRolFirestore(ROLES_USUARIO.LECTOR)
       return null
     } catch (error) {
       if (!esErrorCuota(error)) {
@@ -49,6 +53,7 @@ export function AuthProvider({ children }) {
         await cargarTiendaPorUID(user.uid)
       } else {
         setTienda(null)
+        setRolFirestore(ROLES_USUARIO.LECTOR)
       }
 
       setCargando(false)
@@ -86,6 +91,7 @@ export function AuthProvider({ children }) {
       await signOut(auth)
       setUsuario(null)
       setTienda(null)
+      setRolFirestore(ROLES_USUARIO.LECTOR)
       return { success: true }
     } catch (error) {
       console.error("Error en logout:", error)
@@ -157,6 +163,7 @@ export function AuthProvider({ children }) {
   const value = {
     usuario,
     tienda,
+    rolFirestore,
     cargando,
     login,
     logout,

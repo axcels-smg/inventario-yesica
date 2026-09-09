@@ -1,6 +1,7 @@
 import { collection, addDoc, serverTimestamp } from "firebase/firestore"
 import { db } from "../firebase"
 import { esErrorCuota } from "./cuotaFirebase"
+import { invalidarCacheTienda } from "./consultasTienda"
 
 export async function registrarMovimiento({
   tipo,
@@ -31,6 +32,7 @@ export async function registrarMovimiento({
       fecha: serverTimestamp(),
       fechaTexto: new Date().toLocaleString("es-PE"),
     })
+    if (tiendaId) invalidarCacheTienda("movimientos", tiendaId)
   } catch (error) {
     if (esErrorCuota(error)) return
     throw error

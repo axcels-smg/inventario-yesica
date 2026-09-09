@@ -73,6 +73,17 @@ export function claveModeloProducto(producto) {
   return `${marca}||${categoria}||${modelo}`
 }
 
+/** Id estable por tienda + modelo, para no duplicar al recibir transferencias. */
+export function idProductoPorTienda(tiendaId, producto) {
+  const clave = claveModeloProducto(producto)
+  return `${tiendaId}__${clave}`
+    .replaceAll("/", "_")
+    .replaceAll("#", "_")
+    .replaceAll("[", "_")
+    .replaceAll("]", "_")
+    .slice(0, 700)
+}
+
 /**
  * Busca otro producto con la misma marca + categoría + modelo.
  * excludeId: al editar, ignora el producto actual.

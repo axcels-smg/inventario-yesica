@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Swal from "sweetalert2"
 import {
   BarChart,
@@ -40,14 +40,17 @@ import {
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { enlaceWhatsAppStockBajo, enlaceEmailStockBajo, obtenerTelefonoWhatsApp, guardarTelefonoWhatsApp } from "../utils/whatsapp"
 import AlertasStockAcumulativas from "../components/AlertasStockAcumulativas"
+import ReportePantallasDescontadas from "../components/ReportePantallasDescontadas"
 import ReporteStockEstructurado from "../components/ReporteStockEstructurado"
 import { useTienda } from "../context/TiendaContext"
+import { useRol } from "../context/RolContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { listarPorTienda } from "../utils/consultasTienda"
 
 function Reportes() {
-  const { tiendaActual, tiendas } = useTienda()
+  const { tiendaActual, tiendas, esTiendaPropia } = useTienda()
+  const { esSuperAdmin } = useRol()
   const { productos, todosLosProductos } = useProductosLive()
   const [ventas, setVentas] = useState([])
   const [clientes, setClientes] = useState([])
@@ -63,21 +66,17 @@ function Reportes() {
   const [busquedaStock, setBusquedaStock] = useState("")
   const [alcanceStock, setAlcanceStock] = useState("tienda")
 
-  useEffect(() => {
-    if (tiendaActual) {
-      cargarDatos()
-    }
-    const { fechaDesde: d, fechaHasta: h } = obtenerRangoPreset("mes")
-    setFechaDesde(d)
-    setFechaHasta(h)
-  }, [tiendaActual?.id])
-
-  async function cargarDatos() {
+  const cargarDatos = useCallback(async () => {
     if (!tiendaActual) return
+    if (!esTiendaPropia && !esSuperAdmin()) {
+      setVentas([])
+      setClientes([])
+      return
+    }
 
     const [listaVentas, listaClientes] = await Promise.all([
-      listarPorTienda("ventas", tiendaActual.id),
-      listarPorTienda("clientes", tiendaActual.id),
+      listarPorTienda("ventas", tiendaActual.id, { force: true }),
+      listarPorTienda("clientes", tiendaActual.id, { force: true }),
     ])
 
     listaClientes.sort((a, b) =>
@@ -86,7 +85,16 @@ function Reportes() {
 
     setVentas(listaVentas)
     setClientes(listaClientes)
-  }
+  }, [tiendaActual, esTiendaPropia, esSuperAdmin])
+
+  useEffect(() => {
+    if (tiendaActual) {
+      cargarDatos()
+    }
+    const { fechaDesde: d, fechaHasta: h } = obtenerRangoPreset("mes")
+    setFechaDesde(d)
+    setFechaHasta(h)
+  }, [tiendaActual, cargarDatos])
 
   const clienteSeleccionado = clientes.find((c) => c.id === clienteId)
 
@@ -165,7 +173,10 @@ function Reportes() {
     const productosMap = {}
     ventasFiltradas.forEach((venta) => {
       venta.productos?.forEach((p) => {
-        const nombre = p.marca || p.nombre || "Producto"
+        const nombre =
+          [p.marca, p.categoria, p.modelo].filter((x) => String(x || "").trim()).join(" / ") ||
+          p.nombre ||
+          "Producto"
         productosMap[nombre] = (productosMap[nombre] || 0) + Number(p.cantidad)
       })
     })
@@ -276,11 +287,15 @@ function Reportes() {
     })
   }
 
+  if (!esTiendaPropia && !esSuperAdmin()) {
+    return <AvisoOtraTienda modo="bloqueo" />
+  }
+
   return (
     <div className="space-y-10">
-      <AvisoOtraTienda />
+      {!esTiendaPropia && <AvisoOtraTienda />}
       <div>
-        <h1 className="text-5xl font-black text-slate-800 dark:text-white">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-800 dark:text-white break-words">
           Reportes
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
@@ -545,6 +560,8 @@ function Reportes() {
         </div>
       )}
 
+      <ReportePantallasDescontadas tiendaId={tiendaActual?.id} />
+
       {/* ALERTAS ACUMULATIVAS POR DÍA */}
       <AlertasStockAcumulativas tiendaId={tiendaActual?.id} />
 
@@ -606,7 +623,7 @@ function Reportes() {
           <h2 className="text-xl font-bold mb-4 dark:text-white">
             Top productos vendidos (período)
           </h2>
-          <div className="h-[280px]">
+          <div className="h-[200px] sm:h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={productosVendidos} layout="vertical">
                 <XAxis type="number" />
@@ -624,7 +641,7 @@ function Reportes() {
           <h2 className="text-2xl font-bold mb-6 dark:text-white">
             Ingresos por día
           </h2>
-          <div className="h-[320px]">
+          <div className="h-[220px] sm:h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ventasPorDia}>
                 <XAxis dataKey="fecha" fontSize={11} />
@@ -640,7 +657,7 @@ function Reportes() {
           <h2 className="text-2xl font-bold mb-6 dark:text-white">
             Clientes (período)
           </h2>
-          <div className="h-[320px]">
+          <div className="h-[220px] sm:h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie

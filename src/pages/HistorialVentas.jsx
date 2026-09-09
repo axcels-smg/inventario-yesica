@@ -1,10 +1,7 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import {
-  collection,
   doc,
-  getDocs,
-  deleteDoc,
   runTransaction,
   serverTimestamp,
 } from "firebase/firestore"
@@ -22,12 +19,15 @@ import { TIPOS_MOVIMIENTO, DATOS_NEGOCIO } from "../constants/inventario"
 import { imprimirBoleta } from "../utils/impresion"
 import { enlaceWhatsAppTexto, textoReciboVenta } from "../utils/reciboCliente"
 import { useTienda } from "../context/TiendaContext"
-import { listarPorTienda } from "../utils/consultasTienda"
+import { useRol } from "../context/RolContext"
+import { listarPorTienda, invalidarCacheTienda } from "../utils/consultasTienda"
 import { errorOperacion } from "../utils/erroresUi"
+import { sincronizarCicloDescuentos } from "../utils/reportePantallas"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 function HistorialVentas() {
   const { tiendaActual, esTiendaPropia } = useTienda()
+  const { puedeAnularVentas, puedeEliminarVentas } = useRol()
   const negocioActual = tiendaActual
     ? {
         nombre: tiendaActual.nombre,
@@ -42,17 +42,11 @@ function HistorialVentas() {
   const [paginaActual, setPaginaActual] = useState(1)
   const VENTAS_POR_PAGINA = 20
 
-  useEffect(() => {
-    if (tiendaActual) {
-      cargarVentas()
-    }
-  }, [tiendaActual?.id])
-
-  async function cargarVentas() {
+  const cargarVentas = useCallback(async () => {
     if (!tiendaActual) return
 
     try {
-      const listaVentas = await listarPorTienda("ventas", tiendaActual.id)
+      const listaVentas = await listarPorTienda("ventas", tiendaActual.id, { force: true })
 
       listaVentas.sort((a, b) =>
         obtenerTiempoFecha(b.fecha || b.fechaTexto) -
@@ -60,14 +54,21 @@ function HistorialVentas() {
       )
 
       setVentas(listaVentas)
-      setPaginaActual(1) // Resetear a la primera página al cargar
+      setPaginaActual(1)
 
     } catch (error) {
       errorOperacion(error, "Error cargando ventas")
     }
-  }
+  }, [tiendaActual, setPaginaActual])
+
+  useEffect(() => {
+    if (tiendaActual) {
+      cargarVentas()
+    }
+  }, [tiendaActual, cargarVentas])
 
   async function anularVenta(venta) {
+    if (!esTiendaPropia || !puedeAnularVentas()) return
     if (venta.anulada) {
       Swal.fire({
         icon: "info",
@@ -107,6 +108,7 @@ function HistorialVentas() {
       let metaAnulacion = { cliente: "", numeroBoleta: "" }
 
       await runTransaction(db, async (transaction) => {
+        registrosMovimiento.length = 0
         const ventaRef = doc(db, "ventas", venta.id)
         const ventaSnap = await transaction.get(ventaRef)
 
@@ -133,12 +135,25 @@ function HistorialVentas() {
             : "",
         }
 
+        const porProducto = new Map()
+
         for (const item of productosVenta) {
           if (!item.id) {
             throw new Error("Un producto de la venta no tiene identificador")
           }
 
           const cantidad = Number(item.cantidad)
+          if (!Number.isFinite(cantidad) || cantidad <= 0) {
+            throw new Error(`Cantidad inválida en ${item.marca || item.id}`)
+          }
+
+          if (porProducto.has(item.id)) {
+            const prev = porProducto.get(item.id)
+            prev.cantidad += cantidad
+            prev.stockDespues = prev.stockAntes + prev.cantidad
+            continue
+          }
+
           const productoRef = doc(db, "productos", item.id)
           const productoSnap = await transaction.get(productoRef)
 
@@ -147,12 +162,12 @@ function HistorialVentas() {
           }
 
           const stockActual = Number(productoSnap.data().stock)
+          if (!Number.isFinite(stockActual)) {
+            throw new Error(`Stock inválido para ${item.marca || item.id}`)
+          }
 
-          transaction.update(productoRef, {
-            stock: stockActual + cantidad,
-          })
-
-          registrosMovimiento.push({
+          porProducto.set(item.id, {
+            ref: productoRef,
             productoId: item.id,
             productoNombre: `${item.marca || ""} ${item.modelo || ""}`.trim(),
             cantidad,
@@ -160,6 +175,12 @@ function HistorialVentas() {
             stockDespues: stockActual + cantidad,
           })
         }
+
+        registrosMovimiento.push(...porProducto.values())
+
+        registrosMovimiento.forEach((mov) => {
+          transaction.update(mov.ref, { stock: mov.stockDespues })
+        })
 
         transaction.update(ventaRef, {
           anulada: true,
@@ -171,7 +192,11 @@ function HistorialVentas() {
       for (const mov of registrosMovimiento) {
         await registrarMovimiento({
           tipo: TIPOS_MOVIMIENTO.ANULACION,
-          ...mov,
+          productoId: mov.productoId,
+          productoNombre: mov.productoNombre,
+          cantidad: mov.cantidad,
+          stockAntes: mov.stockAntes,
+          stockDespues: mov.stockDespues,
           ventaId: venta.id,
           numeroBoleta: metaAnulacion.numeroBoleta,
           cliente: metaAnulacion.cliente,
@@ -180,7 +205,9 @@ function HistorialVentas() {
         })
       }
 
+      invalidarCacheTienda("ventas", tiendaActual.id)
       await cargarVentas()
+      sincronizarCicloDescuentos(tiendaActual.id, tiendaActual.nombre).catch(() => {})
 
       Swal.fire({
         icon: "success",
@@ -198,6 +225,15 @@ function HistorialVentas() {
   }
 
   async function eliminarVenta(venta) {
+    if (!esTiendaPropia || !puedeEliminarVentas()) return
+    if (!venta.anulada) {
+      Swal.fire({
+        icon: "warning",
+        title: "Anula primero",
+        text: "No se puede borrar una venta activa. Anúlala para devolver el stock y después, si quieres, elimínala.",
+      })
+      return
+    }
     const confirmacion = await Swal.fire({
       title: "¿Eliminar esta venta?",
       html: `
@@ -217,7 +253,18 @@ function HistorialVentas() {
     try {
       setProcesandoId(venta.id)
 
-      await deleteDoc(doc(db, "ventas", venta.id))
+      await runTransaction(db, async (transaction) => {
+        const ventaRef = doc(db, "ventas", venta.id)
+        const ventaSnap = await transaction.get(ventaRef)
+        if (!ventaSnap.exists()) {
+          throw new Error("La venta ya no existe")
+        }
+        if (!ventaSnap.data().anulada) {
+          throw new Error("Anula la venta antes de borrarla, para devolver el stock")
+        }
+        transaction.delete(ventaRef)
+      })
+      invalidarCacheTienda("ventas", tiendaActual.id)
 
       setVentas((lista) => lista.filter((v) => v.id !== venta.id))
 
@@ -405,7 +452,7 @@ function HistorialVentas() {
     <div className="space-y-8">
 
       <div>
-        <h1 className="text-5xl font-black text-slate-800 dark:text-white">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-800 dark:text-white break-words">
           Historial de Ventas
         </h1>
 
@@ -471,17 +518,17 @@ function HistorialVentas() {
 
               </div>
 
-              <div className="text-right flex flex-col items-end gap-3">
+              <div className="text-left sm:text-right flex flex-col items-stretch sm:items-end gap-3 w-full lg:w-auto">
 
                 <h3
-                  className={`text-4xl font-black ${
+                  className={`text-3xl sm:text-4xl font-black ${
                     venta.anulada ? "text-slate-400 line-through" : "text-green-600"
                   }`}
                 >
                   S/ {venta.total}
                 </h3>
 
-                <div className="flex flex-wrap gap-2 justify-end">
+                <div className="flex flex-wrap gap-2 justify-start sm:justify-end">
                   <button
                     onClick={() => imprimirBoleta(venta, negocioActual)}
                     className="flex items-center gap-2 bg-slate-700 text-white px-5 py-3 rounded-2xl hover:bg-slate-800 transition"
@@ -518,7 +565,7 @@ function HistorialVentas() {
                     </button>
                   )}
 
-                  {!venta.anulada && esTiendaPropia && (
+                  {!venta.anulada && esTiendaPropia && puedeAnularVentas() && (
                     <button
                       onClick={() => anularVenta(venta)}
                       disabled={procesandoId === venta.id}
@@ -533,7 +580,7 @@ function HistorialVentas() {
                     </button>
                   )}
 
-                  {esTiendaPropia && (
+                  {venta.anulada && esTiendaPropia && puedeEliminarVentas() && (
                     <button
                       onClick={() => eliminarVenta(venta)}
                       disabled={procesandoId === venta.id}
