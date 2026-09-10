@@ -13,6 +13,28 @@ export function esStockBajo(stock) {
   return stockNumero(stock) <= STOCK_BAJO_UMBRAL
 }
 
+export function esStockMenorA(stock, umbral) {
+  return stockNumero(stock) < Number(umbral)
+}
+
+function claveModeloStock(producto) {
+  return [
+    String(producto?.marca || "").trim().toLowerCase(),
+    String(producto?.categoria || "").trim().toLowerCase(),
+    String(producto?.modelo || "").trim().toLowerCase(),
+  ].join("|")
+}
+
+/** Incluye todas las tiendas de un modelo si en alguna el stock es menor al umbral. */
+export function filtrarModelosStockMenorA(productos, umbral) {
+  const limite = Number(umbral)
+  if (!Number.isFinite(limite)) return productos
+  const claves = new Set(
+    productos.filter((p) => esStockMenorA(p.stock, limite)).map(claveModeloStock)
+  )
+  return productos.filter((p) => claves.has(claveModeloStock(p)))
+}
+
 export function etiquetaEstadoStock(stock) {
   if (esStockAgotado(stock)) return "No hay"
   if (esStockBajo(stock)) return "Poco stock"

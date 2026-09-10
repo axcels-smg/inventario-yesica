@@ -12,7 +12,7 @@ import {
   exportarInventarioDetalladoTodasLasTiendas,
 } from "../utils/excel"
 import { registrarMovimiento } from "../utils/movimientos"
-import { TIPOS_MOVIMIENTO } from "../constants/inventario"
+import { STOCK_EXCEL_MENOR_A_3, STOCK_EXCEL_MENOR_A_5, TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
@@ -71,7 +71,7 @@ function InventarioExcel() {
     }
   }
 
-  async function exportarDetalladoTodas() {
+  async function exportarDetalladoTodas(stockMenorA) {
     try {
       const lista = await cargarTodasLasTiendas({ force: true })
       if (!lista.length) {
@@ -79,15 +79,29 @@ function InventarioExcel() {
         return
       }
 
-      const r = exportarInventarioDetalladoTodasLasTiendas(
-        lista,
-        tiendas
-      )
+      const r = exportarInventarioDetalladoTodasLasTiendas(lista, tiendas, {
+        stockMenorA,
+      })
+
+      if (r.modelos === 0) {
+        Swal.fire({
+          icon: "info",
+          title: stockMenorA
+            ? `Nada con stock menor a ${stockMenorA}`
+            : "No hay productos para exportar",
+          text: "No hay modelos que cumplan ese filtro en las tiendas.",
+        })
+        return
+      }
 
       Swal.fire({
         icon: "success",
-        title: "Excel de todas las tiendas",
-        text: `${r.tiendas} tiendas · ${r.modelos} modelos · ${r.categorias} categorías. En «Por modelo» cada modelo tiene una columna de stock por tienda.`,
+        title: stockMenorA
+          ? `Excel menor a ${stockMenorA} (todas las tiendas)`
+          : "Excel de todas las tiendas",
+        text: stockMenorA
+          ? `${r.tiendas} tiendas · ${r.modelos} modelos con stock menor a ${stockMenorA} en alguna tienda. Misma tabla: un modelo y una columna por local.`
+          : `${r.tiendas} tiendas · ${r.modelos} modelos · ${r.categorias} categorías. En «Por modelo» cada modelo tiene una columna de stock por tienda.`,
       })
     } catch (error) {
       errorOperacion(error, "Error al exportar")
@@ -309,7 +323,7 @@ function InventarioExcel() {
 
         <button
           type="button"
-          onClick={exportarDetalladoTodas}
+          onClick={() => exportarDetalladoTodas()}
           className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-blue-500 transition"
         >
           <Store className="text-blue-600 mb-3" size={32} />
@@ -318,6 +332,35 @@ function InventarioExcel() {
           </h3>
           <p className="text-slate-500 text-sm mt-1">
             Cada modelo en una sola fila y una columna de stock por tienda. Así ves si el HONOR X7B hay en Plaza Norte y en las demás.
+          </p>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <button
+          type="button"
+          onClick={() => exportarDetalladoTodas(STOCK_EXCEL_MENOR_A_3)}
+          className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-amber-500 transition"
+        >
+          <FileDown className="text-amber-600 mb-3" size={32} />
+          <h3 className="font-bold text-lg dark:text-white">
+            Excel todas las tiendas — menor a 3
+          </h3>
+          <p className="text-slate-500 text-sm mt-1">
+            Mismo cuadro por modelo y columna por tienda, solo modelos con menos de 3 unidades en algún local.
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => exportarDetalladoTodas(STOCK_EXCEL_MENOR_A_5)}
+          className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-orange-500 transition"
+        >
+          <FileDown className="text-orange-600 mb-3" size={32} />
+          <h3 className="font-bold text-lg dark:text-white">
+            Excel todas las tiendas — menor a 5
+          </h3>
+          <p className="text-slate-500 text-sm mt-1">
+            Igual que el de todas las tiendas, pero aparte: solo modelos con menos de 5 unidades en algún local.
           </p>
         </button>
       </div>

@@ -20,7 +20,7 @@ import {
   agruparVentasPorDia,
   obtenerRangoPreset,
 } from "../utils/reportesFiltros"
-import { exportarReporteContable, exportarInventarioDetalladoTienda, exportarInventarioDetalladoTodasLasTiendas, exportarPocoStockEstructurado } from "../utils/excel"
+import { exportarReporteContable, exportarPocoStockEstructurado } from "../utils/excel"
 import {
   enlaceWhatsAppTexto,
   enlaceEmailTexto,
@@ -57,6 +57,7 @@ function Reportes() {
   const [filtroCategoriaStock, setFiltroCategoriaStock] = useState("")
   const [busquedaStock, setBusquedaStock] = useState("")
   const [alcanceStock, setAlcanceStock] = useState("tienda")
+  const [pestana, setPestana] = useState("ventas")
 
   useEffect(() => {
     const { fechaDesde: d, fechaHasta: h } = obtenerRangoPreset("mes")
@@ -274,10 +275,34 @@ function Reportes() {
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
           {tiendaActual?.nombre ? `${tiendaActual.nombre} · ` : ""}
-          Elige fechas y un cliente para ver y enviar su recibo de compras.
+          Elige una pestaña. Así no se mezcla ventas, stock, pantallas y alertas.
         </p>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        {[
+          ["ventas", "Ventas y recibos"],
+          ["stock", "Poco stock"],
+          ["pantallas", "Pantallas"],
+          ["alertas", "Alertas 3 días"],
+        ].map(([id, etiqueta]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setPestana(id)}
+            className={`px-4 py-2 rounded-2xl text-sm font-bold ${
+              pestana === id
+                ? "bg-slate-800 text-white"
+                : "bg-white dark:bg-slate-900 border dark:border-slate-700 dark:text-slate-200"
+            }`}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+
+      {pestana === "ventas" && (
+      <>
       {/* FILTROS */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 space-y-4">
         <h2 className="text-xl font-bold dark:text-white">Filtros del reporte</h2>
@@ -342,49 +367,6 @@ function Reportes() {
           <Download size={18} />
           Exportar Excel contable (filtro actual)
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (!productos.length) {
-              return Swal.fire({ icon: "info", title: "No hay productos" })
-            }
-            const r = exportarInventarioDetalladoTienda(
-              productos,
-              tiendaActual?.nombre || "Tienda"
-            )
-            Swal.fire({
-              icon: "success",
-              title: "Excel detallado",
-              text: `${r.modelos} modelos · ${r.categorias} categorías. Hoja «Por modelo»: un renglón por modelo.`,
-            })
-          }}
-          className="flex items-center gap-2 bg-slate-800 text-white px-5 py-3 rounded-2xl font-bold hover:bg-slate-900"
-        >
-          <FileDown size={18} />
-          Inventario por modelo (esta tienda)
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            const lista = await cargarTodasLasTiendas()
-            if (!lista.length) {
-              return Swal.fire({ icon: "info", title: "No hay productos" })
-            }
-            const r = exportarInventarioDetalladoTodasLasTiendas(
-              lista,
-              tiendas
-            )
-            Swal.fire({
-              icon: "success",
-              title: "Excel de todas las tiendas",
-              text: `${r.tiendas} tiendas · ${r.modelos} modelos. Cada modelo con stock por tienda.`,
-            })
-          }}
-          className="flex items-center gap-2 bg-blue-700 text-white px-5 py-3 rounded-2xl font-bold hover:bg-blue-800"
-        >
-          <FileDown size={18} />
-          Inventario por modelo (todas las tiendas)
-        </button>
         </div>
       </div>
 
@@ -443,7 +425,7 @@ function Reportes() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
           <FileText className="text-blue-500" size={38} />
           <p className="text-slate-500 dark:text-slate-400 mt-4">Ventas (filtro)</p>
@@ -458,80 +440,6 @@ function Reportes() {
             S/ {Number(ingresosFiltrados).toFixed(2)}
           </h2>
         </div>
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setFiltroStockReporte("no_hay")}
-          onKeyDown={(e) => e.key === "Enter" && setFiltroStockReporte("no_hay")}
-          className={`bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 cursor-pointer ${
-            filtroStockReporte === "no_hay" ? "ring-2 ring-red-400" : ""
-          }`}
-        >
-          <AlertTriangle className="text-red-500" size={38} />
-          <p className="text-slate-500 dark:text-slate-400 mt-4">No hay (stock 0)</p>
-          <h2 className="text-4xl font-black dark:text-white">
-            {resumenPocoStock.agotados}
-          </h2>
-          <p className="text-xs text-slate-500 mt-2">
-            Modelos agotados según el aviso de ≤{STOCK_BAJO_UMBRAL} u. (estos están en 0)
-          </p>
-          <div className="flex flex-wrap gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => {
-                const fuente = alcanceStock === "todas" ? todosLosProductos : productos
-                const lista = filtrarProductosPorEstadoStock(fuente, "no_hay")
-                if (lista.length === 0) {
-                  return Swal.fire({
-                    icon: "info",
-                    title: "Todo tiene stock",
-                    text: "No hay modelos en 0 en esta vista.",
-                  })
-                }
-                const r = exportarPocoStockEstructurado({
-                  productos: lista,
-                  nombreTienda:
-                    alcanceStock === "todas"
-                      ? "Todas las tiendas"
-                      : tiendaActual?.nombre || "Tienda",
-                  tiendas,
-                  todas: alcanceStock === "todas",
-                  estadoStock: "no_hay",
-                })
-                Swal.fire({
-                  icon: "success",
-                  title: "Excel de lo que no hay",
-                  text: `${r.productos} modelos en stock 0. Una hoja por categoría.`,
-                })
-              }}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-green-700 text-white text-sm font-bold"
-            >
-              <Download size={16} />
-              Excel no hay
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const fuente = alcanceStock === "todas" ? todosLosProductos : productos
-                const lista = filtrarProductosPorEstadoStock(fuente, "no_hay")
-                const nombre =
-                  alcanceStock === "todas"
-                    ? "Todas las tiendas"
-                    : tiendaActual?.nombre || "Tienda"
-                imprimirModelosStock({
-                  grupos: agruparPorCategoriaMarcaModelo(lista, nombre),
-                  nombreTienda: nombre,
-                  titulo: "Modelos que ya no hay (stock 0)",
-                  nota: `Aviso de poco stock: ${STOCK_BAJO_UMBRAL} unidades o menos. Esta lista es solo stock 0.`,
-                })
-              }}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-800 text-white text-sm font-bold"
-            >
-              <Printer size={16} />
-              Imprimir no hay
-            </button>
-          </div>
-        </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
           <p className="text-slate-500 dark:text-slate-400 mt-2">Clientes en filtro</p>
           <h2 className="text-4xl font-black dark:text-white">
@@ -539,62 +447,6 @@ function Reportes() {
           </h2>
         </div>
       </div>
-
-      {/* ALERTAS WHATSAPP / EMAIL */}
-      {listaAlertaStock.length > 0 && (
-        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-3xl p-6 space-y-4">
-          <h2 className="text-xl font-bold text-red-800 dark:text-red-200">
-            Alertas de stock — {tiendaActual?.nombre || "esta tienda"}
-          </h2>
-          <p className="text-sm text-red-700 dark:text-red-300">
-            El WhatsApp envía la lista agrupada por categoría y marca ({listaAlertaStock.length} ítems).
-            Guarda tu número de Perú; si ya empieza con 51 no se duplica.
-          </p>
-          <div className="flex flex-wrap gap-3 items-end">
-            <input
-              value={telefonoWhatsApp}
-              onChange={(e) => setTelefonoWhatsApp(e.target.value)}
-              placeholder="Ej: 999888777"
-              className="p-3 rounded-2xl border flex-1 min-w-[200px] dark:bg-slate-900 dark:text-white"
-            />
-            <button
-              onClick={guardarWhatsApp}
-              className="px-4 py-3 rounded-2xl bg-slate-800 text-white"
-            >
-              Guardar número
-            </button>
-            <a
-              href={enlaceWhatsAppStockBajo(
-                listaAlertaStock.length > 0 ? listaAlertaStock : productosStockBajo,
-                telefonoWhatsApp,
-                nombreAlertaStock
-              )}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-green-600 text-white font-bold"
-            >
-              <MessageCircle size={18} />
-              Enviar por WhatsApp
-            </a>
-            <a
-              href={enlaceEmailStockBajo(
-                listaAlertaStock.length > 0 ? listaAlertaStock : productosStockBajo,
-                "",
-                nombreAlertaStock
-              )}
-              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 text-white font-bold"
-            >
-              <Mail size={18} />
-              Enviar por Email
-            </a>
-          </div>
-        </div>
-      )}
-
-      <ReportePantallasDescontadas tiendaId={tiendaActual?.id} />
-
-      {/* ALERTAS ACUMULATIVAS POR DÍA */}
-      <AlertasStockAcumulativas tiendaId={tiendaActual?.id} />
 
       {/* TABLA VENTAS FILTRADAS */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 overflow-x-auto">
@@ -708,13 +560,134 @@ function Reportes() {
           </div>
         </div>
       </div>
+      </>
+      )}
+
+      {pestana === "stock" && (
+      <div className="space-y-8">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
+          <AlertTriangle className="text-red-500" size={38} />
+          <p className="text-slate-500 dark:text-slate-400 mt-4">No hay (stock 0)</p>
+          <h2 className="text-4xl font-black dark:text-white">
+            {resumenPocoStock.agotados}
+          </h2>
+          <p className="text-xs text-slate-500 mt-2">
+            Modelos agotados según el aviso de ≤{STOCK_BAJO_UMBRAL} u. (estos están en 0)
+          </p>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => {
+                const fuente = alcanceStock === "todas" ? todosLosProductos : productos
+                const lista = filtrarProductosPorEstadoStock(fuente, "no_hay")
+                if (lista.length === 0) {
+                  return Swal.fire({
+                    icon: "info",
+                    title: "Todo tiene stock",
+                    text: "No hay modelos en 0 en esta vista.",
+                  })
+                }
+                const r = exportarPocoStockEstructurado({
+                  productos: lista,
+                  nombreTienda:
+                    alcanceStock === "todas"
+                      ? "Todas las tiendas"
+                      : tiendaActual?.nombre || "Tienda",
+                  tiendas,
+                  todas: alcanceStock === "todas",
+                  estadoStock: "no_hay",
+                })
+                Swal.fire({
+                  icon: "success",
+                  title: "Excel de lo que no hay",
+                  text: `${r.productos} modelos en stock 0. Una hoja por categoría.`,
+                })
+              }}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-green-700 text-white text-sm font-bold"
+            >
+              <Download size={16} />
+              Excel no hay
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const fuente = alcanceStock === "todas" ? todosLosProductos : productos
+                const lista = filtrarProductosPorEstadoStock(fuente, "no_hay")
+                const nombre =
+                  alcanceStock === "todas"
+                    ? "Todas las tiendas"
+                    : tiendaActual?.nombre || "Tienda"
+                imprimirModelosStock({
+                  grupos: agruparPorCategoriaMarcaModelo(lista, nombre),
+                  nombreTienda: nombre,
+                  titulo: "Modelos que ya no hay (stock 0)",
+                  nota: `Aviso de poco stock: ${STOCK_BAJO_UMBRAL} unidades o menos. Esta lista es solo stock 0.`,
+                })
+              }}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-800 text-white text-sm font-bold"
+            >
+              <Printer size={16} />
+              Imprimir no hay
+            </button>
+          </div>
+        </div>
+
+        {listaAlertaStock.length > 0 && (
+          <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-3xl p-6 space-y-4">
+            <h2 className="text-xl font-bold text-red-800 dark:text-red-200">
+              Alertas de stock — {tiendaActual?.nombre || "esta tienda"}
+            </h2>
+            <p className="text-sm text-red-700 dark:text-red-300">
+              El WhatsApp envía la lista agrupada por categoría y marca ({listaAlertaStock.length} ítems).
+              Guarda tu número de Perú; si ya empieza con 51 no se duplica.
+            </p>
+            <div className="flex flex-wrap gap-3 items-end">
+              <input
+                value={telefonoWhatsApp}
+                onChange={(e) => setTelefonoWhatsApp(e.target.value)}
+                placeholder="Ej: 999888777"
+                className="p-3 rounded-2xl border flex-1 min-w-[200px] dark:bg-slate-900 dark:text-white"
+              />
+              <button
+                onClick={guardarWhatsApp}
+                className="px-4 py-3 rounded-2xl bg-slate-800 text-white"
+              >
+                Guardar número
+              </button>
+              <a
+                href={enlaceWhatsAppStockBajo(
+                  listaAlertaStock.length > 0 ? listaAlertaStock : productosStockBajo,
+                  telefonoWhatsApp,
+                  nombreAlertaStock
+                )}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-green-600 text-white font-bold"
+              >
+                <MessageCircle size={18} />
+                Enviar por WhatsApp
+              </a>
+              <a
+                href={enlaceEmailStockBajo(
+                  listaAlertaStock.length > 0 ? listaAlertaStock : productosStockBajo,
+                  "",
+                  nombreAlertaStock
+                )}
+                className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 text-white font-bold"
+              >
+                <Mail size={18} />
+                Enviar por Email
+              </a>
+            </div>
+          </div>
+        )}
 
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
         <h2 className="text-2xl font-bold mb-2 text-red-500">
           Poco stock — categoría, marca y modelo
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          Cada categoría (PANTALLA, LENTE, BATERIA…) va aparte. Dentro: marca y cada modelo con código, precio, stock y estado. Igual en cada tienda.
+          Abre solo la categoría que necesitas. Excel e imprimir siguen sacando la lista completa.
         </p>
 
         <div className="flex flex-wrap gap-3 mb-6">
@@ -860,6 +833,15 @@ function Reportes() {
             }
           />
         )}
+      </div>
+      </div>
+      )}
+
+      <div className={pestana === "pantallas" ? "" : "hidden"}>
+        <ReportePantallasDescontadas tiendaId={tiendaActual?.id} />
+      </div>
+      <div className={pestana === "alertas" ? "" : "hidden"}>
+        <AlertasStockAcumulativas tiendaId={tiendaActual?.id} />
       </div>
     </div>
   )

@@ -2,7 +2,7 @@ import * as XLSX from "xlsx"
 import { formatearFecha } from "./fechas"
 import { formatearNumeroBoleta } from "./boleta"
 import { filtrarVentasActivas } from "./ventas"
-import { etiquetaEstadoStock, stockNumero } from "./stock"
+import { etiquetaEstadoStock, filtrarModelosStockMenorA, stockNumero } from "./stock"
 import {
   agruparPorCategoriaMarcaModelo,
   agruparPocoStockPorTienda,
@@ -712,25 +712,39 @@ export function exportarInventarioDetalladoTienda(productos, nombreTienda = "Tie
   }
 }
 
-export function exportarInventarioDetalladoTodasLasTiendas(productos, tiendas = []) {
+export function exportarInventarioDetalladoTodasLasTiendas(
+  productos,
+  tiendas = [],
+  { stockMenorA } = {}
+) {
   const mapaTiendas = {}
   tiendas.forEach((t) => {
     if (t?.id) mapaTiendas[t.id] = t.nombre || t.id
   })
 
+  const lista = Number.isFinite(Number(stockMenorA))
+    ? filtrarModelosStockMenorA(productos, stockMenorA)
+    : productos
+
   const filas = ordenarFilasInventario(
-    productos.map((p) =>
+    lista.map((p) =>
       filaInventarioDetallada(p, nombreTiendaDeProducto(p, mapaTiendas))
     )
   )
+  if (filas.length === 0) {
+    return { productos: 0, modelos: 0, categorias: 0, tiendas: 0 }
+  }
+  const tituloResumen = Number.isFinite(Number(stockMenorA))
+    ? `Todas las tiendas · stock menor a ${stockMenorA}`
+    : "Todas las tiendas"
   const libro = armarLibroInventarioDetallado(filas, {
     incluirTienda: true,
-    tituloResumen: "Todas las tiendas",
+    tituloResumen,
   })
-  XLSX.writeFile(
-    libro,
-    `inventario-todas-las-tiendas-${fechaArchivoLocal()}.xlsx`
-  )
+  const archivo = Number.isFinite(Number(stockMenorA))
+    ? `inventario-todas-las-tiendas-menor-a-${stockMenorA}-${fechaArchivoLocal()}.xlsx`
+    : `inventario-todas-las-tiendas-${fechaArchivoLocal()}.xlsx`
+  XLSX.writeFile(libro, archivo)
   return {
     productos: filas.length,
     modelos: new Set(filas.map((f) => claveModelo(f, false))).size,
