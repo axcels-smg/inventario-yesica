@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Swal from "sweetalert2"
-import { Minus, PackageSearch, Plus, Trash2, UserPlus } from "lucide-react"
+import { Ban, Minus, PackageSearch, Plus, Trash2, UserPlus } from "lucide-react"
 
 import {
   addDoc,
@@ -22,6 +22,7 @@ import { useOperacionesLive } from "../context/OperacionesLiveContext"
 import { invalidarCacheTienda } from "../utils/consultasTienda"
 import { errorOperacion } from "../utils/erroresUi"
 import { sincronizarCicloDescuentos } from "../utils/reportePantallas"
+import { anularVentaYDevolverStock } from "../utils/anularVenta"
 import { conReintentoCuota } from "../utils/firestoreLive"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
@@ -34,9 +35,9 @@ import {
 
 function Ventas() {
   const { tiendaActual, esTiendaPropia } = useTienda()
-  const { puedeVender, puedeCrearClientes } = useRol()
+  const { puedeVender, puedeCrearClientes, puedeAnularVentas } = useRol()
   const { productos, aplicarCambiosStock, cargando: cargandoProductos } = useProductosLive()
-  const { clientes, setClientes } = useOperacionesLive()
+  const { clientes, setClientes, ventas } = useOperacionesLive()
 
   const [clienteSeleccionado, setClienteSeleccionado] = useState("")
   const [busquedaCliente, setBusquedaCliente] = useState("")
@@ -50,6 +51,7 @@ function Ventas() {
   const [filtroMarca, setFiltroMarca] = useState("")
   const [filtroCategoria, setFiltroCategoria] = useState("")
   const [vendiendo, setVendiendo] = useState(false)
+  const [anulandoId, setAnulandoId] = useState(null)
   const vendiendoRef = useRef(false)
 
   useEffect(() => {
@@ -286,6 +288,57 @@ function Ventas() {
     0
   )
 
+  const ventasRecientes = useMemo(
+    () =>
+      [...(ventas || [])]
+        .sort((a, b) => {
+          const ta = a.fecha?.toMillis?.() || Date.parse(a.fechaTexto || 0) || 0
+          const tb = b.fecha?.toMillis?.() || Date.parse(b.fechaTexto || 0) || 0
+          return tb - ta
+        })
+        .slice(0, 8),
+    [ventas]
+  )
+
+  async function confirmarYAnularVenta(venta) {
+    if (!esTiendaPropia || !puedeAnularVentas()) return
+    if (venta.anulada) {
+      return Swal.fire({ icon: "info", title: "Esta venta ya está anulada" })
+    }
+
+    const ok = await Swal.fire({
+      title: "¿Anular esta venta?",
+      html: `<p>Se <strong>devuelve el stock</strong> al inventario. La boleta queda marcada como anulada.</p>
+        <p class="mt-2 font-bold">Total: S/ ${venta.total}</p>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Anular y devolver stock",
+      cancelButtonText: "No",
+      confirmButtonColor: "#ea580c",
+    })
+    if (!ok.isConfirmed) return
+
+    try {
+      setAnulandoId(venta.id)
+      await anularVentaYDevolverStock({
+        venta,
+        tiendaActual,
+        aplicarCambiosStock,
+      })
+      await Swal.fire({
+        icon: "success",
+        title: "Venta anulada",
+        text: "El stock volvió a Productos",
+        timer: 1800,
+        showConfirmButton: false,
+      })
+    } catch (error) {
+      errorOperacion(error, "No se pudo anular")
+    } finally {
+      setAnulandoId(null)
+    }
+  }
+
   async function finalizarVenta() {
     if (vendiendoRef.current) return
 
@@ -433,18 +486,6 @@ function Ventas() {
         })
       })
 
-      for (const mov of movimientosPendientes) {
-        await registrarMovimiento({
-          tipo: TIPOS_MOVIMIENTO.VENTA,
-          ...mov,
-          ventaId: ventaRef.id,
-          numeroBoleta: formatearNumeroBoleta(numeroBoleta),
-          cliente: clienteData.nombre || "",
-          detalle: `Venta boleta #${formatearNumeroBoleta(numeroBoleta)}`,
-          tiendaId: tiendaActual.id,
-        })
-      }
-
       const ventaHecha = {
         numeroBoleta,
         fechaTexto: new Date().toLocaleString("es-PE"),
@@ -466,17 +507,45 @@ function Ventas() {
       invalidarCacheTienda("productos", tiendaActual.id)
       sincronizarCicloDescuentos(tiendaActual.id, tiendaActual.nombre).catch(() => {})
 
+      try {
+        for (const mov of movimientosPendientes) {
+          await registrarMovimiento({
+            tipo: TIPOS_MOVIMIENTO.VENTA,
+            ...mov,
+            ventaId: ventaRef.id,
+            numeroBoleta: formatearNumeroBoleta(numeroBoleta),
+            cliente: clienteData.nombre || "",
+            detalle: `Venta boleta #${formatearNumeroBoleta(numeroBoleta)}`,
+            tiendaId: tiendaActual.id,
+          })
+        }
+      } catch (errorMov) {
+        console.error(errorMov)
+      }
+
       const envio = await Swal.fire({
         icon: "success",
         title: "Venta realizada",
-        text: `Boleta #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${Number(total).toFixed(2)}`,
+        text: `Boleta #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${Number(total).toFixed(2)}. El stock ya se descontó.`,
         showCancelButton: true,
+        showDenyButton: esTiendaPropia && puedeAnularVentas(),
         confirmButtonText: "Enviar recibo por WhatsApp",
+        denyButtonText: "Anular venta",
         cancelButtonText: "Cerrar",
         confirmButtonColor: "#16a34a",
+        denyButtonColor: "#ea580c",
       })
 
-      if (envio.isConfirmed) {
+      if (envio.isDenied) {
+        await confirmarYAnularVenta({
+          id: ventaRef.id,
+          total,
+          productos: productosVenta,
+          numeroBoleta,
+          cliente: clienteData.nombre || "",
+          telefono: clienteData.telefono || "",
+        })
+      } else if (envio.isConfirmed) {
         window.open(
           enlaceWhatsAppTexto(textoReciboVenta(ventaHecha, tiendaActual), clienteData.telefono),
           "_blank"
@@ -834,6 +903,61 @@ function Ventas() {
         </div>
 
       </div>
+
+      {esTiendaPropia && (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border dark:border-slate-800">
+          <h2 className="text-xl font-black dark:text-white mb-2">Últimas ventas</h2>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
+            Al cobrar se descuenta el stock. <strong>Anular</strong> lo vuelve a sumar.
+            También puedes anular en Historial.
+          </p>
+          {ventasRecientes.length === 0 ? (
+            <p className="text-slate-500 dark:text-slate-400">Aún no hay ventas en esta tienda.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {ventasRecientes.map((venta) => (
+                <div
+                  key={venta.id}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border rounded-2xl p-4 ${
+                    venta.anulada
+                      ? "border-red-300 dark:border-red-900/50 opacity-80"
+                      : "dark:border-slate-700"
+                  }`}
+                >
+                  <div>
+                    <p className="font-bold dark:text-white">
+                      Boleta #
+                      {venta.numeroBoleta != null
+                        ? formatearNumeroBoleta(venta.numeroBoleta)
+                        : venta.id.slice(0, 6)}
+                      {venta.anulada ? " · ANULADA" : ""}
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      {venta.cliente || "Sin cliente"} · S/ {venta.total} ·{" "}
+                      {venta.fechaTexto || ""}
+                    </p>
+                  </div>
+                  {!venta.anulada && puedeAnularVentas() && (
+                    <button
+                      type="button"
+                      onClick={() => confirmarYAnularVenta(venta)}
+                      disabled={anulandoId === venta.id}
+                      className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-white ${
+                        anulandoId === venta.id
+                          ? "bg-slate-400"
+                          : "bg-orange-600 hover:bg-orange-700"
+                      }`}
+                    >
+                      <Ban size={16} />
+                      Anular
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   )

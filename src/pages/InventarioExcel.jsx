@@ -1,7 +1,7 @@
 import { useRef, useState } from "react"
 import Swal from "sweetalert2"
 import { FileDown, FileUp, Table, Store } from "lucide-react"
-import { collection, writeBatch, doc, runTransaction } from "firebase/firestore"
+import { collection, writeBatch, doc, runTransaction, serverTimestamp } from "firebase/firestore"
 
 import { db } from "../firebase"
 import {
@@ -202,6 +202,7 @@ function InventarioExcel() {
             categoria: p.categoria,
             modelo: p.modelo,
             stock: nuevo,
+            actualizado: serverTimestamp(),
           }
           if (p.tienePrecio) datos.precio = p.precio
           transaction.update(ref, datos)
@@ -219,6 +220,7 @@ function InventarioExcel() {
             marca: p.marca,
             categoria: p.categoria,
             modelo: p.modelo,
+            actualizado: serverTimestamp(),
           }
           if (p.tienePrecio) datos.precio = p.precio
           batch.update(doc(db, "productos", p.id), datos)
@@ -241,6 +243,7 @@ function InventarioExcel() {
             precio: p.tienePrecio ? p.precio : 0,
             stock: p.tieneStock ? p.stock : 0,
             tiendaId: tiendaActual.id,
+            actualizado: serverTimestamp(),
           })
         })
 
@@ -256,6 +259,8 @@ function InventarioExcel() {
         cantidad: importados + actualizados,
         tiendaId: tiendaActual.id,
       })
+
+      await cargarTodasLasTiendas({ force: true })
 
       Swal.fire({
         icon: "success",

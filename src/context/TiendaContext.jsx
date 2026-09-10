@@ -24,8 +24,11 @@ export function TiendaProvider({ children }) {
   const esTiendaPropia = !tiendaActual?.id || !tiendaPropia?.id || tiendaActual.id === tiendaPropia.id
 
   useEffect(() => {
-    if (!cargandoAuth && tiendaAuth) {
+    if (cargandoAuth) return
+    if (tiendaAuth) {
       setTiendaActual(tiendaAuth)
+    } else {
+      setTiendaActual(null)
     }
   }, [cargandoAuth, tiendaAuth])
 

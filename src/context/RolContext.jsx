@@ -65,6 +65,7 @@ export function RolProvider({ children }) {
       [ROLES_USUARIO.VENDEDOR]: [
         "ver_dashboard",
         "ventas",
+        "anular_ventas",
         "ver_productos",
         "ver_clientes",
         "ver_reportes",
