@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Swal from "sweetalert2"
-import { Minus, PackageSearch, Plus, Trash2 } from "lucide-react"
+import { Minus, PackageSearch, Plus, Trash2, UserPlus } from "lucide-react"
 
 import {
+  addDoc,
   collection,
   doc,
   runTransaction,
@@ -17,9 +18,11 @@ import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
 import { useRol } from "../context/RolContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
-import { listarPorTienda, invalidarCacheTienda } from "../utils/consultasTienda"
+import { useOperacionesLive } from "../context/OperacionesLiveContext"
+import { invalidarCacheTienda } from "../utils/consultasTienda"
 import { errorOperacion } from "../utils/erroresUi"
 import { sincronizarCicloDescuentos } from "../utils/reportePantallas"
+import { conReintentoCuota } from "../utils/firestoreLive"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 import {
@@ -31,11 +34,17 @@ import {
 
 function Ventas() {
   const { tiendaActual, esTiendaPropia } = useTienda()
-  const { puedeVender } = useRol()
-  const { productos, setProductos, cargando: cargandoProductos } = useProductosLive()
-  const [clientes, setClientes] = useState([])
+  const { puedeVender, puedeCrearClientes } = useRol()
+  const { productos, aplicarCambiosStock, cargando: cargandoProductos } = useProductosLive()
+  const { clientes, setClientes } = useOperacionesLive()
 
   const [clienteSeleccionado, setClienteSeleccionado] = useState("")
+  const [busquedaCliente, setBusquedaCliente] = useState("")
+  const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState("")
+  const [nuevoTelefono, setNuevoTelefono] = useState("")
+  const [nuevoCorreo, setNuevoCorreo] = useState("")
+  const [guardandoCliente, setGuardandoCliente] = useState(false)
   const [carrito, setCarrito] = useState([])
   const [busquedaProducto, setBusquedaProducto] = useState("")
   const [filtroMarca, setFiltroMarca] = useState("")
@@ -43,28 +52,123 @@ function Ventas() {
   const [vendiendo, setVendiendo] = useState(false)
   const vendiendoRef = useRef(false)
 
-  const cargarClientes = useCallback(async () => {
-    if (!tiendaActual) return
-
-    try {
-      const lista = await listarPorTienda("clientes", tiendaActual.id, { force: true })
-
-      lista.sort((a, b) =>
-        String(a.nombre || "").localeCompare(String(b.nombre || ""))
-      )
-
-      setClientes(lista)
-
-    } catch (error) {
-      errorOperacion(error, "Error cargando clientes")
-    }
-  }, [tiendaActual])
+  useEffect(() => {
+    setCarrito([])
+    setClienteSeleccionado("")
+    setBusquedaCliente("")
+  }, [tiendaActual?.id])
 
   useEffect(() => {
-    if (tiendaActual) {
-      cargarClientes()
+    setCarrito((items) => {
+      let cambio = false
+      const next = []
+      for (const item of items) {
+        const p = productos.find((x) => x.id === item.id)
+        if (!p) {
+          cambio = true
+          continue
+        }
+        const stock = Number(p.stock) || 0
+        if (stock <= 0) {
+          cambio = true
+          continue
+        }
+        const cantidad =
+          item.cantidad === "" ? "" : Math.min(Number(item.cantidad) || 1, stock)
+        if (
+          cantidad !== item.cantidad ||
+          Number(p.precio) !== Number(item.precio)
+        ) {
+          cambio = true
+          next.push({ ...item, cantidad, precio: p.precio, stock })
+        } else {
+          next.push(item)
+        }
+      }
+      return cambio ? next : items
+    })
+  }, [productos])
+
+  const clientesFiltrados = useMemo(() => {
+    const q = busquedaCliente.trim().toLowerCase()
+    let lista = clientes
+    if (q) {
+      lista = clientes.filter((c) =>
+        `${c.nombre || ""} ${c.telefono || ""} ${c.correo || ""}`
+          .toLowerCase()
+          .includes(q)
+      )
     }
-  }, [tiendaActual, cargarClientes])
+    if (clienteSeleccionado && !lista.some((c) => c.id === clienteSeleccionado)) {
+      const extra = clientes.find((c) => c.id === clienteSeleccionado)
+      if (extra) lista = [extra, ...lista]
+    }
+    return lista
+  }, [clientes, busquedaCliente, clienteSeleccionado])
+
+  async function agregarClienteRapido(e) {
+    e.preventDefault()
+    if (!tiendaActual || !puedeCrearClientes()) return
+    if (guardandoCliente) return
+
+    const nombreLimpio = nuevoNombre.trim()
+    const telefonoLimpio = nuevoTelefono.trim()
+    const correoLimpio = nuevoCorreo.trim()
+
+    if (!nombreLimpio || !telefonoLimpio) {
+      Swal.fire({
+        icon: "warning",
+        title: "Completa nombre y teléfono",
+      })
+      return
+    }
+
+    setGuardandoCliente(true)
+    try {
+      const docRef = await addDoc(collection(db, "clientes"), {
+        nombre: nombreLimpio,
+        telefono: telefonoLimpio,
+        correo: correoLimpio,
+        direccion: "",
+        fecha: serverTimestamp(),
+        fechaTexto: new Date().toLocaleString("es-PE"),
+        tiendaId: tiendaActual.id,
+      })
+
+      const nuevo = {
+        id: docRef.id,
+        nombre: nombreLimpio,
+        telefono: telefonoLimpio,
+        correo: correoLimpio,
+        direccion: "",
+        tiendaId: tiendaActual.id,
+      }
+
+      setClientes((lista) =>
+        [...lista, nuevo].sort((a, b) =>
+          String(a.nombre || "").localeCompare(String(b.nombre || ""))
+        )
+      )
+      setClienteSeleccionado(docRef.id)
+      setBusquedaCliente("")
+      setNuevoNombre("")
+      setNuevoTelefono("")
+      setNuevoCorreo("")
+      setMostrarNuevoCliente(false)
+      invalidarCacheTienda("clientes", tiendaActual.id)
+
+      Swal.fire({
+        icon: "success",
+        title: "Cliente listo para la venta",
+        timer: 1400,
+        showConfirmButton: false,
+      })
+    } catch (error) {
+      errorOperacion(error, "Error al agregar cliente")
+    } finally {
+      setGuardandoCliente(false)
+    }
+  }
 
   function obtenerStockProducto(id) {
     const producto = productos.find((p) => p.id === id)
@@ -185,10 +289,13 @@ function Ventas() {
   async function finalizarVenta() {
     if (vendiendoRef.current) return
 
-    if (!clienteSeleccionado) {
+    const clienteData = clientes.find((c) => c.id === clienteSeleccionado)
+
+    if (!clienteSeleccionado || !clienteData) {
       return Swal.fire({
         icon: "warning",
         title: "Selecciona cliente",
+        text: "Elige un cliente de la lista o agrégalo antes de vender.",
       })
     }
 
@@ -210,6 +317,19 @@ function Ventas() {
       })
     }
 
+    const sinPrecio = carrito.filter((item) => !(Number(item.precio) > 0))
+    if (sinPrecio.length > 0) {
+      const sigue = await Swal.fire({
+        icon: "warning",
+        title: "Hay productos a S/ 0",
+        text: "El total de la boleta puede quedar en cero. ¿Vender igual?",
+        showCancelButton: true,
+        confirmButtonText: "Vender igual",
+        cancelButtonText: "Cancelar",
+      })
+      if (!sigue.isConfirmed) return
+    }
+
     const confirmacion = await Swal.fire({
       title: "¿Finalizar venta?",
       text: `Total S/ ${total}`,
@@ -227,12 +347,13 @@ function Ventas() {
     setVendiendo(true)
 
     try {
-      const clienteData = clientes.find(
-        (c) => c.id === clienteSeleccionado
-      )
-
       const productosVenta = carrito.map((item) => ({
-        ...item,
+        id: item.id,
+        codigo: item.codigo || "",
+        marca: item.marca || "",
+        modelo: item.modelo || "",
+        categoria: item.categoria || "",
+        precio: Number(item.precio) || 0,
         cantidad: Number(item.cantidad),
       }))
 
@@ -241,7 +362,8 @@ function Ventas() {
       let numeroBoleta = 0
       let movimientosPendientes = []
 
-      await runTransaction(db, async (transaction) => {
+      await conReintentoCuota(async () => {
+        await runTransaction(db, async (transaction) => {
         movimientosPendientes = []
         const productosActuales = []
 
@@ -296,15 +418,17 @@ function Ventas() {
         })
 
         transaction.set(ventaRef, {
-          cliente: clienteData?.nombre || "",
-          clienteId: clienteData?.id || "",
-          telefono: clienteData?.telefono || "",
+          cliente: clienteData.nombre || "",
+          clienteId: clienteData.id || "",
+          telefono: clienteData.telefono || "",
+          correo: clienteData.correo || "",
           productos: productosVenta,
           total,
           numeroBoleta,
           fecha: serverTimestamp(),
           fechaTexto: new Date().toLocaleString("es-PE"),
           tiendaId: tiendaActual.id,
+        })
         })
       })
 
@@ -314,7 +438,7 @@ function Ventas() {
           ...mov,
           ventaId: ventaRef.id,
           numeroBoleta: formatearNumeroBoleta(numeroBoleta),
-          cliente: clienteData?.nombre || "",
+          cliente: clienteData.nombre || "",
           detalle: `Venta boleta #${formatearNumeroBoleta(numeroBoleta)}`,
           tiendaId: tiendaActual.id,
         })
@@ -323,20 +447,19 @@ function Ventas() {
       const ventaHecha = {
         numeroBoleta,
         fechaTexto: new Date().toLocaleString("es-PE"),
-        cliente: clienteData?.nombre || "",
-        telefono: clienteData?.telefono || "",
+        cliente: clienteData.nombre || "",
+        telefono: clienteData.telefono || "",
         productos: productosVenta,
         total,
       }
 
       setCarrito([])
       setClienteSeleccionado("")
-      setProductos((lista) =>
-        lista.map((p) => {
-          const item = productosVenta.find((i) => i.id === p.id)
-          if (!item) return p
-          return { ...p, stock: Number(p.stock) - item.cantidad }
-        })
+      aplicarCambiosStock(
+        movimientosPendientes.map((mov) => ({
+          id: mov.productoId,
+          stock: mov.stockDespues,
+        }))
       )
       invalidarCacheTienda("ventas", tiendaActual.id)
       invalidarCacheTienda("productos", tiendaActual.id)
@@ -354,7 +477,7 @@ function Ventas() {
 
       if (envio.isConfirmed) {
         window.open(
-          enlaceWhatsAppTexto(textoReciboVenta(ventaHecha, tiendaActual), clienteData?.telefono),
+          enlaceWhatsAppTexto(textoReciboVenta(ventaHecha, tiendaActual), clienteData.telefono),
           "_blank"
         )
       }
@@ -540,19 +663,85 @@ function Ventas() {
             Carrito
           </h2>
 
-          <select
-            value={clienteSeleccionado}
-            onChange={(e) => setClienteSeleccionado(e.target.value)}
-            className="w-full p-4 rounded-2xl mb-6 border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-          >
-            <option value="">Selecciona cliente</option>
+          <div className="mb-6 space-y-3">
+            <input
+              value={busquedaCliente}
+              onChange={(e) => setBusquedaCliente(e.target.value)}
+              placeholder="Buscar cliente por nombre o teléfono..."
+              className="w-full p-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            />
 
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
-              </option>
-            ))}
-          </select>
+            <select
+              value={clienteSeleccionado}
+              onChange={(e) => setClienteSeleccionado(e.target.value)}
+              className="w-full p-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            >
+              <option value="">Selecciona cliente</option>
+
+              {clientesFiltrados.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}{c.telefono ? ` · ${c.telefono}` : ""}
+                </option>
+              ))}
+            </select>
+
+            {clientes.length === 0 && (
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                No hay clientes en esta tienda. Agrégalo aquí para poder vender.
+              </p>
+            )}
+
+            {busquedaCliente.trim() && clientesFiltrados.length === 0 && clientes.length > 0 && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Ningún cliente coincide con la búsqueda.
+              </p>
+            )}
+
+            {puedeCrearClientes() && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMostrarNuevoCliente((v) => !v)}
+                  className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium"
+                >
+                  <UserPlus size={18} />
+                  {mostrarNuevoCliente ? "Cerrar formulario" : "Agregar cliente"}
+                </button>
+
+                {mostrarNuevoCliente && (
+                  <form onSubmit={agregarClienteRapido} className="grid grid-cols-1 gap-3 border dark:border-slate-700 rounded-2xl p-4">
+                    <input
+                      value={nuevoNombre}
+                      onChange={(e) => setNuevoNombre(e.target.value)}
+                      placeholder="Nombre"
+                      className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    />
+                    <input
+                      value={nuevoTelefono}
+                      onChange={(e) => setNuevoTelefono(e.target.value)}
+                      placeholder="Teléfono"
+                      className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    />
+                    <input
+                      value={nuevoCorreo}
+                      onChange={(e) => setNuevoCorreo(e.target.value)}
+                      placeholder="Correo (opcional)"
+                      className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    />
+                    <button
+                      type="submit"
+                      disabled={guardandoCliente}
+                      className={`text-white py-3 rounded-xl font-bold ${
+                        guardandoCliente ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"
+                      }`}
+                    >
+                      {guardandoCliente ? "Guardando..." : "Guardar y seleccionar"}
+                    </button>
+                  </form>
+                )}
+              </>
+            )}
+          </div>
 
           <div className="flex flex-col gap-4">
 

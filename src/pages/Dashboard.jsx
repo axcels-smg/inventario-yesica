@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   Package,
@@ -23,24 +22,13 @@ import StockAlertBanner from "../components/StockAlertBanner"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
+import { useOperacionesLive } from "../context/OperacionesLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
-import { listarPorTienda } from "../utils/consultasTienda"
 
 function Dashboard() {
-  const [ventas, setVentas] = useState([])
   const { tiendaActual, esTiendaPropia } = useTienda()
   const { productos } = useProductosLive()
-
-  const cargarVentas = useCallback(async () => {
-    if (!tiendaActual) return
-    setVentas(await listarPorTienda("ventas", tiendaActual.id, { force: true }))
-  }, [tiendaActual])
-
-  useEffect(() => {
-    if (tiendaActual) {
-      cargarVentas()
-    }
-  }, [tiendaActual, cargarVentas])
+  const { ventas } = useOperacionesLive()
 
   const ventasActivas = filtrarVentasActivas(ventas)
   const stockBajo = resumenStockBajo(productos)

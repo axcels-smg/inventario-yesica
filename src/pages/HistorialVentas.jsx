@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 
 import {
   doc,
@@ -12,7 +12,7 @@ import jsPDF from "jspdf"
 import Swal from "sweetalert2"
 
 import { FileDown, Receipt, Ban, Trash2, Printer, MessageCircle } from "lucide-react"
-import { formatearFecha, obtenerTiempoFecha } from "../utils/fechas"
+import { formatearFecha } from "../utils/fechas"
 import { formatearNumeroBoleta } from "../utils/boleta"
 import { registrarMovimiento } from "../utils/movimientos"
 import { TIPOS_MOVIMIENTO, DATOS_NEGOCIO } from "../constants/inventario"
@@ -20,7 +20,9 @@ import { imprimirBoleta } from "../utils/impresion"
 import { enlaceWhatsAppTexto, textoReciboVenta } from "../utils/reciboCliente"
 import { useTienda } from "../context/TiendaContext"
 import { useRol } from "../context/RolContext"
-import { listarPorTienda, invalidarCacheTienda } from "../utils/consultasTienda"
+import { useProductosLive } from "../context/ProductosLiveContext"
+import { useOperacionesLive } from "../context/OperacionesLiveContext"
+import { invalidarCacheTienda } from "../utils/consultasTienda"
 import { errorOperacion } from "../utils/erroresUi"
 import { sincronizarCicloDescuentos } from "../utils/reportePantallas"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
@@ -28,6 +30,8 @@ import AvisoOtraTienda from "../components/AvisoOtraTienda"
 function HistorialVentas() {
   const { tiendaActual, esTiendaPropia } = useTienda()
   const { puedeAnularVentas, puedeEliminarVentas } = useRol()
+  const { aplicarCambiosStock } = useProductosLive()
+  const { ventas } = useOperacionesLive()
   const negocioActual = tiendaActual
     ? {
         nombre: tiendaActual.nombre,
@@ -37,35 +41,13 @@ function HistorialVentas() {
         email: tiendaActual.email || DATOS_NEGOCIO.email,
       }
     : DATOS_NEGOCIO
-  const [ventas, setVentas] = useState([])
   const [procesandoId, setProcesandoId] = useState(null)
   const [paginaActual, setPaginaActual] = useState(1)
   const VENTAS_POR_PAGINA = 20
 
-  const cargarVentas = useCallback(async () => {
-    if (!tiendaActual) return
-
-    try {
-      const listaVentas = await listarPorTienda("ventas", tiendaActual.id, { force: true })
-
-      listaVentas.sort((a, b) =>
-        obtenerTiempoFecha(b.fecha || b.fechaTexto) -
-        obtenerTiempoFecha(a.fecha || a.fechaTexto)
-      )
-
-      setVentas(listaVentas)
-      setPaginaActual(1)
-
-    } catch (error) {
-      errorOperacion(error, "Error cargando ventas")
-    }
-  }, [tiendaActual, setPaginaActual])
-
   useEffect(() => {
-    if (tiendaActual) {
-      cargarVentas()
-    }
-  }, [tiendaActual, cargarVentas])
+    setPaginaActual(1)
+  }, [tiendaActual?.id])
 
   async function anularVenta(venta) {
     if (!esTiendaPropia || !puedeAnularVentas()) return
@@ -206,7 +188,12 @@ function HistorialVentas() {
       }
 
       invalidarCacheTienda("ventas", tiendaActual.id)
-      await cargarVentas()
+      aplicarCambiosStock(
+        registrosMovimiento.map((mov) => ({
+          id: mov.productoId,
+          stock: mov.stockDespues,
+        }))
+      )
       sincronizarCicloDescuentos(tiendaActual.id, tiendaActual.nombre).catch(() => {})
 
       Swal.fire({
@@ -265,8 +252,6 @@ function HistorialVentas() {
         transaction.delete(ventaRef)
       })
       invalidarCacheTienda("ventas", tiendaActual.id)
-
-      setVentas((lista) => lista.filter((v) => v.id !== venta.id))
 
       Swal.fire({
         icon: "success",

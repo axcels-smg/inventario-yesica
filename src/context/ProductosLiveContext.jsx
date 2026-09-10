@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
-import { collection, onSnapshot } from "firebase/firestore"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "../firebase"
 import { useTienda } from "./TiendaContext"
 import { filtrarProductosStockBajo } from "../utils/stock"
 import { iniciarReintentoAjustes } from "../utils/ajusteStock"
 import { esErrorCuota } from "../utils/cuotaFirebase"
+import { escucharQuery } from "../utils/firestoreLive"
 
 const ProductosLiveContext = createContext(null)
 const STORAGE_TODOS = "inventario_productos_todas"
@@ -34,6 +35,14 @@ function guardarTodosLocal(productos) {
   }
 }
 
+function fusionarTienda(prev, tiendaId, lista) {
+  const ids = new Set(lista.map((p) => p.id))
+  return [
+    ...prev.filter((p) => p.tiendaId !== tiendaId && !ids.has(p.id)),
+    ...lista,
+  ]
+}
+
 function agruparPorTienda(lista) {
   const mapa = {}
   lista.forEach((p) => {
@@ -48,6 +57,9 @@ export function ProductosLiveProvider({ children }) {
   const { tiendaActual, tiendaPropia } = useTienda()
   const [todos, setTodos] = useState(() => leerTodosLocal())
   const [cargando, setCargando] = useState(() => leerTodosLocal().length === 0)
+  const ultimaCargaTodas = useRef(0)
+  const todosRef = useRef(todos)
+  todosRef.current = todos
 
   const tiendaVistaId = tiendaActual?.id || ""
   const tiendaPropiaId = tiendaPropia?.id || ""
@@ -57,24 +69,34 @@ export function ProductosLiveProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, "productos"),
-      (snap) => {
-        const lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-        setTodos(lista)
-        guardarTodosLocal(lista)
-        setCargando(false)
-      },
-      (error) => {
-        if (!esErrorCuota(error)) {
-          console.error(error)
+    const ids = [...new Set([tiendaPropiaId, tiendaVistaId].filter(Boolean))]
+    if (ids.length === 0) {
+      setCargando(false)
+      return undefined
+    }
+
+    setCargando(true)
+    const cortes = ids.map((tiendaId) =>
+      escucharQuery(
+        query(collection(db, "productos"), where("tiendaId", "==", tiendaId)),
+        (snap) => {
+          const lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+          setTodos((prev) => {
+            const next = fusionarTienda(prev, tiendaId, lista)
+            guardarTodosLocal(next)
+            return next
+          })
+          setCargando(false)
+        },
+        (error) => {
+          if (!esErrorCuota(error)) console.error(error)
+          setCargando(false)
         }
-        setCargando(false)
-      }
+      )
     )
 
-    return unsub
-  }, [])
+    return () => cortes.forEach((fn) => fn())
+  }, [tiendaPropiaId, tiendaVistaId])
 
   const porTienda = useMemo(() => agruparPorTienda(todos), [todos])
 
@@ -119,11 +141,49 @@ export function ProductosLiveProvider({ children }) {
           }
           unicos.push(p)
         }
-        return [...resto, ...unicos]
+        const next = [...resto, ...unicos]
+        guardarTodosLocal(next)
+        return next
       })
     },
     [tiendaVistaId, tiendaPropiaId]
   )
+
+  const aplicarCambiosStock = useCallback((cambios) => {
+    if (!cambios?.length) return
+    const mapa = new Map(cambios.filter((c) => c?.id).map((c) => [c.id, c]))
+    setTodos((prev) => {
+      const next = prev.map((p) => {
+        const c = mapa.get(p.id)
+        if (!c) return p
+        const stock =
+          c.stock != null
+            ? Number(c.stock)
+            : Number(p.stock || 0) + Number(c.delta || 0)
+        return { ...p, stock }
+      })
+      guardarTodosLocal(next)
+      return next
+    })
+  }, [])
+
+  const cargarTodasLasTiendas = useCallback(async ({ force = false } = {}) => {
+    const ahora = Date.now()
+    if (!force && ahora - ultimaCargaTodas.current < 90_000 && todosRef.current.length > 0) {
+      return todosRef.current
+    }
+    try {
+      const snap = await getDocs(collection(db, "productos"))
+      const lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      ultimaCargaTodas.current = ahora
+      setTodos(lista)
+      guardarTodosLocal(lista)
+      return lista
+    } catch (error) {
+      if (!esErrorCuota(error)) console.error(error)
+      return todosRef.current
+    }
+  }, [])
 
   const stockBajo = useMemo(
     () => filtrarProductosStockBajo(productos),
@@ -135,6 +195,8 @@ export function ProductosLiveProvider({ children }) {
     productosPropios,
     todosLosProductos: todos,
     setProductos,
+    aplicarCambiosStock,
+    cargarTodasLasTiendas,
     cargando,
     cantidadStockBajo: stockBajo.length,
     productosStockBajo: stockBajo,

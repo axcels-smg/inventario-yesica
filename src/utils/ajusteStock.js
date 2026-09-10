@@ -3,9 +3,10 @@ import { db } from "../firebase"
 import { esErrorCuota } from "./cuotaFirebase"
 import { registrarMovimiento } from "./movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
+import { conReintentoCuota } from "./firestoreLive"
 
 const COLA_KEY = "inventario_ajustes_pendientes"
-const REINTENTO_MS = 45000
+const REINTENTO_MS = 8000
 
 function leerCola() {
   try {
@@ -80,9 +81,9 @@ export async function aplicarAjusteStock(producto, delta) {
   }
 
   try {
-    const { stockAntes, stockDespues } = await aplicarDeltaEnServidor(
-      producto.id,
-      cambio
+    const { stockAntes, stockDespues } = await conReintentoCuota(
+      () => aplicarDeltaEnServidor(producto.id, cambio),
+      { intentos: 5, baseMs: 600 }
     )
     return { stockAntes, stockDespues, cambio, diferido: false }
   } catch (error) {
@@ -114,13 +115,18 @@ export function iniciarReintentoAjustes() {
     for (const item of cola) {
       if (!item.delta) continue
       try {
-        await aplicarDeltaEnServidor(item.id, item.delta)
+        const { stockAntes, stockDespues } = await conReintentoCuota(
+          () => aplicarDeltaEnServidor(item.id, item.delta),
+          { intentos: 3, baseMs: 500 }
+        )
         await registrarMovimiento({
           tipo: TIPOS_MOVIMIENTO.AJUSTE_STOCK,
           productoId: item.id,
           productoNombre: item.productoNombre || "",
           cantidad: item.delta,
-          detalle: `Ajuste diferido ${item.delta > 0 ? "+" : ""}${item.delta}`,
+          stockAntes,
+          stockDespues,
+          detalle: `Ajuste ${item.delta > 0 ? "+" : ""}${item.delta}`,
           tiendaId: item.tiendaId || "",
         })
       } catch {
@@ -132,4 +138,8 @@ export function iniciarReintentoAjustes() {
 
   vaciarCola()
   window.setInterval(vaciarCola, REINTENTO_MS)
+  window.addEventListener("online", vaciarCola)
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") vaciarCola()
+  })
 }

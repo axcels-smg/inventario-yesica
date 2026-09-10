@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Swal from "sweetalert2"
 import {
   BarChart,
@@ -38,15 +38,14 @@ import ReporteStockEstructurado from "../components/ReporteStockEstructurado"
 import { useTienda } from "../context/TiendaContext"
 import { useRol } from "../context/RolContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
+import { useOperacionesLive } from "../context/OperacionesLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
-import { listarPorTienda } from "../utils/consultasTienda"
 
 function Reportes() {
   const { tiendaActual, tiendas, esTiendaPropia } = useTienda()
   const { esSuperAdmin } = useRol()
-  const { productos, todosLosProductos } = useProductosLive()
-  const [ventas, setVentas] = useState([])
-  const [clientes, setClientes] = useState([])
+  const { productos, todosLosProductos, cargarTodasLasTiendas } = useProductosLive()
+  const { ventas, clientes } = useOperacionesLive()
 
   const [fechaDesde, setFechaDesde] = useState("")
   const [fechaHasta, setFechaHasta] = useState("")
@@ -59,35 +58,17 @@ function Reportes() {
   const [busquedaStock, setBusquedaStock] = useState("")
   const [alcanceStock, setAlcanceStock] = useState("tienda")
 
-  const cargarDatos = useCallback(async () => {
-    if (!tiendaActual) return
-    if (!esTiendaPropia && !esSuperAdmin()) {
-      setVentas([])
-      setClientes([])
-      return
-    }
-
-    const [listaVentas, listaClientes] = await Promise.all([
-      listarPorTienda("ventas", tiendaActual.id, { force: true }),
-      listarPorTienda("clientes", tiendaActual.id, { force: true }),
-    ])
-
-    listaClientes.sort((a, b) =>
-      String(a.nombre || "").localeCompare(String(b.nombre || ""))
-    )
-
-    setVentas(listaVentas)
-    setClientes(listaClientes)
-  }, [tiendaActual, esTiendaPropia, esSuperAdmin])
-
   useEffect(() => {
-    if (tiendaActual) {
-      cargarDatos()
-    }
     const { fechaDesde: d, fechaHasta: h } = obtenerRangoPreset("mes")
     setFechaDesde(d)
     setFechaHasta(h)
-  }, [tiendaActual, cargarDatos])
+  }, [tiendaActual?.id])
+
+  useEffect(() => {
+    if (alcanceStock === "todas") {
+      cargarTodasLasTiendas().catch(() => {})
+    }
+  }, [alcanceStock, cargarTodasLasTiendas])
 
   const clienteSeleccionado = clientes.find((c) => c.id === clienteId)
 
@@ -384,12 +365,13 @@ function Reportes() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            if (!todosLosProductos.length) {
+          onClick={async () => {
+            const lista = await cargarTodasLasTiendas()
+            if (!lista.length) {
               return Swal.fire({ icon: "info", title: "No hay productos" })
             }
             const r = exportarInventarioDetalladoTodasLasTiendas(
-              todosLosProductos,
+              lista,
               tiendas
             )
             Swal.fire({

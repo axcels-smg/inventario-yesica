@@ -56,7 +56,7 @@ function resumenTransferencia(transferencia) {
 function Transferencias() {
   const { tiendaPropia: tiendaActual, tiendas } = useTienda()
   const { puedeHacerTransferencias } = useRol()
-  const { productosPropios: productosOrigen } = useProductosLive()
+  const { productosPropios: productosOrigen, aplicarCambiosStock } = useProductosLive()
   const [transferencias, setTransferencias] = useState([])
   const [modalAbierto, setModalAbierto] = useState(false)
   const [cargando, setCargando] = useState(true)
@@ -259,6 +259,12 @@ function Transferencias() {
         })
       }
 
+      aplicarCambiosStock(
+        (transferencia.productos || []).map((item) => ({
+          id: item.productoId,
+          delta: -Number(item.cantidad) || 0,
+        }))
+      )
       Swal.fire({
         icon: "success",
         title: "Enviado",
@@ -371,6 +377,12 @@ function Transferencias() {
         })
       }
 
+      aplicarCambiosStock(
+        movimientosEntrada.map((mov) => ({
+          id: mov.productoId,
+          delta: Number(mov.qty) || 0,
+        }))
+      )
       Swal.fire({
         icon: "success",
         title: "Stock agregado",
@@ -451,6 +463,14 @@ function Transferencias() {
         transaction.update(transRef, { estado: ESTADOS_TRANSFERENCIA.CANCELADA })
       })
 
+      if (devolverStock) {
+        aplicarCambiosStock(
+          (transferencia.productos || []).map((item) => ({
+            id: item.productoId,
+            delta: Number(item.cantidad) || 0,
+          }))
+        )
+      }
       Swal.fire({
         icon: "success",
         title: "Transferencia cancelada",

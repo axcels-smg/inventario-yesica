@@ -16,6 +16,7 @@ import Login from "./pages/Login"
 import MainLayout from "./layout/MainLayout"
 import { TiendaProvider } from "./context/TiendaContext"
 import { ProductosLiveProvider } from "./context/ProductosLiveContext"
+import { OperacionesLiveProvider } from "./context/OperacionesLiveContext"
 import { AuthProvider, useAuth } from "./context/AuthContext"
 import { RolProvider, useRol } from "./context/RolContext"
 
@@ -59,7 +60,9 @@ function App() {
             <Route path="/" element={
               <ProtectedRoute>
                 <ProductosLiveProvider>
-                  <MainLayout />
+                  <OperacionesLiveProvider>
+                    <MainLayout />
+                  </OperacionesLiveProvider>
                 </ProductosLiveProvider>
               </ProtectedRoute>
             }>

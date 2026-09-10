@@ -23,7 +23,7 @@ import {
 
 function InventarioExcel() {
   const { tiendaActual, esTiendaPropia, tiendas } = useTienda()
-  const { productos: productosLive, todosLosProductos } = useProductosLive()
+  const { productos: productosLive, cargarTodasLasTiendas } = useProductosLive()
   const inputRef = useRef(null)
   const [importando, setImportando] = useState(false)
   const [vistaPrevia, setVistaPrevia] = useState([])
@@ -71,15 +71,16 @@ function InventarioExcel() {
     }
   }
 
-  function exportarDetalladoTodas() {
+  async function exportarDetalladoTodas() {
     try {
-      if (!todosLosProductos.length) {
+      const lista = await cargarTodasLasTiendas({ force: true })
+      if (!lista.length) {
         Swal.fire({ icon: "info", title: "No hay productos para exportar" })
         return
       }
 
       const r = exportarInventarioDetalladoTodasLasTiendas(
-        todosLosProductos,
+        lista,
         tiendas
       )
 

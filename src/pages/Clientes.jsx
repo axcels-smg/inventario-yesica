@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from "react"
+import { useState, useRef } from "react"
 import Swal from "sweetalert2"
 import { Pencil, Search, Trash2, X } from "lucide-react"
 
@@ -13,15 +13,15 @@ import {
 } from "firebase/firestore"
 import { useTienda } from "../context/TiendaContext"
 import { useRol } from "../context/RolContext"
-import { listarPorTienda, invalidarCacheTienda } from "../utils/consultasTienda"
+import { useOperacionesLive } from "../context/OperacionesLiveContext"
+import { invalidarCacheTienda } from "../utils/consultasTienda"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { errorOperacion } from "../utils/erroresUi"
 
 function Clientes() {
   const { tiendaActual, esTiendaPropia } = useTienda()
   const { puedeCrearClientes, puedeEditarClientes, puedeEliminarClientes } = useRol()
-
-  const [clientes, setClientes] = useState([])
+  const { clientes } = useOperacionesLive()
 
   const [nombre, setNombre] = useState("")
   const [telefono, setTelefono] = useState("")
@@ -31,29 +31,6 @@ function Clientes() {
   const [editandoId, setEditandoId] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const guardandoRef = useRef(false)
-
-  const cargarClientes = useCallback(async () => {
-    if (!tiendaActual) return
-
-    try {
-      const lista = await listarPorTienda("clientes", tiendaActual.id, { force: true })
-
-      lista.sort((a, b) =>
-        String(a.nombre || "").localeCompare(String(b.nombre || ""))
-      )
-
-      setClientes(lista)
-
-    } catch (error) {
-      console.log(error)
-    }
-  }, [tiendaActual])
-
-  useEffect(() => {
-    if (tiendaActual) {
-      cargarClientes()
-    }
-  }, [tiendaActual, cargarClientes])
 
   function limpiarFormulario() {
     setNombre("")
@@ -83,10 +60,11 @@ function Clientes() {
     const correoLimpio = correo.trim()
     const direccionLimpia = direccion.trim()
 
-    if (!nombreLimpio || !telefonoLimpio || !correoLimpio) {
+    if (!nombreLimpio || !telefonoLimpio) {
       Swal.fire({
         icon: "warning",
-        title: "Completa los campos",
+        title: "Completa nombre y teléfono",
+        text: "El correo es opcional.",
       })
       return
     }
@@ -122,7 +100,6 @@ function Clientes() {
 
       invalidarCacheTienda("clientes", tiendaActual.id)
       limpiarFormulario()
-      await cargarClientes()
 
     } catch (error) {
       errorOperacion(error, "Error al guardar")
@@ -157,8 +134,6 @@ function Clientes() {
       if (editandoId === id) {
         limpiarFormulario()
       }
-
-      await cargarClientes()
 
     } catch (error) {
       errorOperacion(error, "Error al eliminar")
@@ -228,7 +203,7 @@ function Clientes() {
             <input
               value={correo}
               onChange={(e) => setCorreo(e.target.value)}
-              placeholder="Correo"
+              placeholder="Correo (opcional)"
               className="p-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
 

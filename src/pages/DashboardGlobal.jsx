@@ -29,7 +29,7 @@ function DashboardGlobal() {
   const { tiendas } = useTienda()
   const { esSuperAdmin } = useRol()
   const permitido = esSuperAdmin()
-  const { todosLosProductos } = useProductosLive()
+  const { todosLosProductos, cargarTodasLasTiendas } = useProductosLive()
   const [ventas, setVentas] = useState([])
   const [cargando, setCargando] = useState(true)
 
@@ -56,13 +56,16 @@ function DashboardGlobal() {
       }
     }
 
-    if (tiendas.length) cargarVentas()
+    if (tiendas.length) {
+      cargarTodasLasTiendas().catch(() => {})
+      cargarVentas()
+    }
     else setCargando(false)
 
     return () => {
       cancelado = true
     }
-  }, [tiendas, permitido])
+  }, [tiendas, permitido, cargarTodasLasTiendas])
 
   const ventasActivas = ventas.filter((v) => !v.anulada)
 

@@ -1,5 +1,10 @@
 import { initializeApp } from "firebase/app"
-import { getFirestore, initializeFirestore } from "firebase/firestore"
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore"
 import { getAuth } from "firebase/auth"
 
 const firebaseConfig = {
@@ -23,10 +28,19 @@ const app = initializeApp(firebaseConfig)
 let db
 try {
   db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
     experimentalAutoDetectLongPolling: true,
   })
 } catch {
-  db = getFirestore(app)
+  try {
+    db = initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+    })
+  } catch {
+    db = getFirestore(app)
+  }
 }
 export { db }
 

@@ -41,7 +41,7 @@ import { useProductosLive } from "../context/ProductosLiveContext"
 import { useRol } from "../context/RolContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
-const ESPERA_GUARDADO_MS = 80
+const ESPERA_GUARDADO_MS = 450
 
 function Productos() {
   const { tiendaActual, tiendaPropia, esTiendaPropia } = useTienda()
@@ -292,10 +292,10 @@ function Productos() {
 
       if (!silencioso && diferido) {
         Swal.fire({
-          icon: "info",
-          title: "Stock en espera",
-          text: "Firebase está saturado. El cambio se guardará en cuanto se pueda.",
-          timer: 2200,
+          icon: "warning",
+          title: "Reintentando sincronizar",
+          text: "Firebase no respondió. El stock se está reenviando para que las otras laptops y tiendas lo vean.",
+          timer: 2600,
           showConfirmButton: false,
         })
       } else if (!silencioso && !diferido) {
