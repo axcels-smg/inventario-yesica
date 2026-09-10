@@ -239,6 +239,7 @@ function Transferencias() {
           }
           transaction.update(productoRef, {
             stock: stockActual - cantidadItem,
+            actualizado: serverTimestamp(),
           })
         }
 
@@ -341,7 +342,10 @@ function Transferencias() {
             if (!Number.isFinite(stockActual)) {
               throw new Error(`Stock inválido en destino para ${nombreExactoProducto(c.item)}`)
             }
-            transaction.update(c.ref, { stock: stockActual + c.qty })
+            transaction.update(c.ref, {
+              stock: stockActual + c.qty,
+              actualizado: serverTimestamp(),
+            })
           } else {
             transaction.set(c.ref, {
               marca: c.item.marca || "",
@@ -351,6 +355,7 @@ function Transferencias() {
               precio: c.item.precio || 0,
               stock: c.qty,
               tiendaId: transferencia.destinoTiendaId,
+              actualizado: serverTimestamp(),
             })
           }
           movimientosEntrada.push({
@@ -456,6 +461,7 @@ function Transferencias() {
             }
             transaction.update(productoRef, {
               stock: stockActual + qty,
+              actualizado: serverTimestamp(),
             })
           }
         }

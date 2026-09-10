@@ -5,11 +5,17 @@ import Sidebar from "../components/Sidebar"
 import { useStockBajo } from "../hooks/useStockBajo"
 import { useTienda } from "../context/TiendaContext"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
+import { leerAjustesPendientes, suscribirAjustesPendientes } from "../utils/ajusteStock"
 
 function MainLayout() {
   const [menuAbierto, setMenuAbierto] = useState(false)
   const { tiendaActual } = useTienda()
   const { cantidad: alertasStock } = useStockBajo(tiendaActual?.id)
+  const [pendientes, setPendientes] = useState(() => leerAjustesPendientes())
+
+  useEffect(() => {
+    return suscribirAjustesPendientes(setPendientes)
+  }, [])
 
   useEffect(() => {
     document.body.style.overflow = menuAbierto ? "hidden" : ""
@@ -86,6 +92,12 @@ function MainLayout() {
 
         <main className="flex-1 w-full min-w-0 p-3 pt-[4.75rem] pb-[max(3rem,env(safe-area-inset-bottom))] sm:p-4 sm:pt-20 md:px-8 md:pt-24 overflow-x-clip">
           <div className="max-w-7xl mx-auto w-full min-w-0">
+            {pendientes.length > 0 && (
+              <div className="mb-4 rounded-2xl border border-amber-400 bg-amber-50 dark:bg-amber-950/50 dark:border-amber-700 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+                {pendientes.length} cambio{pendientes.length === 1 ? "" : "s"} aún no llegó a la nube.
+                En esta laptop se ve; en las otras tiendas se verá en cuanto Firebase lo acepte (se reenvía solo).
+              </div>
+            )}
             <Outlet />
           </div>
         </main>

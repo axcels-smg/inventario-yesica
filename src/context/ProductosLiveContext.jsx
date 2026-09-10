@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
-import { collection, getDocs, query, where } from "firebase/firestore"
+import { collection, getDocs, query, Timestamp, where } from "firebase/firestore"
 import { db } from "../firebase"
 import { useTienda } from "./TiendaContext"
 import { filtrarProductosStockBajo } from "../utils/stock"
-import { iniciarReintentoAjustes } from "../utils/ajusteStock"
+import { iniciarReintentoAjustes, aplicarAjustesPendientesALista, suscribirAjustesPendientes } from "../utils/ajusteStock"
 import { esErrorCuota } from "../utils/cuotaFirebase"
 import { escucharQuery } from "../utils/firestoreLive"
 
@@ -35,6 +35,14 @@ function guardarTodosLocal(productos) {
   }
 }
 
+function fusionarLista(prev, lista) {
+  const mapa = new Map(prev.map((p) => [p.id, p]))
+  lista.forEach((p) => {
+    if (p?.id) mapa.set(p.id, { ...mapa.get(p.id), ...p })
+  })
+  return [...mapa.values()]
+}
+
 function fusionarTienda(prev, tiendaId, lista) {
   const ids = new Set(lista.map((p) => p.id))
   return [
@@ -64,8 +72,11 @@ export function ProductosLiveProvider({ children }) {
   const tiendaVistaId = tiendaActual?.id || ""
   const tiendaPropiaId = tiendaPropia?.id || ""
 
+  const [colaTick, setColaTick] = useState(0)
+
   useEffect(() => {
     iniciarReintentoAjustes()
+    return suscribirAjustesPendientes(() => setColaTick((n) => n + 1))
   }, [])
 
   useEffect(() => {
@@ -75,52 +86,81 @@ export function ProductosLiveProvider({ children }) {
       return undefined
     }
 
+    let cancelado = false
     setCargando(true)
-    const cortes = ids.map((tiendaId) =>
-      escucharQuery(
-        query(collection(db, "productos"), where("tiendaId", "==", tiendaId)),
-        (snap) => {
+
+    async function cargarCatalogo() {
+      for (const tiendaId of ids) {
+        try {
+          const snap = await getDocs(
+            query(collection(db, "productos"), where("tiendaId", "==", tiendaId))
+          )
+          if (cancelado) return
           const lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
           setTodos((prev) => {
             const next = fusionarTienda(prev, tiendaId, lista)
             guardarTodosLocal(next)
             return next
           })
-          setCargando(false)
-        },
-        (error) => {
+        } catch (error) {
           if (!esErrorCuota(error)) console.error(error)
-          setCargando(false)
         }
-      )
-    )
+      }
+      if (!cancelado) setCargando(false)
+    }
 
-    return () => cortes.forEach((fn) => fn())
+    cargarCatalogo()
+    return () => {
+      cancelado = true
+    }
   }, [tiendaPropiaId, tiendaVistaId])
+
+  useEffect(() => {
+    const desde = Timestamp.fromMillis(Date.now() - 120000)
+    return escucharQuery(
+      query(collection(db, "productos"), where("actualizado", ">=", desde)),
+      (snap) => {
+        const cambios = snap.docChanges
+          ? snap.docChanges().map((c) => ({ id: c.doc.id, ...c.doc.data() }))
+          : snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+        if (!cambios.length) return
+        setTodos((prev) => {
+          const next = fusionarLista(prev, cambios)
+          guardarTodosLocal(next)
+          return next
+        })
+      }
+    )
+  }, [])
 
   const porTienda = useMemo(() => agruparPorTienda(todos), [todos])
 
   const productos = useMemo(() => {
     const productosBase = porTienda[tiendaVistaId] || []
     const sin = porTienda[""] || []
+    let lista = productosBase
     if (tiendaVistaId && tiendaVistaId === tiendaPropiaId) {
-      return [
+      lista = [
         ...productosBase,
         ...sin.filter((p) => !productosBase.some((x) => x.id === p.id)),
       ]
     }
-    return productosBase
-  }, [porTienda, tiendaVistaId, tiendaPropiaId])
+    return aplicarAjustesPendientesALista(lista)
+  }, [porTienda, tiendaVistaId, tiendaPropiaId, colaTick])
 
   const productosPropios = useMemo(() => {
     const dePropia = porTienda[tiendaPropiaId] || []
     const sin = porTienda[""] || []
-    if (!tiendaPropiaId) return productos
-    return [
-      ...dePropia,
-      ...sin.filter((p) => !dePropia.some((x) => x.id === p.id)),
-    ]
-  }, [porTienda, tiendaPropiaId, productos])
+    let lista = dePropia
+    if (!tiendaPropiaId) lista = productos
+    else {
+      lista = [
+        ...dePropia,
+        ...sin.filter((p) => !dePropia.some((x) => x.id === p.id)),
+      ]
+    }
+    return aplicarAjustesPendientesALista(lista)
+  }, [porTienda, tiendaPropiaId, productos, colaTick])
 
   const setProductos = useCallback(
     (updater) => {
@@ -160,7 +200,7 @@ export function ProductosLiveProvider({ children }) {
           c.stock != null
             ? Number(c.stock)
             : Number(p.stock || 0) + Number(c.delta || 0)
-        return { ...p, stock }
+        return { ...p, stock, actualizado: new Date() }
       })
       guardarTodosLocal(next)
       return next
@@ -200,6 +240,7 @@ export function ProductosLiveProvider({ children }) {
     cargando,
     cantidadStockBajo: stockBajo.length,
     productosStockBajo: stockBajo,
+    colaTick,
   }
 
   return (

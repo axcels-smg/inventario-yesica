@@ -161,7 +161,10 @@ function HistorialVentas() {
         registrosMovimiento.push(...porProducto.values())
 
         registrosMovimiento.forEach((mov) => {
-          transaction.update(mov.ref, { stock: mov.stockDespues })
+          transaction.update(mov.ref, {
+            stock: mov.stockDespues,
+            actualizado: serverTimestamp(),
+          })
         })
 
         transaction.update(ventaRef, {

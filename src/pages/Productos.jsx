@@ -19,6 +19,7 @@ import {
   deleteDoc,
   updateDoc,
   doc,
+  serverTimestamp,
 } from "firebase/firestore"
 
 import {
@@ -269,12 +270,16 @@ function Productos() {
 
       setProductosLive((lista) =>
         lista.map((p) =>
-          p.id === producto.id ? { ...p, stock: stockDespues } : p
+          p.id === producto.id
+            ? { ...p, stock: diferido ? stockAntes : stockDespues }
+            : p
         )
       )
 
       if (productoAjuste?.id === producto.id) {
-        setProductoAjuste((p) => (p ? { ...p, stock: stockDespues } : p))
+        setProductoAjuste((p) =>
+          p ? { ...p, stock: diferido ? stockAntes : stockDespues } : p
+        )
       }
 
       if (!diferido) {
@@ -403,6 +408,7 @@ function Productos() {
           codigo: codigoLimpio,
           precio: precioNumero,
           tiendaId: tiendaActual.id,
+          actualizado: serverTimestamp(),
         }
 
         await updateDoc(doc(db, "productos", editandoId), datos)
@@ -446,6 +452,7 @@ function Productos() {
           precio: precioNumero,
           stock: stockNumeroVal,
           tiendaId: tiendaActual.id,
+          actualizado: serverTimestamp(),
         })
         setProductosLive((lista) => {
           if (lista.some((p) => p.id === creado.id)) return lista

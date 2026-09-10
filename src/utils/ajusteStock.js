@@ -1,4 +1,4 @@
-import { doc, runTransaction } from "firebase/firestore"
+import { doc, increment, serverTimestamp, updateDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { esErrorCuota } from "./cuotaFirebase"
 import { registrarMovimiento } from "./movimientos"
@@ -6,23 +6,63 @@ import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { conReintentoCuota } from "./firestoreLive"
 
 const COLA_KEY = "inventario_ajustes_pendientes"
-const REINTENTO_MS = 8000
+const COLA_EVENTO = "inventario-cola-stock"
+const REINTENTO_MS = 5000
 
-function leerCola() {
+function avisarCola() {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new Event(COLA_EVENTO))
+}
+
+export function leerAjustesPendientes() {
   try {
     const lista = JSON.parse(localStorage.getItem(COLA_KEY) || "[]")
-    return Array.isArray(lista) ? lista : []
+    return Array.isArray(lista) ? lista.filter((item) => item?.id && item.delta) : []
   } catch {
     return []
   }
 }
 
+export function suscribirAjustesPendientes(callback) {
+  if (typeof window === "undefined") return () => {}
+  const emitir = () => callback(leerAjustesPendientes())
+  emitir()
+  window.addEventListener(COLA_EVENTO, emitir)
+  window.addEventListener("storage", emitir)
+  return () => {
+    window.removeEventListener(COLA_EVENTO, emitir)
+    window.removeEventListener("storage", emitir)
+  }
+}
+
+export function aplicarAjustesPendientesALista(lista) {
+  const cola = leerAjustesPendientes()
+  if (!cola.length) return lista
+  const mapa = new Map(cola.map((item) => [item.id, Number(item.delta) || 0]))
+  return lista.map((p) => {
+    const delta = mapa.get(p.id)
+    if (!delta) return p
+    return {
+      ...p,
+      stock: Math.max(0, Number(p.stock || 0) + delta),
+      syncPendiente: true,
+    }
+  })
+}
+
+export function marcaStockNube(stock) {
+  const datos = { actualizado: serverTimestamp() }
+  if (stock != null) datos.stock = stock
+  return datos
+}
+
 function guardarCola(lista) {
   localStorage.setItem(COLA_KEY, JSON.stringify(lista))
+  avisarCola()
 }
 
 function encolarAjuste(producto, delta) {
-  const cola = leerCola()
+  const cola = leerAjustesPendientes()
   const i = cola.findIndex((item) => item.id === producto.id)
   if (i >= 0) {
     cola[i].delta += delta
@@ -41,24 +81,10 @@ function encolarAjuste(producto, delta) {
 }
 
 async function aplicarDeltaEnServidor(productoId, delta) {
-  return runTransaction(db, async (transaction) => {
-    const ref = doc(db, "productos", productoId)
-    const snap = await transaction.get(ref)
-    if (!snap.exists()) {
-      throw new Error("El producto ya no existe")
-    }
-    const stockAntes = Number(snap.data().stock)
-    if (!Number.isFinite(stockAntes)) {
-      throw new Error("Stock inválido")
-    }
-    const stockDespues = stockAntes + delta
-    if (stockDespues < 0) {
-      throw new Error(
-        `No se puede dejar el stock en ${stockDespues}. Hay ${stockAntes} u.`
-      )
-    }
-    transaction.update(ref, { stock: stockDespues })
-    return { stockAntes, stockDespues }
+  const ref = doc(db, "productos", productoId)
+  await updateDoc(ref, {
+    stock: increment(delta),
+    actualizado: serverTimestamp(),
   })
 }
 
@@ -80,22 +106,19 @@ export async function aplicarAjusteStock(producto, delta) {
     )
   }
 
+  const stockAntes = Number.isFinite(stockLocal) ? stockLocal : 0
+  const stockDespues = stockAntes + cambio
+
   try {
-    const { stockAntes, stockDespues } = await conReintentoCuota(
+    await conReintentoCuota(
       () => aplicarDeltaEnServidor(producto.id, cambio),
-      { intentos: 5, baseMs: 600 }
+      { intentos: 6, baseMs: 400 }
     )
     return { stockAntes, stockDespues, cambio, diferido: false }
   } catch (error) {
     if (esErrorCuota(error)) {
-      const stockAntes = Number.isFinite(stockLocal) ? stockLocal : 0
       encolarAjuste(producto, cambio)
-      return {
-        stockAntes,
-        stockDespues: stockAntes + cambio,
-        cambio,
-        diferido: true,
-      }
+      return { stockAntes, stockDespues, cambio, diferido: true }
     }
     throw error
   }
@@ -108,24 +131,22 @@ export function iniciarReintentoAjustes() {
   reintentoIniciado = true
 
   async function vaciarCola() {
-    const cola = leerCola()
+    const cola = leerAjustesPendientes()
     if (cola.length === 0) return
 
     const resto = []
     for (const item of cola) {
       if (!item.delta) continue
       try {
-        const { stockAntes, stockDespues } = await conReintentoCuota(
+        await conReintentoCuota(
           () => aplicarDeltaEnServidor(item.id, item.delta),
-          { intentos: 3, baseMs: 500 }
+          { intentos: 4, baseMs: 400 }
         )
         await registrarMovimiento({
           tipo: TIPOS_MOVIMIENTO.AJUSTE_STOCK,
           productoId: item.id,
           productoNombre: item.productoNombre || "",
           cantidad: item.delta,
-          stockAntes,
-          stockDespues,
           detalle: `Ajuste ${item.delta > 0 ? "+" : ""}${item.delta}`,
           tiendaId: item.tiendaId || "",
         })

@@ -414,6 +414,7 @@ function Ventas() {
         productosActuales.forEach(({ ref, stock, item }) => {
           transaction.update(ref, {
             stock: stock - item.cantidad,
+            actualizado: serverTimestamp(),
           })
         })
 
