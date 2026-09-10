@@ -204,3 +204,120 @@ export function imprimirBoleta(venta, tienda = null) {
   ventana.document.write(html)
   ventana.document.close()
 }
+
+function escaparHtml(valor) {
+  return String(valor ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+export function imprimirModelosStock({
+  grupos = [],
+  nombreTienda = "Tienda",
+  titulo = "Modelos que ya no hay (stock 0)",
+  nota = "",
+} = {}) {
+  const filas = grupos.flatMap((cat) =>
+    (cat.marcas || []).flatMap((marca) =>
+      (marca.modelos || []).map((m) => ({
+        categoria: cat.categoria,
+        marca: marca.marca,
+        modelo: m.modelo,
+        codigo: m.codigo || "—",
+        stock: m.stock,
+        estado: m.estado,
+        precio: m.precio,
+      }))
+    )
+  )
+
+  if (filas.length === 0) {
+    Swal.fire({
+      icon: "info",
+      title: "Nada para imprimir",
+      text: "No hay modelos con ese filtro.",
+    })
+    return
+  }
+
+  const bloques = grupos
+    .map((cat) => {
+      const lineas = (cat.marcas || [])
+        .flatMap((marca) =>
+          (marca.modelos || []).map(
+            (m) => `
+              <tr>
+                <td>${escaparHtml(marca.marca)}</td>
+                <td>${escaparHtml(m.modelo)}</td>
+                <td>${escaparHtml(m.codigo || "—")}</td>
+                <td style="text-align:right">${escaparHtml(m.stock)}</td>
+                <td>${escaparHtml(m.estado)}</td>
+                <td style="text-align:right">S/ ${Number(m.precio || 0).toFixed(2)}</td>
+              </tr>`
+          )
+        )
+        .join("")
+      return `
+        <h2>${escaparHtml(cat.categoria)} — ${cat.cantidad} modelo${cat.cantidad === 1 ? "" : "s"}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Marca</th>
+              <th>Modelo</th>
+              <th>Código</th>
+              <th>Stock</th>
+              <th>Estado</th>
+              <th>Precio</th>
+            </tr>
+          </thead>
+          <tbody>${lineas}</tbody>
+        </table>`
+    })
+    .join("")
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>${escaparHtml(titulo)}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 16px; color: #111; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        .meta { color: #555; margin-bottom: 16px; font-size: 13px; }
+        h2 { font-size: 15px; margin: 18px 0 8px; border-bottom: 1px solid #111; padding-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 8px; }
+        th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+        th { background: #f3f3f3; }
+        @media print { body { padding: 0; } .no-print { display: none; } }
+      </style>
+    </head>
+    <body>
+      <h1>${escaparHtml(titulo)}</h1>
+      <p class="meta">${escaparHtml(nombreTienda)} · ${filas.length} modelos · ${new Date().toLocaleString("es-PE")}${nota ? `<br/>${escaparHtml(nota)}` : ""}</p>
+      ${bloques}
+      <script>
+        window.onload = () => {
+          window.print();
+          window.onafterprint = () => window.close();
+        };
+      </script>
+    </body>
+    </html>
+  `
+
+  const ventana = window.open("", "_blank", "width=900,height=800")
+  if (!ventana) {
+    Swal.fire({
+      icon: "warning",
+      title: "Ventanas bloqueadas",
+      text: "Permite ventanas emergentes para imprimir la lista.",
+    })
+    return
+  }
+  ventana.document.write(html)
+  ventana.document.close()
+}
+

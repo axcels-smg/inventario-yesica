@@ -11,15 +11,7 @@ import {
   Pie,
   Cell,
 } from "recharts"
-import {
-  FileText,
-  DollarSign,
-  AlertTriangle,
-  Download,
-  MessageCircle,
-  Mail,
-  FileDown,
-} from "lucide-react"
+import { FileText, DollarSign, AlertTriangle, Download, MessageCircle, Mail, FileDown, Printer } from "lucide-react"
 
 import { filtrarProductosStockBajo, resumenStockBajo, filtrarProductosPorEstadoStock } from "../utils/stock"
 import { agruparPorCategoriaMarcaModelo, agruparPocoStockPorTienda } from "../utils/reporteStock"
@@ -37,6 +29,7 @@ import {
   formatoMoneda,
   nombreProductoVenta,
 } from "../utils/reciboCliente"
+import { imprimirModelosStock } from "../utils/impresion"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { enlaceWhatsAppStockBajo, enlaceEmailStockBajo, obtenerTelefonoWhatsApp, guardarTelefonoWhatsApp } from "../utils/whatsapp"
 import AlertasStockAcumulativas from "../components/AlertasStockAcumulativas"
@@ -486,10 +479,10 @@ function Reportes() {
         <div
           role="button"
           tabIndex={0}
-          onClick={() => setFiltroStockReporte("bajo")}
-          onKeyDown={(e) => e.key === "Enter" && setFiltroStockReporte("bajo")}
+          onClick={() => setFiltroStockReporte("no_hay")}
+          onKeyDown={(e) => e.key === "Enter" && setFiltroStockReporte("no_hay")}
           className={`bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 cursor-pointer ${
-            filtroStockReporte === "bajo" || filtroStockReporte === "no_hay" ? "ring-2 ring-red-400" : ""
+            filtroStockReporte === "no_hay" ? "ring-2 ring-red-400" : ""
           }`}
         >
           <AlertTriangle className="text-red-500" size={38} />
@@ -498,8 +491,64 @@ function Reportes() {
             {resumenPocoStock.agotados}
           </h2>
           <p className="text-xs text-slate-500 mt-2">
-            {resumenPocoStock.poco} con poco stock · {resumenPocoStock.pantallasSinStock} pantallas sin stock
+            Modelos agotados según el aviso de ≤{STOCK_BAJO_UMBRAL} u. (estos están en 0)
           </p>
+          <div className="flex flex-wrap gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => {
+                const fuente = alcanceStock === "todas" ? todosLosProductos : productos
+                const lista = filtrarProductosPorEstadoStock(fuente, "no_hay")
+                if (lista.length === 0) {
+                  return Swal.fire({
+                    icon: "info",
+                    title: "Todo tiene stock",
+                    text: "No hay modelos en 0 en esta vista.",
+                  })
+                }
+                const r = exportarPocoStockEstructurado({
+                  productos: lista,
+                  nombreTienda:
+                    alcanceStock === "todas"
+                      ? "Todas las tiendas"
+                      : tiendaActual?.nombre || "Tienda",
+                  tiendas,
+                  todas: alcanceStock === "todas",
+                  estadoStock: "no_hay",
+                })
+                Swal.fire({
+                  icon: "success",
+                  title: "Excel de lo que no hay",
+                  text: `${r.productos} modelos en stock 0. Una hoja por categoría.`,
+                })
+              }}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-green-700 text-white text-sm font-bold"
+            >
+              <Download size={16} />
+              Excel no hay
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const fuente = alcanceStock === "todas" ? todosLosProductos : productos
+                const lista = filtrarProductosPorEstadoStock(fuente, "no_hay")
+                const nombre =
+                  alcanceStock === "todas"
+                    ? "Todas las tiendas"
+                    : tiendaActual?.nombre || "Tienda"
+                imprimirModelosStock({
+                  grupos: agruparPorCategoriaMarcaModelo(lista, nombre),
+                  nombreTienda: nombre,
+                  titulo: "Modelos que ya no hay (stock 0)",
+                  nota: `Aviso de poco stock: ${STOCK_BAJO_UMBRAL} unidades o menos. Esta lista es solo stock 0.`,
+                })
+              }}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-800 text-white text-sm font-bold"
+            >
+              <Printer size={16} />
+              Imprimir no hay
+            </button>
+          </div>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
           <p className="text-slate-500 dark:text-slate-400 mt-2">Clientes en filtro</p>
@@ -739,16 +788,31 @@ function Reportes() {
           <button
             type="button"
             onClick={() => {
+              const lista =
+                alcanceStock === "todas" ? reporteStockTodas.lista : listaStockReporte
+              if (lista.length === 0) {
+                return Swal.fire({
+                  icon: "info",
+                  title: "Nada que exportar",
+                  text: "Cambia el filtro o no hay modelos con ese estado.",
+                })
+              }
               const r = exportarPocoStockEstructurado({
-                productos: alcanceStock === "todas" ? reporteStockTodas.lista : listaStockReporte,
-                nombreTienda: tiendaActual?.nombre || "Tienda",
+                productos: lista,
+                nombreTienda:
+                  alcanceStock === "todas"
+                    ? "Todas las tiendas"
+                    : tiendaActual?.nombre || "Tienda",
                 tiendas,
                 todas: alcanceStock === "todas",
-                estadoStock: "",
+                estadoStock: filtroStockReporte,
               })
               Swal.fire({
                 icon: "success",
-                title: "Excel de poco stock",
+                title:
+                  filtroStockReporte === "no_hay"
+                    ? "Excel de lo que no hay"
+                    : "Excel de poco stock",
                 text: `${r.categorias} categorías · ${r.productos} modelos. Una hoja por categoría.`,
               })
             }}
@@ -756,6 +820,33 @@ function Reportes() {
           >
             <Download size={18} />
             Excel de este reporte
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const lista =
+                alcanceStock === "todas" ? reporteStockTodas.lista : listaStockReporte
+              const nombre =
+                alcanceStock === "todas"
+                  ? "Todas las tiendas"
+                  : tiendaActual?.nombre || "Tienda"
+              imprimirModelosStock({
+                grupos: agruparPorCategoriaMarcaModelo(lista, nombre),
+                nombreTienda: nombre,
+                titulo:
+                  filtroStockReporte === "no_hay"
+                    ? "Modelos que ya no hay (stock 0)"
+                    : `Poco stock (≤ ${STOCK_BAJO_UMBRAL} u.)`,
+                nota:
+                  filtroStockReporte === "no_hay"
+                    ? "Solo modelos en 0. El aviso de 3 unidades incluye también 1, 2 y 3."
+                    : `Incluye stock 0 hasta ${STOCK_BAJO_UMBRAL}.`,
+              })
+            }}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-800 text-white font-bold"
+          >
+            <Printer size={18} />
+            Imprimir este reporte
           </button>
         </div>
 

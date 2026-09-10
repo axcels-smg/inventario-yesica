@@ -824,7 +824,9 @@ export function exportarPocoStockEstructurado({
 
   const nombre = todas
     ? `poco-stock-todas-las-tiendas-${fechaArchivoLocal()}.xlsx`
-    : `poco-stock-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`
+    : estadoStock === "no_hay" || estadoStock === "agotado"
+      ? `no-hay-modelos-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`
+      : `poco-stock-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`
 
   XLSX.writeFile(libro, nombre)
   return {
@@ -833,7 +835,11 @@ export function exportarPocoStockEstructurado({
   }
 }
 
-export function exportarPocoStockCiclo3Dias(alertas, nombreTienda = "Tienda") {
+export function exportarPocoStockCiclo3Dias(
+  alertas,
+  nombreTienda = "Tienda",
+  { soloNoHay = false } = {}
+) {
   const dias = [...new Set((alertas || []).map((a) => a.fechaKey).filter(Boolean))].sort()
   const libro = XLSX.utils.book_new()
   const usados = new Set()
@@ -859,12 +865,49 @@ export function exportarPocoStockCiclo3Dias(alertas, nombreTienda = "Tienda") {
     })
   })
 
+  function filasDeCategoria(modelos) {
+    return [...modelos.values()]
+      .sort(
+        (a, b) =>
+          compararTexto(a.Marca, b.Marca) || compararTexto(a.Modelo, b.Modelo)
+      )
+      .map((m) => {
+        const fila = {
+          Categoria: "",
+          Marca: m.Marca,
+          Modelo: m.Modelo,
+          Codigo: m.Codigo,
+          "Precio unit.": m["Precio unit."],
+        }
+        dias.forEach((d) => {
+          const v = m.stockPorDia[d]
+          fila[`Stock ${formatearFechaKey(d)}`] = v === undefined ? "" : v
+        })
+        const ultimoDia = [...dias].reverse().find((d) => m.stockPorDia[d] !== undefined)
+        const ultimoStock = ultimoDia != null ? m.stockPorDia[ultimoDia] : null
+        fila.Estado =
+          ultimoDia != null ? etiquetaEstadoStock(ultimoStock) : ""
+        fila._ultimoStock = ultimoStock
+        return fila
+      })
+        .filter((fila) => {
+          if (!soloNoHay) return true
+          return fila._ultimoStock != null && Number(fila._ultimoStock) <= 0
+        })
+        .map((fila) => {
+          const limpia = { ...fila }
+          delete limpia._ultimoStock
+          return limpia
+        })
+  }
+
   const resumen = [
     {
       Tienda: nombreTienda,
       Ciclo: "3 días",
       Dias: dias.map(formatearFechaKey).join(" · ") || "—",
       Categorias: porCategoria.size,
+      Filtro: soloNoHay ? "Solo modelos que ya no hay (stock 0)" : "Poco stock (≤ 3)",
     },
   ]
   XLSX.utils.book_append_sheet(
@@ -873,53 +916,84 @@ export function exportarPocoStockCiclo3Dias(alertas, nombreTienda = "Tienda") {
     nombreHojaExcel("Resumen", usados)
   )
 
+  const filasNoHay = []
   ;[...porCategoria.entries()]
     .sort((a, b) => compararTexto(a[0], b[0]))
     .forEach(([categoria, modelos]) => {
-      const filas = [...modelos.values()]
-        .sort(
-          (a, b) =>
-            compararTexto(a.Marca, b.Marca) || compararTexto(a.Modelo, b.Modelo)
-        )
-        .map((m) => {
-          const fila = {
-            Categoria: categoria,
-            Marca: m.Marca,
-            Modelo: m.Modelo,
-            Codigo: m.Codigo,
-            "Precio unit.": m["Precio unit."],
-          }
-          dias.forEach((d) => {
-            const v = m.stockPorDia[d]
-            fila[`Stock ${formatearFechaKey(d)}`] = v === undefined ? "" : v
-          })
-          const ultimoDia = [...dias].reverse().find((d) => m.stockPorDia[d] !== undefined)
-          fila.Estado =
-            ultimoDia != null ? etiquetaEstadoStock(m.stockPorDia[ultimoDia]) : ""
-          return fila
-        })
-
-      const hoja = filas.length
-        ? XLSX.utils.json_to_sheet(filas)
-        : XLSX.utils.aoa_to_sheet([["Categoria", "Marca", "Modelo"]])
-      hoja["!cols"] = Object.keys(filas[0] || { Modelo: "" }).map((c) => ({
-        wch: c === "Modelo" ? 32 : 14,
-      }))
-      if (filas.length) {
-        const lastCol = XLSX.utils.encode_col(Object.keys(filas[0]).length - 1)
-        hoja["!autofilter"] = { ref: `A1:${lastCol}${filas.length + 1}` }
-      }
-      XLSX.utils.book_append_sheet(libro, hoja, nombreHojaExcel(categoria, usados))
+      filasDeCategoria(modelos)
+        .filter((f) => f.Estado === "No hay")
+        .forEach((f) => filasNoHay.push({ ...f, Categoria: categoria }))
     })
+
+  if (filasNoHay.length) {
+    const hojaNoHay = XLSX.utils.json_to_sheet(filasNoHay)
+    hojaNoHay["!cols"] = Object.keys(filasNoHay[0]).map((c) => ({
+      wch: c === "Modelo" ? 32 : 14,
+    }))
+    XLSX.utils.book_append_sheet(
+      libro,
+      hojaNoHay,
+      nombreHojaExcel("No hay stock 0", usados)
+    )
+  }
+
+  if (!soloNoHay) {
+    ;[...porCategoria.entries()]
+      .sort((a, b) => compararTexto(a[0], b[0]))
+      .forEach(([categoria, modelos]) => {
+        const filas = filasDeCategoria(modelos).map((f) => ({
+          ...f,
+          Categoria: categoria,
+        }))
+
+        const hoja = filas.length
+          ? XLSX.utils.json_to_sheet(filas)
+          : XLSX.utils.aoa_to_sheet([["Categoria", "Marca", "Modelo"]])
+        hoja["!cols"] = Object.keys(filas[0] || { Modelo: "" }).map((c) => ({
+          wch: c === "Modelo" ? 32 : 14,
+        }))
+        if (filas.length) {
+          const lastCol = XLSX.utils.encode_col(Object.keys(filas[0]).length - 1)
+          hoja["!autofilter"] = { ref: `A1:${lastCol}${filas.length + 1}` }
+        }
+        XLSX.utils.book_append_sheet(libro, hoja, nombreHojaExcel(categoria, usados))
+      })
+  } else {
+    ;[...porCategoria.entries()]
+      .sort((a, b) => compararTexto(a[0], b[0]))
+      .forEach(([categoria, modelos]) => {
+        const filas = filasDeCategoria(modelos).map((f) => ({
+          ...f,
+          Categoria: categoria,
+        }))
+        if (!filas.length) return
+        const hoja = XLSX.utils.json_to_sheet(filas)
+        hoja["!cols"] = Object.keys(filas[0]).map((c) => ({
+          wch: c === "Modelo" ? 32 : 14,
+        }))
+        XLSX.utils.book_append_sheet(libro, hoja, nombreHojaExcel(categoria, usados))
+      })
+  }
+
+  if (soloNoHay && filasNoHay.length === 0) {
+    return {
+      categorias: porCategoria.size,
+      dias: dias.length,
+      noHay: 0,
+    }
+  }
 
   XLSX.writeFile(
     libro,
-    `poco-stock-3-dias-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`
+    soloNoHay
+      ? `no-hay-3-dias-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`
+      : `poco-stock-3-dias-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`
   )
 
   return {
     categorias: porCategoria.size,
     dias: dias.length,
+    noHay: filasNoHay.length,
   }
 }
 

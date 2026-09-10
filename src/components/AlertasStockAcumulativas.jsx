@@ -1,9 +1,12 @@
-import { AlertTriangle, Calendar, Package, Download } from "lucide-react"
+import { AlertTriangle, Calendar, Package, Download, Printer } from "lucide-react"
 import Swal from "sweetalert2"
 import { useAlertasStockHistorial } from "../hooks/useAlertasStockHistorial"
 import { etiquetaEstadoStock, esStockAgotado } from "../utils/stock"
 import { DIAS_CICLO_ALERTAS, formatearFechaKey } from "../utils/alertasStock"
 import { exportarPocoStockCiclo3Dias } from "../utils/excel"
+import { imprimirModelosStock } from "../utils/impresion"
+import { agruparPorCategoriaMarcaModelo } from "../utils/reporteStock"
+import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 
@@ -32,7 +35,45 @@ function AlertasStockAcumulativas({ tiendaId }) {
     Swal.fire({
       icon: "success",
       title: "Excel de 3 días",
-      text: `${r.categorias} categorías · ${r.dias} día(s). Cada categoría es un cuadro (PANTALLA, LENTE…).`,
+      text: `${r.categorias} categorías · ${r.noHay} modelos en 0. La primera hoja de datos es “No hay stock 0”.`,
+    })
+  }
+
+  function excelSoloNoHay() {
+    if (alertas.length === 0) {
+      Swal.fire({
+        icon: "info",
+        title: "Aún no hay días guardados",
+        text: "Entra a Reportes cada día. Se guardan solo los últimos 3 días.",
+      })
+      return
+    }
+    const r = exportarPocoStockCiclo3Dias(
+      alertas,
+      tiendaActual?.nombre || "Tienda",
+      { soloNoHay: true }
+    )
+    if (!r.noHay) {
+      return Swal.fire({
+        icon: "info",
+        title: "Nadie está en 0",
+        text: "En el ciclo de 3 días no hay modelos con stock 0.",
+      })
+    }
+    Swal.fire({
+      icon: "success",
+      title: "Excel de lo que no hay",
+      text: `${r.noHay} modelos en stock 0 (ciclo de 3 días).`,
+    })
+  }
+
+  function imprimirSoloNoHay() {
+    const lista = (listaAcumulativa || []).filter((p) => esStockAgotado(p.stock))
+    imprimirModelosStock({
+      grupos: agruparPorCategoriaMarcaModelo(lista, tiendaActual?.nombre || "Tienda"),
+      nombreTienda: tiendaActual?.nombre || "Tienda",
+      titulo: "Modelos que ya no hay (stock 0)",
+      nota: `Ciclo de ${DIAS_CICLO_ALERTAS} días. El aviso de poco stock es ≤ ${STOCK_BAJO_UMBRAL} u.; esta hoja es solo 0.`,
     })
   }
 
@@ -62,19 +103,35 @@ function AlertasStockAcumulativas({ tiendaId }) {
     <div className="space-y-6">
       {/* Resumen de alertas por día */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Calendar size={24} className="text-red-500" />
             Poco stock — ciclo de {DIAS_CICLO_ALERTAS} días
           </h2>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={descargarExcelCiclo}
               className="flex items-center gap-2 text-sm font-bold text-white bg-green-700 px-3 py-2 rounded-xl"
             >
               <Download size={16} />
-              Excel (un cuadro por categoría)
+              Excel 3 días
+            </button>
+            <button
+              type="button"
+              onClick={excelSoloNoHay}
+              className="flex items-center gap-2 text-sm font-bold text-white bg-red-700 px-3 py-2 rounded-xl"
+            >
+              <Download size={16} />
+              Excel no hay (0)
+            </button>
+            <button
+              type="button"
+              onClick={imprimirSoloNoHay}
+              className="flex items-center gap-2 text-sm font-bold text-white bg-slate-800 px-3 py-2 rounded-xl"
+            >
+              <Printer size={16} />
+              Imprimir no hay
             </button>
             <button
               type="button"
@@ -86,7 +143,7 @@ function AlertasStockAcumulativas({ tiendaId }) {
           </div>
         </div>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          Al entrar a Reportes se guarda el poco stock de hoy. Solo quedan 3 días; el más viejo se borra. El Excel tiene un cuadro por categoría (PANTALLA, LENTE, BATERIA…).
+          Al entrar a Reportes se guarda el poco stock de hoy (≤ {STOCK_BAJO_UMBRAL} u.). Solo quedan 3 días. <strong>Excel no hay</strong> e <strong>Imprimir no hay</strong> sacan solo los modelos en stock 0.
         </p>
 
         <div className="space-y-3">
