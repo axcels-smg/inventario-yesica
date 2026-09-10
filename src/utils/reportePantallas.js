@@ -151,14 +151,23 @@ async function listarTransferenciasOrigen(tiendaId) {
 }
 
 export async function recolectarLineasDescuento(tiendaId, nombreTienda) {
-  const [ventas, transferencias] = await Promise.all([
+  const [ventas, transferencias, productos] = await Promise.all([
     listarPorTienda("ventas", tiendaId, { force: true }),
     listarTransferenciasOrigen(tiendaId),
+    listarPorTienda("productos", tiendaId, { force: true }),
   ])
+  const stockPorId = Object.fromEntries(
+    (productos || []).map((p) => [p.id, Number(p.stock) || 0])
+  )
   return [
     ...extraerLineasDeVentas(ventas, nombreTienda),
     ...extraerLineasDeTransferencias(transferencias, nombreTienda),
   ]
+    .filter((l) => l.pantalla || esCategoriaPantalla(l))
+    .map((l) => ({
+      ...l,
+      stockActual: stockPorId[l.productoId] ?? "",
+    }))
 }
 
 function payloadDia(tiendaId, nombreTienda, fechaKey, items) {
@@ -260,6 +269,7 @@ export function filasExcelDescuentos(dias) {
         Modelo: item.modelo || "—",
         Codigo: item.codigo || "—",
         Cantidad: Number(item.cantidad) || 0,
+        "Stock actual": item.stockActual === "" || item.stockActual == null ? "—" : Number(item.stockActual),
         "Precio unit.": Number(item.precio) || 0,
         Subtotal: Number(item.subtotal) || 0,
         Cliente: item.cliente || (item.tipo === "transferencia" ? "—" : "Sin cliente"),

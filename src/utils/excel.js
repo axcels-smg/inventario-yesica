@@ -1020,6 +1020,7 @@ const COLUMNAS_DESCUENTOS = [
   "Modelo",
   "Codigo",
   "Cantidad",
+  "Stock actual",
   "Precio unit.",
   "Subtotal",
   "Cliente",
@@ -1112,6 +1113,59 @@ export function exportarDescuentosCiclo7Dias(dias, nombreTienda = "Tienda") {
     pantallas: pantallas.length,
     lineas: todas.length,
   }
+}
+
+export function exportarPantallasDeUnDia(dia, nombreTienda = "Tienda") {
+  const fecha = formatearFechaKey(dia?.fechaKey)
+  const filas = filasExcelDescuentos([dia]).filter((f) => f.EsPantalla === "Sí")
+  if (filas.length === 0) {
+    return { filas: 0, unidades: 0, fecha }
+  }
+
+  const libro = XLSX.utils.book_new()
+  const usados = new Set()
+  const unidades = filas.reduce((s, f) => s + (Number(f.Cantidad) || 0), 0)
+  const resumen = [
+    {
+      Fecha: fecha,
+      Tienda: dia.tiendaNombre || nombreTienda,
+      "Pantallas vendidas (unid.)": unidades,
+      Líneas: filas.length,
+      Total: dia.total || filas.reduce((s, f) => s + (Number(f.Subtotal) || 0), 0),
+      Clientes: (dia.clientes || []).join(", ") || "—",
+    },
+  ]
+  const hojaResumen = XLSX.utils.json_to_sheet(resumen)
+  hojaResumen["!cols"] = [
+    { wch: 14 },
+    { wch: 22 },
+    { wch: 24 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 36 },
+  ]
+  XLSX.utils.book_append_sheet(libro, hojaResumen, nombreHojaExcel("Resumen del día", usados))
+
+  const data = filas.map((fila) => {
+    const copia = { ...fila }
+    delete copia.fechaKey
+    return copia
+  })
+  const hoja = XLSX.utils.json_to_sheet(data, { header: COLUMNAS_DESCUENTOS })
+  hoja["!cols"] = COLUMNAS_DESCUENTOS.map((c) => ({
+    wch: c === "Modelo" || c === "Cliente" ? 28 : c === "Categoria" ? 16 : 12,
+  }))
+  const lastCol = XLSX.utils.encode_col(COLUMNAS_DESCUENTOS.length - 1)
+  hoja["!autofilter"] = { ref: `A1:${lastCol}${data.length + 1}` }
+  hoja["!views"] = [{ state: "frozen", ySplit: 1, topLeftCell: "A2" }]
+  XLSX.utils.book_append_sheet(libro, hoja, nombreHojaExcel("Detalle pantallas", usados))
+
+  XLSX.writeFile(
+    libro,
+    `pantallas-${slugArchivo(fecha)}-${slugArchivo(nombreTienda)}.xlsx`
+  )
+
+  return { filas: filas.length, unidades, fecha }
 }
 
 export { COLUMNAS_PRODUCTOS }

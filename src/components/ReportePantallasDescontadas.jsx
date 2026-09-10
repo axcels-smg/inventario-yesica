@@ -3,7 +3,7 @@ import { Calendar, Download, Monitor, User } from "lucide-react"
 import Swal from "sweetalert2"
 import { useDescuentosPantallas } from "../hooks/useDescuentosPantallas"
 import { useTienda } from "../context/TiendaContext"
-import { exportarDescuentosCiclo7Dias } from "../utils/excel"
+import { exportarDescuentosCiclo7Dias, exportarPantallasDeUnDia } from "../utils/excel"
 import {
   DIAS_CICLO_DESCUENTOS,
   filtrarPantallas,
@@ -17,20 +17,36 @@ function ReportePantallasDescontadas({ tiendaId }) {
   const [diaAbierto, setDiaAbierto] = useState("")
 
   function descargarExcel() {
-    const hay = dias.some((d) => (d.items || []).length > 0)
+    const hay = dias.some((d) => (d.pantallas || d.items || []).length > 0)
     if (!hay) {
-      Swal.fire({
+      return Swal.fire({
         icon: "info",
-        title: "Aún no hay descuentos",
-        text: `Se guardan ${DIAS_CICLO_DESCUENTOS} días. Vende o transfiere pantallas y vuelve a entrar a Reportes.`,
+        title: "Aún no hay pantallas vendidas",
+        text: `Se guardan ${DIAS_CICLO_DESCUENTOS} días. Si hoy vendes 10 pantallas, aparecen en este día con modelo, cliente y boleta. Al octavo día se borra el más viejo.`,
       })
-      return
     }
     const r = exportarDescuentosCiclo7Dias(dias, nombre)
     Swal.fire({
       icon: "success",
       title: "Excel de 7 días",
-      text: `${r.dias} días · ${r.pantallas} líneas de pantallas · ${r.lineas} descuentos en total. Hojas: Resumen, Pantallas, Todo descontado, y un cuadro por día.`,
+      text: `${r.dias} días · ${r.pantallas} líneas. Una hoja por día y el detalle de cada venta.`,
+    })
+  }
+
+  function descargarExcelDia(e, dia) {
+    e.stopPropagation()
+    const r = exportarPantallasDeUnDia(dia, nombre)
+    if (r.filas === 0) {
+      return Swal.fire({
+        icon: "info",
+        title: `Nada el ${r.fecha}`,
+        text: "Ese día no se vendió ni se transfirió ninguna pantalla.",
+      })
+    }
+    Swal.fire({
+      icon: "success",
+      title: `Excel ${r.fecha}`,
+      text: `${r.unidades} pantallas · ${r.filas} líneas con modelo, cliente, boleta y stock que queda.`,
     })
   }
 
@@ -53,7 +69,7 @@ function ReportePantallasDescontadas({ tiendaId }) {
             Pantallas descontadas — {DIAS_CICLO_DESCUENTOS} días
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {nombre}: cada venta o transferencia resta stock. Se guarda el detalle (modelo, marca, categoría, cliente, boleta). Al octavo día se borra el más viejo.
+            Ejemplo: si hay 1000 en stock y hoy vendes 10, aquí salen esas 10 con modelo, cliente y boleta. Puedes bajar el Excel de ese día. Solo se guardan {DIAS_CICLO_DESCUENTOS} días; al octavo se borra el primero.
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
@@ -86,64 +102,74 @@ function ReportePantallasDescontadas({ tiendaId }) {
               key={dia.id || dia.fechaKey}
               className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden"
             >
-              <button
-                type="button"
-                onClick={() => setDiaAbierto(abierto ? "" : dia.fechaKey)}
-                className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60"
-              >
-                <div className="flex items-center gap-3">
-                  <Calendar size={18} className="text-blue-500" />
-                  <div>
-                    <p className="font-semibold dark:text-white">{fecha}</p>
-                    <p className="text-sm text-slate-500">
-                      {pantallas.length} línea{pantallas.length === 1 ? "" : "s"} de pantallas · {dia.unidadesPantallas || 0} u. · {items.length} descuentos en total
-                    </p>
-                    {(dia.clientes || []).length > 0 && (
-                      <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                        <User size={12} />
-                        {(dia.clientes || []).slice(0, 4).join(", ")}
-                        {(dia.clientes || []).length > 4 ? "…" : ""}
+              <div className="flex items-center gap-2 p-3 sm:p-4 hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                <button
+                  type="button"
+                  onClick={() => setDiaAbierto(abierto ? "" : dia.fechaKey)}
+                  className="flex-1 min-w-0 flex items-center justify-between gap-3 text-left"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Calendar size={18} className="text-blue-500 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-semibold dark:text-white">{fecha}</p>
+                      <p className="text-sm text-slate-500">
+                        {Number(dia.unidadesPantallas || 0)} pantalla{Number(dia.unidadesPantallas || 0) === 1 ? "" : "s"} vendida{Number(dia.unidadesPantallas || 0) === 1 ? "" : "s"} · {pantallas.length} modelo{pantallas.length === 1 ? "" : "s"}
                       </p>
-                    )}
+                      {(dia.clientes || []).length > 0 && (
+                        <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                          <User size={12} />
+                          {(dia.clientes || []).slice(0, 4).join(", ")}
+                          {(dia.clientes || []).length > 4 ? "…" : ""}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <span className="text-2xl font-black text-blue-700 dark:text-blue-300 tabular-nums">
-                  {dia.unidadesPantallas || 0}
-                </span>
-              </button>
+                  <span className="text-2xl font-black text-blue-700 dark:text-blue-300 tabular-nums">
+                    {dia.unidadesPantallas || 0}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => descargarExcelDia(e, dia)}
+                  className="flex items-center gap-1 px-3 py-2 rounded-xl bg-green-700 text-white text-xs font-bold shrink-0"
+                >
+                  <Download size={14} />
+                  Excel del día
+                </button>
+              </div>
 
               {abierto && (
                 <div className="px-4 pb-4 overflow-x-auto">
-                  {items.length === 0 ? (
-                    <p className="text-sm text-slate-500">Ese día no se descontó stock.</p>
+                  {pantallas.length === 0 ? (
+                    <p className="text-sm text-slate-500">Ese día no se vendió ninguna pantalla.</p>
                   ) : (
                     <table className="w-full text-sm min-w-[720px]">
                       <thead className="bg-slate-100 dark:bg-slate-800">
                         <tr>
-                          <th className="p-2 text-left">Categoría</th>
                           <th className="p-2 text-left">Marca</th>
                           <th className="p-2 text-left">Modelo</th>
-                          <th className="p-2 text-right">Cant.</th>
+                          <th className="p-2 text-right">Vendidas</th>
+                          <th className="p-2 text-right">Stock ahora</th>
                           <th className="p-2 text-left">Cliente</th>
                           <th className="p-2 text-left">Boleta</th>
                           <th className="p-2 text-left">Tipo</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {items.map((item, i) => (
+                        {pantallas.map((item, i) => (
                           <tr
                             key={`${item.productoId}-${item.ventaId}-${i}`}
-                            className={`border-t dark:border-slate-700 ${
-                              item.pantalla ? "bg-blue-50/60 dark:bg-blue-950/20" : ""
-                            }`}
+                            className="border-t dark:border-slate-700 bg-blue-50/60 dark:bg-blue-950/20"
                           >
-                            <td className="p-2">{item.categoria}</td>
                             <td className="p-2">{item.marca}</td>
                             <td className="p-2 font-medium dark:text-white">
                               {item.modelo}
                               {item.codigo ? ` · ${item.codigo}` : ""}
                             </td>
                             <td className="p-2 text-right font-bold">{item.cantidad}</td>
+                            <td className="p-2 text-right">
+                              {item.stockActual === "" || item.stockActual == null ? "—" : item.stockActual}
+                            </td>
                             <td className="p-2">
                               {item.cliente || (item.destino ? `→ ${item.destino}` : "—")}
                             </td>
