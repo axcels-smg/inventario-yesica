@@ -71,3 +71,31 @@ export function obtenerTiempoFecha(fecha) {
 
   return fechaNormalizada.getTime()
 }
+
+export function formatoFechaInput(fecha = new Date()) {
+  const d = fecha instanceof Date ? fecha : normalizarFecha(fecha)
+  if (!d) return ""
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
+export function claveDiaLocal(fecha) {
+  const d = normalizarFecha(fecha)
+  return d ? formatoFechaInput(d) : ""
+}
+
+export function etiquetaDiaEs(fechaIsoOFecha) {
+  const d =
+    typeof fechaIsoOFecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fechaIsoOFecha)
+      ? new Date(`${fechaIsoOFecha}T12:00:00`)
+      : normalizarFecha(fechaIsoOFecha)
+  if (!d) return "Sin fecha"
+  return d.toLocaleDateString("es-PE", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  })
+}

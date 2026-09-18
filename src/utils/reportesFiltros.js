@@ -1,5 +1,22 @@
-import { obtenerTiempoFecha } from "./fechas"
-import { filtrarVentasActivas } from "./ventas"
+import { claveDiaLocal, formatoFechaInput, obtenerTiempoFecha } from "./fechas"
+import { esVentaActiva, filtrarVentasActivas } from "./ventas"
+
+export const DIAS_HISTORIAL_VENTAS = 30
+
+export function fechaCorteHistorial(dias = DIAS_HISTORIAL_VENTAS) {
+  const corte = new Date()
+  corte.setHours(0, 0, 0, 0)
+  corte.setDate(corte.getDate() - (dias - 1))
+  return corte
+}
+
+export function filtrarVentasUltimoMes(ventas, dias = DIAS_HISTORIAL_VENTAS) {
+  const t = fechaCorteHistorial(dias).getTime()
+  return ventas.filter((venta) => {
+    const tiempo = obtenerTiempoFecha(venta.fecha || venta.fechaTexto)
+    return tiempo >= t
+  })
+}
 
 export function filtrarVentasPorFecha(ventas, fechaDesde, fechaHasta) {
   const desde = fechaDesde
@@ -59,19 +76,84 @@ export function agruparVentasPorDia(ventas) {
   return Object.values(mapa).sort((a, b) => (b.tiempo || 0) - (a.tiempo || 0))
 }
 
+export function agruparVentasPorDiaDetalle(ventas) {
+  const mapa = {}
+
+  ventas.forEach((venta) => {
+    const tiempo = obtenerTiempoFecha(venta.fecha || venta.fechaTexto)
+    const clave = claveDiaLocal(venta.fecha || venta.fechaTexto) || "sin-fecha"
+
+    if (!mapa[clave]) {
+      mapa[clave] = {
+        clave,
+        tiempo,
+        ventas: [],
+        totalActivas: 0,
+        cantidadActivas: 0,
+        cantidadAnuladas: 0,
+      }
+    }
+
+    mapa[clave].ventas.push(venta)
+    if (esVentaActiva(venta)) {
+      mapa[clave].totalActivas += Number(venta.total) || 0
+      mapa[clave].cantidadActivas += 1
+    } else {
+      mapa[clave].cantidadAnuladas += 1
+    }
+  })
+
+  return Object.values(mapa)
+    .map((dia) => ({
+      ...dia,
+      ventas: [...dia.ventas].sort(
+        (a, b) =>
+          obtenerTiempoFecha(a.fecha || a.fechaTexto) -
+          obtenerTiempoFecha(b.fecha || b.fechaTexto)
+      ),
+    }))
+    .sort((a, b) => (b.tiempo || 0) - (a.tiempo || 0))
+}
+
+export function resumenCuentaVentas(ventas) {
+  let activas = 0
+  let anuladas = 0
+  let unidades = 0
+  let total = 0
+
+  ventas.forEach((venta) => {
+    if (!esVentaActiva(venta)) {
+      anuladas += 1
+      return
+    }
+    activas += 1
+    total += Number(venta.total) || 0
+    ;(venta.productos || []).forEach((p) => {
+      unidades += Number(p.cantidad) || 0
+    })
+  })
+
+  return {
+    activas,
+    anuladas,
+    unidades,
+    total,
+    totalRegistros: ventas.length,
+  }
+}
+
 export function obtenerRangoPreset(preset) {
   const hoy = new Date()
-
-  // Usar hora local en lugar de UTC para evitar desfase de día
-  const formato = (d) => {
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, "0")
-    const day = String(d.getDate()).padStart(2, "0")
-    return `${y}-${m}-${day}`
-  }
+  const formato = (d) => formatoFechaInput(d)
 
   if (preset === "hoy") {
     return { fechaDesde: formato(hoy), fechaHasta: formato(hoy) }
+  }
+
+  if (preset === "ayer") {
+    const ayer = new Date(hoy)
+    ayer.setDate(hoy.getDate() - 1)
+    return { fechaDesde: formato(ayer), fechaHasta: formato(ayer) }
   }
 
   if (preset === "semana") {
@@ -83,6 +165,13 @@ export function obtenerRangoPreset(preset) {
   if (preset === "mes") {
     const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
     return { fechaDesde: formato(inicio), fechaHasta: formato(hoy) }
+  }
+
+  if (preset === "30dias") {
+    return {
+      fechaDesde: formato(fechaCorteHistorial(DIAS_HISTORIAL_VENTAS)),
+      fechaHasta: formato(hoy),
+    }
   }
 
   return { fechaDesde: "", fechaHasta: "" }

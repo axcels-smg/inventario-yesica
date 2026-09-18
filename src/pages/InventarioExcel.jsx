@@ -14,21 +14,72 @@ import {
 import { registrarMovimiento } from "../utils/movimientos"
 import { STOCK_EXCEL_MENOR_A_3, STOCK_EXCEL_MENOR_A_5, TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { useTienda } from "../context/TiendaContext"
+import { useRol } from "../context/RolContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import { errorOperacion } from "../utils/erroresUi"
-import {
-  claveModeloProducto,
-} from "../utils/productos"
+import { claveModeloProducto } from "../utils/productos"
+
+function clasificarImportacion(filas, productosLive) {
+  const porClave = new Map()
+  productosLive.forEach((p) => {
+    const clave = claveModeloProducto(p)
+    if (!clave || clave === "||||" || porClave.has(clave)) return
+    porClave.set(clave, p)
+  })
+
+  const actualizaciones = new Map()
+  const nuevos = new Map()
+  let invalidos = 0
+
+  for (const p of filas) {
+    const clave = claveModeloProducto(p)
+    if (!clave || clave === "||||") {
+      invalidos += 1
+      continue
+    }
+    const existente = porClave.get(clave)
+    if (existente?.id) {
+      actualizaciones.set(existente.id, {
+        id: existente.id,
+        codigo: p.codigo || existente.codigo || "",
+        marca: p.marca,
+        categoria: p.categoria,
+        modelo: p.modelo,
+        precio: p.tienePrecio ? p.precio : existente.precio,
+        stock: p.tieneStock ? p.stock : existente.stock,
+        stockOrigen: Number(existente.stock) || 0,
+        tienePrecio: p.tienePrecio,
+        tieneStock: p.tieneStock,
+      })
+    } else {
+      nuevos.set(clave, p)
+      porClave.set(clave, p)
+    }
+  }
+
+  return {
+    listaNuevos: [...nuevos.values()],
+    listaUpdates: [...actualizaciones.values()],
+    invalidos,
+  }
+}
 
 function InventarioExcel() {
   const { tiendaActual, esTiendaPropia, tiendas } = useTienda()
+  const { puedeEditarProductos, puedeCrearProductos } = useRol()
   const { productos: productosLive, cargarTodasLasTiendas } = useProductosLive()
   const inputRef = useRef(null)
   const [importando, setImportando] = useState(false)
+  const [exportandoTodas, setExportandoTodas] = useState(false)
+  const [filtroTodas, setFiltroTodas] = useState("")
   const [vistaPrevia, setVistaPrevia] = useState([])
+  const [resumenImport, setResumenImport] = useState(null)
 
-  function exportarInventarioSimple() {
+  const puedeImportar =
+    esTiendaPropia && (puedeEditarProductos() || puedeCrearProductos())
+
+  function exportarParaReimportar() {
     try {
       if (productosLive.length === 0) {
         Swal.fire({ icon: "info", title: "No hay productos para exportar" })
@@ -39,9 +90,9 @@ function InventarioExcel() {
 
       Swal.fire({
         icon: "success",
-        title: "Excel exportado",
-        text: `${productosLive.length} productos en una sola hoja`,
-        timer: 2000,
+        title: "Excel para reimportar",
+        text: `${productosLive.length} productos en una sola hoja. Este es el archivo que se puede volver a subir.`,
+        timer: 2200,
         showConfirmButton: false,
       })
     } catch (error) {
@@ -63,16 +114,18 @@ function InventarioExcel() {
 
       Swal.fire({
         icon: "success",
-        title: "Excel detallado descargado",
-        text: `${tiendaActual?.nombre || "Tienda"}: ${r.modelos} modelos en ${r.categorias} categorías. Abre la hoja «Por modelo». Cada categoría (PANTALLA, LENTE…) lista un renglón por modelo.`,
+        title: "Inventario descargado",
+        text: `${tiendaActual?.nombre || "Tienda"}: ${r.modelos} modelos en ${r.categorias} categorías. Para ver y contar. No lo uses para importar.`,
       })
     } catch (error) {
       errorOperacion(error, "Error al exportar")
     }
   }
 
-  async function exportarDetalladoTodas(stockMenorA) {
+  async function exportarDetalladoTodas() {
+    const stockMenorA = filtroTodas ? Number(filtroTodas) : undefined
     try {
+      setExportandoTodas(true)
       const lista = await cargarTodasLasTiendas({ force: true })
       if (!lista.length) {
         Swal.fire({ icon: "info", title: "No hay productos para exportar" })
@@ -100,96 +153,73 @@ function InventarioExcel() {
           ? `Excel menor a ${stockMenorA} (todas las tiendas)`
           : "Excel de todas las tiendas",
         text: stockMenorA
-          ? `${r.tiendas} tiendas · ${r.modelos} modelos con stock menor a ${stockMenorA} en alguna tienda. Misma tabla: un modelo y una columna por local.`
-          : `${r.tiendas} tiendas · ${r.modelos} modelos · ${r.categorias} categorías. En «Por modelo» cada modelo tiene una columna de stock por tienda.`,
+          ? `${r.tiendas} tiendas · ${r.modelos} modelos con stock menor a ${stockMenorA} en alguna tienda.`
+          : `${r.tiendas} tiendas · ${r.modelos} modelos · ${r.categorias} categorías. Una columna de stock por local.`,
       })
     } catch (error) {
       errorOperacion(error, "Error al exportar")
+    } finally {
+      setExportandoTodas(false)
     }
   }
 
   async function manejarArchivo(e) {
-    if (!esTiendaPropia) return
+    if (!puedeImportar) return
     const archivo = e.target.files?.[0]
     if (!archivo) return
 
     try {
       const productos = await leerProductosDesdeExcel(archivo)
+      const clasificado = clasificarImportacion(productos, productosLive)
       setVistaPrevia(productos.slice(0, 50))
+      setResumenImport({
+        filas: productos.length,
+        nuevos: clasificado.listaNuevos.length,
+        actualizados: clasificado.listaUpdates.length,
+        invalidos: clasificado.invalidos,
+      })
 
       if (productos.length === 0) {
         Swal.fire({
           icon: "warning",
           title: "Archivo vacío",
-          text: "Usa columnas: Codigo, Marca, Categoria, Modelo, Precio, Stock",
+          text: "Usa la plantilla o el Excel de una sola hoja (Codigo, Marca, Categoria, Modelo, Precio, Stock).",
+        })
+        return
+      }
+
+      if (clasificado.listaNuevos.length === 0 && clasificado.listaUpdates.length === 0) {
+        Swal.fire({
+          icon: "info",
+          title: "Nada que importar",
+          text:
+            clasificado.invalidos > 0
+              ? `${clasificado.invalidos} filas sin marca/categoría/modelo válidos.`
+              : "No hay productos válidos en el archivo",
         })
         return
       }
 
       const confirmacion = await Swal.fire({
-        title: `¿Importar ${productos.length} filas?`,
-        text: "Si ya existe la misma marca, categoría y modelo, se actualiza el stock y el precio. Si no existe, se crea.",
+        title: "¿Aplicar este Excel?",
+        html: `
+          <p class="text-left">El <b>stock del archivo es el que debe quedar</b>, no se suma al actual.</p>
+          <p class="text-left mt-3">Filas leídas: <b>${productos.length}</b></p>
+          <p class="text-left">Se actualizan: <b>${clasificado.listaUpdates.length}</b></p>
+          <p class="text-left">Se crean: <b>${clasificado.listaNuevos.length}</b></p>
+          ${clasificado.invalidos ? `<p class="text-left">Filas inválidas (se saltan): <b>${clasificado.invalidos}</b></p>` : ""}
+        `,
         icon: "question",
         showCancelButton: true,
         confirmButtonText: "Importar",
+        cancelButtonText: "Cancelar",
       })
 
       if (!confirmacion.isConfirmed) return
 
       setImportando(true)
 
-      const porClave = new Map()
-      productosLive.forEach((p) => {
-        const clave = claveModeloProducto(p)
-        if (!clave || clave === "||||" || porClave.has(clave)) return
-        porClave.set(clave, p)
-      })
-
-      const actualizaciones = new Map()
-      const nuevos = new Map()
-      let invalidos = 0
-
-      for (const p of productos) {
-        const clave = claveModeloProducto(p)
-        if (!clave || clave === "||||") {
-          invalidos += 1
-          continue
-        }
-        const existente = porClave.get(clave)
-        if (existente?.id) {
-          actualizaciones.set(existente.id, {
-            id: existente.id,
-            codigo: p.codigo || existente.codigo || "",
-            marca: p.marca,
-            categoria: p.categoria,
-            modelo: p.modelo,
-            precio: p.tienePrecio ? p.precio : existente.precio,
-            stock: p.tieneStock ? p.stock : existente.stock,
-            stockOrigen: Number(existente.stock) || 0,
-            tienePrecio: p.tienePrecio,
-            tieneStock: p.tieneStock,
-          })
-        } else {
-          nuevos.set(clave, p)
-          porClave.set(clave, p)
-        }
-      }
-
-      const listaNuevos = [...nuevos.values()]
-      const listaUpdates = [...actualizaciones.values()]
-
-      if (listaNuevos.length === 0 && listaUpdates.length === 0) {
-        Swal.fire({
-          icon: "info",
-          title: "Nada que importar",
-          text:
-            invalidos > 0
-              ? `${invalidos} filas sin marca/categoría/modelo válidos.`
-              : "No hay productos válidos en el archivo",
-        })
-        return
-      }
-
+      const { listaNuevos, listaUpdates, invalidos } = clasificado
       const LOTE = 400
       let importados = 0
       let actualizados = 0
@@ -283,11 +313,13 @@ function InventarioExcel() {
       })
 
       setVistaPrevia([])
+      setResumenImport(null)
       if (inputRef.current) inputRef.current.value = ""
     } catch (error) {
       errorOperacion(error, "Error al importar")
     } finally {
       setImportando(false)
+      if (inputRef.current) inputRef.current.value = ""
     }
   }
 
@@ -302,218 +334,143 @@ function InventarioExcel() {
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
           {tiendaActual?.nombre ? `${tiendaActual.nombre} · ` : ""}
-          Descarga un cuadro por categoría (PANTALLA, LENTE, BATERIA…) o el de todas las tiendas.
+          Baja el stock para verlo, o súbelo para corregirlo. Las ventas se rinden en Historial.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <button
-          type="button"
-          onClick={exportarDetalladoEstaTienda}
-          className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-green-500 transition"
-        >
-          <FileDown className="text-green-600 mb-3" size={32} />
-          <h3 className="font-bold text-lg dark:text-white">
-            Excel detallado de esta tienda
-          </h3>
-          <p className="text-slate-500 text-sm mt-1">
-            {tiendaActual?.nombre || "Tienda actual"}: un renglón por modelo (HONOR X7B, SAMSUNG A16…). Hojas PANTALLA, LENTE, FLEX… con filtro. Primera columna: el modelo.
-          </p>
-        </button>
+      <section className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 p-6 space-y-4">
+        <h2 className="text-xl font-bold dark:text-white">1. Bajar esta tienda</h2>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">
+          El detallado es para revisar (PANTALLA, LENTE…). El de una hoja es el que luego se puede volver a importar.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={exportarDetalladoEstaTienda}
+            className="flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-2xl font-bold hover:bg-green-700"
+          >
+            <FileDown size={18} />
+            Descargar inventario
+          </button>
+          <button
+            type="button"
+            onClick={exportarParaReimportar}
+            className="flex items-center gap-2 bg-white dark:bg-slate-800 border dark:border-slate-700 text-slate-800 dark:text-white px-5 py-3 rounded-2xl font-medium hover:border-green-500"
+          >
+            <FileDown size={18} />
+            Descargar para reimportar
+          </button>
+        </div>
+      </section>
 
-        <button
-          type="button"
-          onClick={() => exportarDetalladoTodas()}
-          className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-blue-500 transition"
-        >
-          <Store className="text-blue-600 mb-3" size={32} />
-          <h3 className="font-bold text-lg dark:text-white">
-            Excel detallado de todas las tiendas
-          </h3>
-          <p className="text-slate-500 text-sm mt-1">
-            Cada modelo en una sola fila y una columna de stock por tienda. Así ves si el HONOR X7B hay en Plaza Norte y en las demás.
-          </p>
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <button
-          type="button"
-          onClick={() => exportarDetalladoTodas(STOCK_EXCEL_MENOR_A_3)}
-          className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-amber-500 transition"
-        >
-          <FileDown className="text-amber-600 mb-3" size={32} />
-          <h3 className="font-bold text-lg dark:text-white">
-            Excel todas las tiendas — menor a 3
-          </h3>
-          <p className="text-slate-500 text-sm mt-1">
-            Mismo cuadro por modelo y columna por tienda, solo modelos con menos de 3 unidades en algún local.
-          </p>
-        </button>
-        <button
-          type="button"
-          onClick={() => exportarDetalladoTodas(STOCK_EXCEL_MENOR_A_5)}
-          className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-orange-500 transition"
-        >
-          <FileDown className="text-orange-600 mb-3" size={32} />
-          <h3 className="font-bold text-lg dark:text-white">
-            Excel todas las tiendas — menor a 5
-          </h3>
-          <p className="text-slate-500 text-sm mt-1">
-            Igual que el de todas las tiendas, pero aparte: solo modelos con menos de 5 unidades en algún local.
-          </p>
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <button
-          type="button"
-          onClick={exportarPlantillaExcel}
-          className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-blue-500 transition"
-        >
-          <FileDown className="text-blue-600 mb-3" size={32} />
-          <h3 className="font-bold text-lg dark:text-white">Plantilla</h3>
-          <p className="text-slate-500 text-sm mt-1">
-            Descarga ejemplo con columnas correctas
-          </p>
-        </button>
-
-        <button
-          type="button"
-          onClick={exportarInventarioSimple}
-          className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left hover:border-green-500 transition"
-        >
-          <FileDown className="text-green-600 mb-3" size={32} />
-          <h3 className="font-bold text-lg dark:text-white">Exportar simple</h3>
-          <p className="text-slate-500 text-sm mt-1">
-            Una sola hoja. Al reimportar se actualiza el stock de lo que ya existe.
-          </p>
-        </button>
-
-        {esTiendaPropia ? (
-        <label className="bg-blue-600 text-white p-6 rounded-3xl text-left cursor-pointer hover:bg-blue-700 transition">
-          <FileUp className="mb-3" size={32} />
-          <h3 className="font-bold text-lg">
-            {importando ? "Importando..." : "Importar Excel"}
-          </h3>
-          <p className="text-blue-100 text-sm mt-1">
-            .xlsx con marca, modelo, stock, precio
-          </p>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={manejarArchivo}
-            disabled={importando}
-            className="hidden"
-          />
-        </label>
-        ) : (
-          <div className="bg-slate-100 dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-3xl text-left">
-            <FileUp className="text-slate-400 mb-3" size={32} />
-            <h3 className="font-bold text-lg dark:text-white">Importar</h3>
-            <p className="text-slate-500 text-sm mt-1">
-              Solo se puede importar en tu propia tienda.
-            </p>
+      <section className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 p-6 space-y-4">
+        <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
+          <Store size={22} />
+          2. Bajar todas las tiendas
+        </h2>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">
+          Un modelo por fila y una columna de stock por local. Elige si quieres todo o solo lo que hay que reponer.
+        </p>
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+          <div className="sm:w-64">
+            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Qué incluir</label>
+            <select
+              value={filtroTodas}
+              onChange={(e) => setFiltroTodas(e.target.value)}
+              className="w-full p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="">Todo el inventario</option>
+              <option value={String(STOCK_EXCEL_MENOR_A_3)}>Solo menor a {STOCK_EXCEL_MENOR_A_3}</option>
+              <option value={String(STOCK_EXCEL_MENOR_A_5)}>Solo menor a {STOCK_EXCEL_MENOR_A_5}</option>
+            </select>
           </div>
-        )}
-      </div>
-
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 p-6">
-        <h2 className="text-xl font-bold mb-2 dark:text-white">Excel detallado (por modelo)</h2>
-        <p className="text-slate-500 text-sm mb-4">
-          La columna principal es el modelo. En cada hoja puedes filtrar. Orden: categoría → marca → modelo (A10 antes que A16).
-        </p>
-        <div className="overflow-x-auto">
-          <table className="w-full border dark:border-slate-700 rounded-xl overflow-hidden text-sm">
-            <thead className="bg-slate-100 dark:bg-slate-800">
-              <tr>
-                <th className="p-3 text-left">N°</th>
-                <th className="p-3 text-left">Modelo</th>
-                <th className="p-3 text-left">Marca</th>
-                <th className="p-3 text-left">Categoría</th>
-                <th className="p-3 text-left">Código</th>
-                <th className="p-3 text-left">Precio unit.</th>
-                <th className="p-3 text-left">Stock</th>
-                <th className="p-3 text-left">Estado</th>
-                <th className="p-3 text-left">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t dark:border-slate-700">
-                <td className="p-3">1</td>
-                <td className="p-3 font-medium">X7B</td>
-                <td className="p-3">HONOR</td>
-                <td className="p-3">PANTALLA</td>
-                <td className="p-3">—</td>
-                <td className="p-3">85</td>
-                <td className="p-3">4</td>
-                <td className="p-3">OK</td>
-                <td className="p-3">340</td>
-              </tr>
-            </tbody>
-          </table>
+          <button
+            type="button"
+            onClick={exportarDetalladoTodas}
+            disabled={exportandoTodas}
+            className="flex items-center gap-2 bg-blue-600 text-white px-5 py-3 rounded-2xl font-bold hover:bg-blue-700 disabled:bg-slate-400"
+          >
+            <FileDown size={18} />
+            {exportandoTodas ? "Preparando…" : "Descargar"}
+          </button>
         </div>
-        <p className="text-slate-500 text-sm mt-4">
-          Hojas: Resumen · Por modelo · Sin stock · Detalle · PANTALLA · LENTE · BATERIA · …
-        </p>
-      </div>
+      </section>
 
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 p-6">
-        <h2 className="text-xl font-bold mb-4 dark:text-white">Columnas para importar</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full border dark:border-slate-700 rounded-xl overflow-hidden">
-            <thead className="bg-slate-100 dark:bg-slate-800">
-              <tr>
-                <th className="p-3 text-left">Codigo</th>
-                <th className="p-3 text-left">Marca</th>
-                <th className="p-3 text-left">Categoria</th>
-                <th className="p-3 text-left">Modelo</th>
-                <th className="p-3 text-left">Precio</th>
-                <th className="p-3 text-left">Stock</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t dark:border-slate-700">
-                <td className="p-3 font-mono text-sm">SKU-001</td>
-                <td className="p-3">Nike</td>
-                <td className="p-3">Zapatillas</td>
-                <td className="p-3">Air Max</td>
-                <td className="p-3">250</td>
-                <td className="p-3">10</td>
-              </tr>
-            </tbody>
-          </table>
+      <section className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 p-6 space-y-4">
+        <h2 className="text-xl font-bold dark:text-white">3. Subir / corregir stock</h2>
+        <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-4 text-sm text-amber-900 dark:text-amber-200 space-y-1">
+          <p>El número de <b>Stock en el Excel es el que debe quedar</b> en el sistema. No se suma.</p>
+          <p>Importa la <b>plantilla</b> o el archivo <b>para reimportar</b>. No subas el Excel detallado (el de varias hojas).</p>
         </div>
-      </div>
 
-      {vistaPrevia.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={exportarPlantillaExcel}
+            className="flex items-center gap-2 bg-white dark:bg-slate-800 border dark:border-slate-700 px-5 py-3 rounded-2xl font-medium dark:text-white"
+          >
+            <FileDown size={18} />
+            Plantilla
+          </button>
+
+          {puedeImportar ? (
+            <label className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-white cursor-pointer ${importando ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"}`}>
+              <FileUp size={18} />
+              {importando ? "Importando…" : "Importar Excel"}
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={manejarArchivo}
+                disabled={importando}
+                className="hidden"
+              />
+            </label>
+          ) : (
+            <div className="px-5 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-sm">
+              {esTiendaPropia
+                ? "Solo un administrador puede importar."
+                : "Solo se puede importar en tu propia tienda."}
+            </div>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-500">
+          Columnas: Codigo · Marca · Categoria · Modelo · Precio · Stock. Ejemplo: SAMSUNG · PANTALLA · A05.
+        </p>
+      </section>
+
+      {resumenImport && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 p-6">
-          <h2 className="text-xl font-bold mb-4 dark:text-white">
-            Vista previa (primeras filas)
-          </h2>
-          <div className="overflow-x-auto max-h-[300px]">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0">
-                <tr>
-                  <th className="p-2 text-left">Código</th>
-                  <th className="p-2 text-left">Marca</th>
-                  <th className="p-2 text-left">Modelo</th>
-                  <th className="p-2 text-left">Stock</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vistaPrevia.map((p, i) => (
-                  <tr key={i} className="border-t dark:border-slate-800">
-                    <td className="p-2">{p.codigo || "—"}</td>
-                    <td className="p-2">{p.marca}</td>
-                    <td className="p-2">{p.modelo}</td>
-                    <td className="p-2">{p.stock}</td>
+          <h2 className="text-xl font-bold mb-3 dark:text-white">Último archivo leído</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+            {resumenImport.filas} filas · {resumenImport.actualizados} a actualizar · {resumenImport.nuevos} nuevos
+            {resumenImport.invalidos ? ` · ${resumenImport.invalidos} inválidas` : ""}
+          </p>
+          {vistaPrevia.length > 0 && (
+            <div className="overflow-x-auto max-h-[300px]">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0">
+                  <tr>
+                    <th className="p-2 text-left">Código</th>
+                    <th className="p-2 text-left">Marca</th>
+                    <th className="p-2 text-left">Modelo</th>
+                    <th className="p-2 text-left">Stock</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {vistaPrevia.map((p, i) => (
+                    <tr key={i} className="border-t dark:border-slate-800">
+                      <td className="p-2">{p.codigo || "—"}</td>
+                      <td className="p-2">{p.marca}</td>
+                      <td className="p-2">{p.modelo}</td>
+                      <td className="p-2">{p.stock ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -84,19 +84,19 @@ export function exportarProductosExcel(productos) {
 
   XLSX.writeFile(
     libro,
-    `inventario-${new Date().toISOString().slice(0, 10)}.xlsx`
+    `inventario-para-importar-${fechaArchivoLocal()}.xlsx`
   )
 }
 
 export function exportarPlantillaExcel() {
   const ejemplo = [
     {
-      Codigo: "SKU-001",
-      Marca: "Nike",
-      Categoria: "Zapatillas",
-      Modelo: "Air Max",
-      Precio: 250,
-      Stock: 10,
+      Codigo: "SAM-A05",
+      Marca: "SAMSUNG",
+      Categoria: "PANTALLA",
+      Modelo: "A05",
+      Precio: 85,
+      Stock: 4,
     },
   ]
 

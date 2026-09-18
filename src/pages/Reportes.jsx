@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 import Swal from "sweetalert2"
 import {
   BarChart,
@@ -11,24 +12,22 @@ import {
   Pie,
   Cell,
 } from "recharts"
-import { FileText, DollarSign, AlertTriangle, Download, MessageCircle, Mail, FileDown, Printer } from "lucide-react"
+import { AlertTriangle, Download, MessageCircle, Mail, Printer } from "lucide-react"
 
 import { filtrarProductosStockBajo, resumenStockBajo, filtrarProductosPorEstadoStock } from "../utils/stock"
 import { agruparPorCategoriaMarcaModelo, agruparPocoStockPorTienda } from "../utils/reporteStock"
 import {
-  aplicarFiltrosReporte,
   agruparVentasPorDia,
+  DIAS_HISTORIAL_VENTAS,
+  filtrarVentasPorCliente,
+  filtrarVentasPorFecha,
+  filtrarVentasUltimoMes,
   obtenerRangoPreset,
+  resumenCuentaVentas,
 } from "../utils/reportesFiltros"
 import { exportarReporteContable, exportarPocoStockEstructurado } from "../utils/excel"
-import {
-  enlaceWhatsAppTexto,
-  enlaceEmailTexto,
-  textoReciboPeriodo,
-  descargarPdfReciboPeriodo,
-  formatoMoneda,
-  nombreProductoVenta,
-} from "../utils/reciboCliente"
+import { formatoMoneda, nombreProductoVenta } from "../utils/reciboCliente"
+import { filtrarVentasActivas } from "../utils/ventas"
 import { imprimirModelosStock } from "../utils/impresion"
 import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
 import { enlaceWhatsAppStockBajo, enlaceEmailStockBajo, obtenerTelefonoWhatsApp, guardarTelefonoWhatsApp } from "../utils/whatsapp"
@@ -59,10 +58,13 @@ function Reportes() {
   const [alcanceStock, setAlcanceStock] = useState("tienda")
   const [pestana, setPestana] = useState("ventas")
 
+  const rangoMes = obtenerRangoPreset("30dias")
+
   useEffect(() => {
-    const { fechaDesde: d, fechaHasta: h } = obtenerRangoPreset("mes")
+    const { fechaDesde: d, fechaHasta: h } = obtenerRangoPreset("30dias")
     setFechaDesde(d)
     setFechaHasta(h)
+    setClienteId("")
   }, [tiendaActual?.id])
 
   useEffect(() => {
@@ -73,20 +75,26 @@ function Reportes() {
 
   const clienteSeleccionado = clientes.find((c) => c.id === clienteId)
 
-  const ventasFiltradas = useMemo(
-    () =>
-      aplicarFiltrosReporte(ventas, {
-        fechaDesde,
-        fechaHasta,
-        clienteId,
-        clienteNombre: clienteSeleccionado?.nombre || "",
-      }),
-    [ventas, fechaDesde, fechaHasta, clienteId, clienteSeleccionado]
+  const ventasDelMes = useMemo(() => filtrarVentasUltimoMes(ventas), [ventas])
+
+  const ventasPeriodo = useMemo(() => {
+    let lista = filtrarVentasPorFecha(ventasDelMes, fechaDesde, fechaHasta)
+    lista = filtrarVentasPorCliente(
+      lista,
+      clienteId,
+      clienteSeleccionado?.nombre || ""
+    )
+    return lista
+  }, [ventasDelMes, fechaDesde, fechaHasta, clienteId, clienteSeleccionado])
+
+  const ventasActivas = useMemo(
+    () => filtrarVentasActivas(ventasPeriodo),
+    [ventasPeriodo]
   )
 
-  const ingresosFiltrados = ventasFiltradas.reduce(
-    (acc, v) => acc + Number(v.total),
-    0
+  const resumen = useMemo(
+    () => resumenCuentaVentas(ventasPeriodo),
+    [ventasPeriodo]
   )
 
   const productosStockBajo = filtrarProductosStockBajo(productos)
@@ -142,38 +150,39 @@ function Reportes() {
   const nombreAlertaStock =
     alcanceStock === "todas" ? "Todas las tiendas" : tiendaActual?.nombre || ""
 
-  const ventasPorDia = agruparVentasPorDia(ventasFiltradas).slice(0, 31)
+  const ventasPorDia = agruparVentasPorDia(ventasActivas).slice(0, 31)
 
   const productosVendidos = useMemo(() => {
     const productosMap = {}
-    ventasFiltradas.forEach((venta) => {
+    ventasActivas.forEach((venta) => {
       venta.productos?.forEach((p) => {
-        const nombre =
-          [p.marca, p.categoria, p.modelo].filter((x) => String(x || "").trim()).join(" / ") ||
-          p.nombre ||
-          "Producto"
-        productosMap[nombre] = (productosMap[nombre] || 0) + Number(p.cantidad)
+        const nombre = nombreProductoVenta(p)
+        if (!productosMap[nombre]) {
+          productosMap[nombre] = { nombre, cantidad: 0, total: 0 }
+        }
+        const cant = Number(p.cantidad) || 0
+        productosMap[nombre].cantidad += cant
+        productosMap[nombre].total += Number(p.precio) * cant
       })
     })
 
-    return Object.entries(productosMap)
-      .map(([nombre, cantidad]) => ({ nombre, cantidad }))
-      .sort((a, b) => b.cantidad - a.cantidad)
-      .slice(0, 12)
-  }, [ventasFiltradas])
-
-  const clientesFrecuentes = useMemo(() => {
-    const clientesMap = {}
-    ventasFiltradas.forEach((v) => {
-      const c = v.cliente || "Sin nombre"
-      clientesMap[c] = (clientesMap[c] || 0) + 1
-    })
-
-    return Object.entries(clientesMap)
-      .map(([cliente, cantidad]) => ({ cliente, cantidad }))
+    return Object.values(productosMap)
       .sort((a, b) => b.cantidad - a.cantidad)
       .slice(0, 8)
-  }, [ventasFiltradas])
+  }, [ventasActivas])
+
+  const clientesPorMonto = useMemo(() => {
+    const mapa = {}
+    ventasActivas.forEach((v) => {
+      const c = v.cliente || "Sin nombre"
+      if (!mapa[c]) mapa[c] = { cliente: c, total: 0, cantidad: 0 }
+      mapa[c].total += Number(v.total) || 0
+      mapa[c].cantidad += 1
+    })
+    return Object.values(mapa)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8)
+  }, [ventasActivas])
 
   const colores = ["#2563eb", "#16a34a", "#dc2626", "#ca8a04", "#9333ea"]
 
@@ -186,80 +195,6 @@ function Reportes() {
   function guardarWhatsApp() {
     guardarTelefonoWhatsApp(telefonoWhatsApp)
     Swal.fire({ icon: "success", title: "Número guardado", timer: 1200 })
-  }
-
-  function abrirReciboWhatsApp() {
-    if (!clienteSeleccionado) {
-      return Swal.fire({
-        icon: "info",
-        title: "Elige un cliente",
-        text: "Selecciona el cliente y las fechas. Así se arma su recibo de ese período.",
-      })
-    }
-    if (ventasFiltradas.length === 0) {
-      return Swal.fire({ icon: "info", title: "Sin ventas", text: "Ese cliente no tiene ventas en las fechas elegidas." })
-    }
-    const texto = textoReciboPeriodo({
-      ventas: ventasFiltradas,
-      cliente: clienteSeleccionado,
-      fechaDesde,
-      fechaHasta,
-      tienda: tiendaActual,
-    })
-    const telefono = clienteSeleccionado.telefono || ""
-    if (!telefono) {
-      Swal.fire({
-        icon: "warning",
-        title: "El cliente no tiene teléfono",
-        text: "Se abrirá WhatsApp para que elijas el contacto.",
-      })
-    }
-    window.open(enlaceWhatsAppTexto(texto, telefono), "_blank")
-  }
-
-  function abrirReciboEmail() {
-    if (!clienteSeleccionado) {
-      return Swal.fire({
-        icon: "info",
-        title: "Elige un cliente",
-        text: "Selecciona el cliente y las fechas para enviar su recibo.",
-      })
-    }
-    if (ventasFiltradas.length === 0) {
-      return Swal.fire({ icon: "info", title: "Sin ventas", text: "Ese cliente no tiene ventas en las fechas elegidas." })
-    }
-    const texto = textoReciboPeriodo({
-      ventas: ventasFiltradas,
-      cliente: clienteSeleccionado,
-      fechaDesde,
-      fechaHasta,
-      tienda: tiendaActual,
-    })
-    window.location.href = enlaceEmailTexto(
-      texto,
-      clienteSeleccionado.correo || "",
-      `Recibo de compras — ${clienteSeleccionado.nombre}`
-    )
-  }
-
-  async function descargarReciboPdf() {
-    if (!clienteSeleccionado) {
-      return Swal.fire({
-        icon: "info",
-        title: "Elige un cliente",
-        text: "Selecciona el cliente y las fechas para descargar su recibo.",
-      })
-    }
-    if (ventasFiltradas.length === 0) {
-      return Swal.fire({ icon: "info", title: "Sin ventas", text: "Ese cliente no tiene ventas en las fechas elegidas." })
-    }
-    await descargarPdfReciboPeriodo({
-      ventas: ventasFiltradas,
-      cliente: clienteSeleccionado,
-      fechaDesde,
-      fechaHasta,
-      tienda: tiendaActual,
-    })
   }
 
   if (!esTiendaPropia && !esSuperAdmin()) {
@@ -275,13 +210,21 @@ function Reportes() {
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
           {tiendaActual?.nombre ? `${tiendaActual.nombre} · ` : ""}
-          Elige una pestaña. Así no se mezcla ventas, stock, pantallas y alertas.
+          Resumen del negocio. Para rendir cuentas a un cliente usa{" "}
+          <Link to="/historial" className="font-bold text-blue-600 dark:text-blue-400 underline">
+            Historial
+          </Link>
+          . El inventario completo se baja en{" "}
+          <Link to="/excel" className="font-bold text-blue-600 dark:text-blue-400 underline">
+            Excel
+          </Link>
+          .
         </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
         {[
-          ["ventas", "Ventas y recibos"],
+          ["ventas", "Ventas"],
           ["stock", "Poco stock"],
           ["pantallas", "Pantallas"],
           ["alertas", "Alertas 3 días"],
@@ -303,18 +246,23 @@ function Reportes() {
 
       {pestana === "ventas" && (
       <>
-      {/* FILTROS */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 space-y-4">
-        <h2 className="text-xl font-bold dark:text-white">Filtros del reporte</h2>
+        <h2 className="text-xl font-bold dark:text-white">1. Período</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Mismos {DIAS_HISTORIAL_VENTAS} días que Historial. Elige un día, una semana o el mes. El cliente es opcional (para ver su movimiento, no para imprimir su cuenta).
+        </p>
 
         <div className="flex flex-wrap gap-2">
           {[
             ["hoy", "Hoy"],
+            ["ayer", "Ayer"],
             ["semana", "Esta semana"],
             ["mes", "Este mes"],
+            ["30dias", "Últimos 30 días"],
           ].map(([clave, etiqueta]) => (
             <button
               key={clave}
+              type="button"
               onClick={() => aplicarPreset(clave)}
               className="px-4 py-2 rounded-xl bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200 text-sm font-medium"
             >
@@ -328,6 +276,8 @@ function Reportes() {
             <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Desde</label>
             <input
               type="date"
+              min={rangoMes.fechaDesde}
+              max={rangoMes.fechaHasta}
               value={fechaDesde}
               onChange={(e) => setFechaDesde(e.target.value)}
               className="w-full p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
@@ -337,13 +287,15 @@ function Reportes() {
             <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Hasta</label>
             <input
               type="date"
+              min={rangoMes.fechaDesde}
+              max={rangoMes.fechaHasta}
               value={fechaHasta}
               onChange={(e) => setFechaHasta(e.target.value)}
               className="w-full p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </div>
           <div>
-            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Cliente</label>
+            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Cliente (opcional)</label>
             <select
               value={clienteId}
               onChange={(e) => setClienteId(e.target.value)}
@@ -359,160 +311,113 @@ function Reportes() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-        <button
-          onClick={() => exportarReporteContable(ventasFiltradas)}
-          className="flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-2xl font-bold hover:bg-green-700"
-        >
-          <Download size={18} />
-          Exportar Excel contable (filtro actual)
-        </button>
+        <div className="flex flex-wrap gap-3 items-center">
+          <button
+            type="button"
+            onClick={() => exportarReporteContable(ventasActivas)}
+            className="flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-2xl font-bold hover:bg-green-700"
+          >
+            <Download size={18} />
+            Excel de este período
+          </button>
+          <Link
+            to="/historial"
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl border dark:border-slate-700 font-medium dark:text-white hover:border-blue-500"
+          >
+            Estado de cuenta (Historial)
+          </Link>
         </div>
       </div>
 
-      {/* RECIBO POR CLIENTE + FECHAS */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 space-y-4">
-        <h2 className="text-xl font-bold dark:text-white">Recibo del cliente</h2>
-        <p className="text-slate-500 dark:text-slate-400 text-sm">
-          1) Elige <b>Desde</b> y <b>Hasta</b>. 2) Elige el <b>cliente</b>. 3) Envía el resumen de esas compras por WhatsApp, correo o PDF.
-        </p>
-
-        {!clienteId && (
-          <p className="text-amber-700 dark:text-amber-300 text-sm">
-            Todavía no hay cliente seleccionado. El reporte de arriba muestra todas las ventas del período. Para el recibo, elige un cliente.
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border dark:border-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Ventas válidas</p>
+          <p className="text-3xl font-black dark:text-white">{resumen.activas}</p>
+        </div>
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border dark:border-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Unidades</p>
+          <p className="text-3xl font-black dark:text-white">{resumen.unidades}</p>
+        </div>
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border dark:border-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Anuladas (no suman)</p>
+          <p className="text-3xl font-black dark:text-white">{resumen.anuladas}</p>
+        </div>
+        <div className="bg-emerald-50 dark:bg-emerald-950/40 rounded-3xl p-5 border border-emerald-200 dark:border-emerald-900">
+          <p className="text-xs text-emerald-700 dark:text-emerald-300">Ingresos</p>
+          <p className="text-3xl font-black text-emerald-700 dark:text-emerald-300">
+            {formatoMoneda(resumen.total)}
           </p>
-        )}
-
-        {clienteSeleccionado && (
-          <div className="rounded-2xl bg-slate-50 dark:bg-slate-800 p-4 space-y-2">
-            <p className="dark:text-white">
-              <b>{clienteSeleccionado.nombre}</b>
-              {clienteSeleccionado.telefono ? ` · Tel ${clienteSeleccionado.telefono}` : " · sin teléfono"}
-              {clienteSeleccionado.correo ? ` · ${clienteSeleccionado.correo}` : ""}
-            </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Período {fechaDesde || "—"} al {fechaHasta || "—"} · {ventasFiltradas.length} ventas · {formatoMoneda(ingresosFiltrados)}
-            </p>
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={abrirReciboWhatsApp}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-green-600 text-white font-bold hover:bg-green-700"
-          >
-            <MessageCircle size={18} />
-            Enviar recibo por WhatsApp
-          </button>
-          <button
-            type="button"
-            onClick={abrirReciboEmail}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 text-white font-bold hover:bg-blue-700"
-          >
-            <Mail size={18} />
-            Enviar recibo por correo
-          </button>
-          <button
-            type="button"
-            onClick={descargarReciboPdf}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-800 text-white font-bold hover:bg-slate-900"
-          >
-            <FileDown size={18} />
-            Descargar PDF del período
-          </button>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
-          <FileText className="text-blue-500" size={38} />
-          <p className="text-slate-500 dark:text-slate-400 mt-4">Ventas (filtro)</p>
-          <h2 className="text-4xl font-black dark:text-white">
-            {ventasFiltradas.length}
-          </h2>
-        </div>
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
-          <DollarSign className="text-green-500" size={38} />
-          <p className="text-slate-500 dark:text-slate-400 mt-4">Ingresos (filtro)</p>
-          <h2 className="text-4xl font-black dark:text-white">
-            S/ {Number(ingresosFiltrados).toFixed(2)}
-          </h2>
-        </div>
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
-          <p className="text-slate-500 dark:text-slate-400 mt-2">Clientes en filtro</p>
-          <h2 className="text-4xl font-black dark:text-white">
-            {new Set(ventasFiltradas.map((v) => v.cliente)).size}
-          </h2>
-        </div>
-      </div>
-
-      {/* TABLA VENTAS FILTRADAS */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 overflow-x-auto">
-        <h2 className="text-xl font-bold mb-4 dark:text-white">
-          {clienteSeleccionado
-            ? `Compras de ${clienteSeleccionado.nombre}`
-            : "Ventas del período"}
-        </h2>
-        <table className="w-full min-w-[700px] text-sm">
-          <thead className="bg-slate-100 dark:bg-slate-800">
-            <tr>
-              <th className="p-3 text-left">Boleta</th>
-              <th className="p-3 text-left">Fecha</th>
-              <th className="p-3 text-left">Cliente</th>
-              <th className="p-3 text-left">Productos</th>
-              <th className="p-3 text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ventasFiltradas.length === 0 && (
-              <tr>
-                <td colSpan={5} className="p-6 text-center text-slate-500">
-                  Sin ventas en este filtro
-                </td>
-              </tr>
-            )}
-            {ventasFiltradas.slice(0, 80).map((v) => (
-              <tr key={v.id} className="border-t dark:border-slate-800 align-top">
-                <td className="p-3 font-mono">
-                  {v.numeroBoleta != null
-                    ? String(v.numeroBoleta).padStart(6, "0")
-                    : "—"}
-                </td>
-                <td className="p-3">{v.fechaTexto || "—"}</td>
-                <td className="p-3">{v.cliente}</td>
-                <td className="p-3 text-slate-600 dark:text-slate-300">
-                  {(v.productos || []).map((p, i) => (
-                    <div key={i}>
-                      {nombreProductoVenta(p)} × {p.cantidad}
-                    </div>
+          <h2 className="text-xl font-bold mb-4 dark:text-white">Qué se vendió</h2>
+          {productosVendidos.length === 0 ? (
+            <p className="text-slate-500">Sin ventas en este período.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100 dark:bg-slate-800">
+                  <tr>
+                    <th className="p-2 text-left">Modelo</th>
+                    <th className="p-2 text-right">Unid.</th>
+                    <th className="p-2 text-right">Soles</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productosVendidos.map((p) => (
+                    <tr key={p.nombre} className="border-t dark:border-slate-800">
+                      <td className="p-2 dark:text-white">{p.nombre}</td>
+                      <td className="p-2 text-right font-bold dark:text-white">{p.cantidad}</td>
+                      <td className="p-2 text-right">{formatoMoneda(p.total)}</td>
+                    </tr>
                   ))}
-                </td>
-                <td className="p-3 text-right font-bold">{formatoMoneda(v.total)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {ventasFiltradas.length > 80 && (
-          <p className="text-slate-500 text-sm mt-3">
-            Mostrando 80 de {ventasFiltradas.length} — exporta Excel o el PDF del cliente para ver todas
-          </p>
-        )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
+          <h2 className="text-xl font-bold mb-4 dark:text-white">Quién compró (por soles)</h2>
+          {clientesPorMonto.length === 0 ? (
+            <p className="text-slate-500">Sin clientes en este período.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100 dark:bg-slate-800">
+                  <tr>
+                    <th className="p-2 text-left">Cliente</th>
+                    <th className="p-2 text-right">Ventas</th>
+                    <th className="p-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientesPorMonto.map((c) => (
+                    <tr key={c.cliente} className="border-t dark:border-slate-800">
+                      <td className="p-2 dark:text-white">{c.cliente}</td>
+                      <td className="p-2 text-right">{c.cantidad}</td>
+                      <td className="p-2 text-right font-bold dark:text-white">{formatoMoneda(c.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       {productosVendidos.length > 0 && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
-          <h2 className="text-xl font-bold mb-4 dark:text-white">
-            Top productos vendidos (período)
-          </h2>
-          <div className="h-[200px] sm:h-[280px]">
+          <h2 className="text-xl font-bold mb-4 dark:text-white">Unidades por modelo</h2>
+          <div className="h-[200px] sm:h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={productosVendidos} layout="vertical">
                 <XAxis type="number" />
-                <YAxis dataKey="nombre" type="category" width={120} fontSize={10} />
+                <YAxis dataKey="nombre" type="category" width={140} fontSize={10} />
                 <Tooltip />
-                <Bar dataKey="cantidad" fill="#16a34a" />
+                <Bar dataKey="cantidad" fill="#16a34a" name="Unidades" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -521,10 +426,13 @@ function Reportes() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
-          <h2 className="text-2xl font-bold mb-6 dark:text-white">
+          <h2 className="text-xl font-bold mb-6 dark:text-white">
             Ingresos por día
           </h2>
-          <div className="h-[220px] sm:h-[320px]">
+          {ventasPorDia.length === 0 ? (
+            <p className="text-slate-500">Sin ingresos en este período.</p>
+          ) : (
+          <div className="h-[220px] sm:h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ventasPorDia}>
                 <XAxis dataKey="fecha" fontSize={11} />
@@ -534,30 +442,35 @@ function Reportes() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
-          <h2 className="text-2xl font-bold mb-6 dark:text-white">
-            Clientes (período)
+          <h2 className="text-xl font-bold mb-6 dark:text-white">
+            Clientes por monto
           </h2>
-          <div className="h-[220px] sm:h-[320px]">
+          {clientesPorMonto.length === 0 ? (
+            <p className="text-slate-500">Sin datos.</p>
+          ) : (
+          <div className="h-[220px] sm:h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={clientesFrecuentes}
-                  dataKey="cantidad"
+                  data={clientesPorMonto}
+                  dataKey="total"
                   nameKey="cliente"
                   outerRadius={110}
                   label
                 >
-                  {clientesFrecuentes.map((_, i) => (
+                  {clientesPorMonto.map((_, i) => (
                     <Cell key={i} fill={colores[i % colores.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(valor) => formatoMoneda(valor)} />
               </PieChart>
             </ResponsiveContainer>
           </div>
+          )}
         </div>
       </div>
       </>
@@ -567,69 +480,17 @@ function Reportes() {
       <div className="space-y-8">
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
           <AlertTriangle className="text-red-500" size={38} />
-          <p className="text-slate-500 dark:text-slate-400 mt-4">No hay (stock 0)</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-4">No hay (stock 0) en esta tienda</p>
           <h2 className="text-4xl font-black dark:text-white">
             {resumenPocoStock.agotados}
           </h2>
-          <p className="text-xs text-slate-500 mt-2">
-            Modelos agotados según el aviso de ≤{STOCK_BAJO_UMBRAL} u. (estos están en 0)
+          <p className="text-sm text-slate-500 mt-3">
+            Abajo filtras y bajas Excel o imprimes. El inventario completo de todas las tiendas está en{" "}
+            <Link to="/excel" className="font-bold text-blue-600 dark:text-blue-400 underline">
+              Excel
+            </Link>
+            .
           </p>
-          <div className="flex flex-wrap gap-2 mt-4">
-            <button
-              type="button"
-              onClick={() => {
-                const fuente = alcanceStock === "todas" ? todosLosProductos : productos
-                const lista = filtrarProductosPorEstadoStock(fuente, "no_hay")
-                if (lista.length === 0) {
-                  return Swal.fire({
-                    icon: "info",
-                    title: "Todo tiene stock",
-                    text: "No hay modelos en 0 en esta vista.",
-                  })
-                }
-                const r = exportarPocoStockEstructurado({
-                  productos: lista,
-                  nombreTienda:
-                    alcanceStock === "todas"
-                      ? "Todas las tiendas"
-                      : tiendaActual?.nombre || "Tienda",
-                  tiendas,
-                  todas: alcanceStock === "todas",
-                  estadoStock: "no_hay",
-                })
-                Swal.fire({
-                  icon: "success",
-                  title: "Excel de lo que no hay",
-                  text: `${r.productos} modelos en stock 0. Una hoja por categoría.`,
-                })
-              }}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-green-700 text-white text-sm font-bold"
-            >
-              <Download size={16} />
-              Excel no hay
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const fuente = alcanceStock === "todas" ? todosLosProductos : productos
-                const lista = filtrarProductosPorEstadoStock(fuente, "no_hay")
-                const nombre =
-                  alcanceStock === "todas"
-                    ? "Todas las tiendas"
-                    : tiendaActual?.nombre || "Tienda"
-                imprimirModelosStock({
-                  grupos: agruparPorCategoriaMarcaModelo(lista, nombre),
-                  nombreTienda: nombre,
-                  titulo: "Modelos que ya no hay (stock 0)",
-                  nota: `Aviso de poco stock: ${STOCK_BAJO_UMBRAL} unidades o menos. Esta lista es solo stock 0.`,
-                })
-              }}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-800 text-white text-sm font-bold"
-            >
-              <Printer size={16} />
-              Imprimir no hay
-            </button>
-          </div>
         </div>
 
         {listaAlertaStock.length > 0 && (
