@@ -24,6 +24,7 @@ import {
 
 import {
   filtrarProductos,
+  separarTerminosFiltro,
   obtenerValoresUnicos,
   PRODUCTOS_POR_PAGINA,
   buscarProductoDuplicado,
@@ -75,6 +76,8 @@ function Productos() {
 
   // BUSQUEDA Y FILTROS
   const [busqueda, setBusqueda] = useState("")
+  const [textoFiltro, setTextoFiltro] = useState("")
+  const [modoTexto, setModoTexto] = useState("contiene")
   const [filtroMarca, setFiltroMarca] = useState("")
   const [filtroCategoria, setFiltroCategoria] = useState("")
   const [filtroStock, setFiltroStock] = useState("")
@@ -135,7 +138,7 @@ function Productos() {
 
   useEffect(() => {
     setPaginaActual(1)
-  }, [busqueda, filtroMarca, filtroCategoria, filtroStock])
+  }, [busqueda, textoFiltro, modoTexto, filtroMarca, filtroCategoria, filtroStock])
 
   // LIMPIAR
   function limpiarFormulario() {
@@ -557,15 +560,22 @@ function Productos() {
     [productos]
   )
 
+  const terminosFiltro = useMemo(
+    () => separarTerminosFiltro(textoFiltro),
+    [textoFiltro]
+  )
+
   const productosFiltrados = useMemo(
     () =>
       filtrarProductos(productos, {
         busqueda,
+        texto: textoFiltro,
+        modoTexto,
         marca: filtroMarca,
         categoria: filtroCategoria,
         estadoStock: filtroStock,
       }),
-    [productos, busqueda, filtroMarca, filtroCategoria, filtroStock]
+    [productos, busqueda, textoFiltro, modoTexto, filtroMarca, filtroCategoria, filtroStock]
   )
 
   const modelosDuplicados = useMemo(
@@ -683,6 +693,51 @@ function Productos() {
             />
           </div>
         </div>
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 p-4 sm:p-5 space-y-3">
+        <p className="text-sm font-bold text-slate-700 dark:text-white">
+          Filtrar por texto del producto
+        </p>
+        <div className="flex flex-col lg:flex-row gap-3">
+          <div className="flex rounded-2xl overflow-hidden border dark:border-slate-700 shrink-0">
+            <button
+              type="button"
+              onClick={() => setModoTexto("contiene")}
+              className={`px-4 py-3 text-sm font-medium ${
+                modoTexto === "contiene"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              }`}
+            >
+              Mostrar los que llevan
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoTexto("excluye")}
+              className={`px-4 py-3 text-sm font-medium ${
+                modoTexto === "excluye"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              }`}
+            >
+              Ocultar los que llevan
+            </button>
+          </div>
+          <input
+            value={textoFiltro}
+            onChange={(e) => setTextoFiltro(e.target.value)}
+            placeholder="Varias palabras. Ej: YIIFIX, AMM, MECANICO"
+            className="w-full p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+        </div>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {terminosFiltro.length > 0
+            ? modoTexto === "contiene"
+              ? `Solo se ven los que llevan alguna de estas: ${terminosFiltro.join(", ")}.`
+              : `No se muestran los que llevan alguna de estas: ${terminosFiltro.join(", ")}.`
+            : "Escribe varias palabras separadas por coma o espacio. Puedes mostrar los que las llevan, u ocultarlos."}
+        </p>
       </div>
 
       {/* BTN + STATS */}
@@ -814,7 +869,11 @@ function Productos() {
             {!cargando && productosPagina.length === 0 && (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
-                  {filtroStock === "no_hay"
+                  {terminosFiltro.length > 0
+                    ? modoTexto === "contiene"
+                      ? `Ningún producto lleva ${terminosFiltro.join(", ")}`
+                      : "No quedan productos después de ocultar esas palabras"
+                    : filtroStock === "no_hay"
                     ? "No hay productos agotados con este filtro"
                     : "No hay productos para mostrar"}
                 </td>

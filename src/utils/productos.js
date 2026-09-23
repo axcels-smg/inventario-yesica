@@ -18,7 +18,14 @@ export function textoBusquedaProducto(producto) {
 
 export function filtrarProductos(
   productos,
-  { busqueda = "", marca = "", categoria = "", estadoStock = "" } = {}
+  {
+    busqueda = "",
+    marca = "",
+    categoria = "",
+    estadoStock = "",
+    texto = "",
+    modoTexto = "contiene",
+  } = {}
 ) {
   let lista = productos
 
@@ -38,12 +45,34 @@ export function filtrarProductos(
 
   if (terminos.length > 0) {
     lista = lista.filter((p) => {
-      const texto = textoBusquedaProducto(p)
-      return terminos.every((termino) => texto.includes(termino))
+      const textoProducto = textoBusquedaProducto(p)
+      return terminos.every((termino) => textoProducto.includes(termino))
+    })
+  }
+
+  const frases = separarTerminosFiltro(texto)
+  if (frases.length > 0) {
+    lista = lista.filter((p) => {
+      const contenido = textoBusquedaProducto(p)
+      const llevaAlguno = frases.some((frase) => contenido.includes(frase))
+      return modoTexto === "excluye" ? !llevaAlguno : llevaAlguno
     })
   }
 
   return lista
+}
+
+/** Varias palabras separadas por coma, espacio o punto y coma. */
+export function separarTerminosFiltro(texto) {
+  return [
+    ...new Set(
+      String(texto || "")
+        .toLowerCase()
+        .split(/[\s,;]+/)
+        .map((termino) => termino.trim())
+        .filter(Boolean)
+    ),
+  ]
 }
 
 export function obtenerValoresUnicos(productos, campo) {
