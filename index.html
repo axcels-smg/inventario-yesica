@@ -6,7 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="format-detection" content="telephone=no" />
-    <meta name="color-scheme" content="light dark" />
+    <script>
+      try {
+        if (localStorage.getItem("theme") === "dark") {
+          document.documentElement.classList.add("dark")
+        }
+      } catch (e) {}
+    </script>
     <meta name="app-build" content="2026-09-18-historial-excel-reportes" />
     <title>Inventario G.R.L.</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">

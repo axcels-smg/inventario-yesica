@@ -33,6 +33,18 @@ function esYiifix(palabra) {
   return /^YI{1,2}FIX$/.test(palabra)
 }
 
+function calidadDe(palabras) {
+  if (palabras.includes("OLED") || palabras.includes("AMM")) return "oled"
+  if (palabras.includes("INCELL") || palabras.includes("AMP")) return "incell"
+  if (
+    palabras.includes("ORIGINAL") ||
+    palabras.includes("OP") ||
+    palabras.includes("ASS") ||
+    palabras.includes("RE")
+  ) return "original"
+  return ""
+}
+
 export function clasificarModelo(modelo) {
   const palabras = palabrasModelo(modelo)
   const tieneYiifix = palabras.some(esYiifix)
@@ -51,8 +63,22 @@ export function clasificarModelo(modelo) {
 
   return {
     tipo,
+    calidad: calidadDe(palabras),
+    alternativas: alternativasDe(modelo),
     base: baseFamilia || base || limpiarBorde(modelo),
   }
+}
+
+function alternativasDe(modelo) {
+  return limpiarBorde(modelo)
+    .split("/")
+    .map((parte) => {
+      const base = palabrasModelo(parte)
+        .filter((palabra) => !esYiifix(palabra) && !PALABRAS_MECANICO.has(palabra) && palabra !== "ORIGINAL")
+        .join(" ")
+      return coreModelo(base)
+    })
+    .filter(Boolean)
 }
 
 function claveFamilia(producto, base) {
@@ -67,17 +93,98 @@ function stockDe(lista) {
   return (lista || []).reduce((suma, p) => suma + stockNumero(p.stock), 0)
 }
 
+function coreModelo(base) {
+  return String(base || "")
+    .replace(/\bORIGINAL\b/g, " ")
+    .replace(/\bOLED\b/g, " ")
+    .replace(/\bINCELL\b/g, " ")
+    .replace(/\b4G\b/g, " ")
+    .replace(/\bCON MARCO\b/g, " ")
+    .replace(/\bSIN MARCO\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function calidadBase(base) {
+  const texto = ` ${base || ""} `
+  if (texto.includes(" OLED ")) return "oled"
+  if (texto.includes(" INCELL ")) return "incell"
+  if (texto.includes(" ORIGINAL ")) return "original"
+  return ""
+}
+
+function tipoMarco(base) {
+  const texto = ` ${base || ""} `
+  if (texto.includes(" SIN MARCO ")) return "sin"
+  if (texto.includes(" CON MARCO ")) return "con"
+  return ""
+}
+
+function unirVarianteSinMarco(grupos) {
+  const pantallas = grupos.filter((grupo) => esCategoriaPantalla(grupo))
+
+  function destino(origen, slot) {
+    const core = coreModelo(origen.base)
+    const marco = tipoMarco(origen.base)
+    const calidad = origen.calidad || ""
+    const pool = pantallas.filter((grupo) => {
+      if (grupo === origen) return false
+      if (limpiarBorde(grupo.marca) !== limpiarBorde(origen.marca)) return false
+      const coreDestino = coreModelo(grupo.base)
+      const alternativas = origen.alternativas || [core]
+      if (coreDestino !== core && !alternativas.includes(coreDestino)) return false
+      if (!grupo.normal.length) return false
+      if (marco && tipoMarco(grupo.base) !== marco) return false
+      const delNormal = calidadBase(grupo.base)
+      if (calidad === "oled" || calidad === "incell") return delNormal === calidad
+      if (calidad === "original") return delNormal === "original" || delNormal === ""
+      return delNormal === "" || delNormal === "original"
+    }).sort((a, b) => {
+      const ordenMarco = { con: 0, sin: 1 }
+      const marcoA = (ordenMarco[tipoMarco(a.base)] ?? 9) - (ordenMarco[tipoMarco(b.base)] ?? 9)
+      if (!marco && marcoA) return marcoA
+      const puesto = (grupo) => {
+        const suyo = coreModelo(grupo.base)
+        if (suyo === (origen.alternativas || [])[0]) return 0
+        if (suyo === core) return 1
+        return 2
+      }
+      const porNombre = puesto(a) - puesto(b)
+      if (porNombre) return porNombre
+      const exacto = (grupo) => (calidadBase(grupo.base) === calidad ? 0 : 1)
+      return exacto(a) - exacto(b)
+    })
+    return pool.find((grupo) => grupo[slot].length === 0) || null
+  }
+
+  pantallas.forEach((origen) => {
+    if (origen.normal.length) return
+    ;["yiifix", "mecanico"].forEach((slot) => {
+      if (!origen[slot].length) return
+      const casa = destino(origen, slot)
+      if (!casa) return
+      casa[slot].push(...origen[slot])
+      origen[slot] = []
+    })
+  })
+
+  return grupos.filter(
+    (grupo) =>
+      grupo.normal.length || grupo.yiifix.length || grupo.mecanico.length || grupo.mixto.length
+  )
+}
+
 export function agruparVariantes(productos) {
   const mapa = new Map()
 
   ;(productos || []).forEach((producto) => {
     const clase = esCategoriaPantalla(producto)
       ? clasificarModelo(producto?.modelo)
-      : { tipo: "normal", base: limpiarBorde(producto?.modelo) }
+      : { tipo: "normal", calidad: "", alternativas: [], base: limpiarBorde(producto?.modelo) }
     const propio = clase.tipo === "mixto"
     const clave = propio
       ? `${claveFamilia(producto, clase.base)}||${limpiarBorde(producto?.modelo)}`
-      : claveFamilia(producto, clase.base)
+      : `${claveFamilia(producto, clase.base)}||${clase.calidad || ""}`
 
     if (!mapa.has(clave)) {
       mapa.set(clave, {
@@ -85,6 +192,8 @@ export function agruparVariantes(productos) {
         marca: producto?.marca || "",
         categoria: producto?.categoria || "",
         base: clase.base,
+        calidad: clase.calidad || "",
+        alternativas: clase.alternativas || [],
         normal: [],
         yiifix: [],
         mecanico: [],
@@ -97,7 +206,7 @@ export function agruparVariantes(productos) {
     grupo[casilla].push(producto)
   })
 
-  return [...mapa.values()]
+  return unirVarianteSinMarco([...mapa.values()])
     .map((grupo) => {
       const normal = stockDe(grupo.normal)
       const yiifix = stockDe(grupo.yiifix)
