@@ -136,7 +136,7 @@ function unirVarianteSinMarco(grupos) {
       if (!grupo.normal.length) return false
       if (marco && tipoMarco(grupo.base) !== marco) return false
       const delNormal = calidadBase(grupo.base)
-      if (calidad === "oled" || calidad === "incell") return delNormal === calidad
+      if (calidad === "oled" || calidad === "incell") return delNormal === calidad || delNormal === ""
       if (calidad === "original") return delNormal === "original" || delNormal === ""
       return delNormal === "" || delNormal === "original"
     }).sort((a, b) => {
@@ -162,6 +162,38 @@ function unirVarianteSinMarco(grupos) {
     ;["yiifix", "mecanico"].forEach((slot) => {
       if (!origen[slot].length) return
       const casa = destino(origen, slot)
+      if (!casa) return
+      casa[slot].push(...origen[slot])
+      origen[slot] = []
+    })
+  })
+
+  pantallas.forEach((origen) => {
+    if (origen.normal.length) return
+    ;["yiifix", "mecanico"].forEach((slot) => {
+      if (!origen[slot].length) return
+      const core = coreModelo(origen.base)
+      const alternativas = origen.alternativas?.length ? origen.alternativas : [core]
+      const casa = pantallas
+        .filter((grupo) => {
+          if (grupo === origen || grupo[slot].length) return false
+          if (limpiarBorde(grupo.marca) !== limpiarBorde(origen.marca)) return false
+          if (tipoMarco(origen.base) && tipoMarco(grupo.base) !== tipoMarco(origen.base)) return false
+          const coreDestino = coreModelo(grupo.base)
+          const delOtro = grupo.alternativas?.length ? grupo.alternativas : [coreDestino]
+          const mismo = alternativas.includes(coreDestino) || delOtro.includes(core)
+          if (!mismo) return false
+          if (grupo.normal.length) {
+            const delNormal = calidadBase(grupo.base)
+            const calidad = origen.calidad || ""
+            if ((calidad === "oled" || calidad === "incell") && delNormal && delNormal !== calidad) return false
+          }
+          return grupo.normal.length || grupo.yiifix.length || grupo.mecanico.length
+        })
+        .sort((a, b) => {
+          const puesto = (grupo) => (coreModelo(grupo.base) === alternativas[0] ? 0 : 1)
+          return puesto(a) - puesto(b)
+        })[0]
       if (!casa) return
       casa[slot].push(...origen[slot])
       origen[slot] = []
