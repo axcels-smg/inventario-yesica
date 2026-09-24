@@ -31,6 +31,16 @@ function numeroWhatsAppPeru(telefono) {
   return `51${numero}`
 }
 
+export function enlaceWhatsAppTexto(texto, telefono) {
+  const numero = numeroWhatsAppPeru(telefono || obtenerTelefonoWhatsApp())
+  if (!numero) return `https://wa.me/?text=${encodeURIComponent(texto)}`
+  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`
+}
+
+export function enlaceEmailTexto(texto, asunto) {
+  return `mailto:?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
+}
+
 export function enlaceWhatsAppStockBajo(productos, telefono, nombreTienda = "") {
   const numero = numeroWhatsAppPeru(telefono || obtenerTelefonoWhatsApp())
   const texto = textoAlertaStock(productos, nombreTienda)

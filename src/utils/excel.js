@@ -2,11 +2,8 @@ import * as XLSX from "xlsx"
 import { formatearFecha } from "./fechas"
 import { formatearNumeroBoleta } from "./boleta"
 import { filtrarVentasActivas } from "./ventas"
-import { etiquetaEstadoStock, filtrarModelosStockMenorA, stockNumero } from "./stock"
-import {
-  agruparPorCategoriaMarcaModelo,
-  agruparPocoStockPorTienda,
-} from "./reporteStock"
+import { esCategoriaPantalla, etiquetaEstadoStock, filtrarModelosStockMenorA, stockNumero } from "./stock"
+import { agruparVariantes } from "./variantesModelo"
 import { formatearFechaKey } from "./alertasStock"
 import { filasExcelDescuentos } from "./reportePantallas"
 
@@ -764,34 +761,54 @@ export function exportarPocoStockEstructurado({
     "Tienda",
     "Categoria",
     "Marca",
-    "Modelo",
-    "Codigo",
-    "Precio unit.",
-    "Stock",
+    "Normal",
+    "Stock normal",
+    "YIIFIX",
+    "Stock YIIFIX",
+    "Mecanico",
+    "Stock mecanico",
+    "Total",
     "Estado",
-    "Valor",
   ]
 
-  function filasDeGrupos(grupos, tienda) {
-    const filas = []
-    grupos.forEach((cat) => {
-      cat.marcas.forEach((marca) => {
-        marca.modelos.forEach((m) => {
-          filas.push({
-            Tienda: tienda || m.tienda || nombreTienda,
-            Categoria: cat.categoria,
-            Marca: marca.marca,
-            Modelo: m.modelo,
-            Codigo: m.codigo || "—",
-            "Precio unit.": m.precio,
-            Stock: m.stock,
-            Estado: m.estado,
-            Valor: m.valor,
-          })
-        })
-      })
+  function estadoDelTotal(total) {
+    if (total === 0) return "En 0"
+    if (total < 3) return "Menor que 3"
+    if (total < 5) return "Menor que 5"
+    return "OK"
+  }
+
+  function filasAgrupadas(lista, tienda) {
+    return agruparVariantes(lista).map((familia) => {
+      const pantalla = esCategoriaPantalla(familia)
+      const base = {
+        Tienda: tienda,
+        Categoria: familia.categoria,
+        Marca: familia.marca,
+        Total: familia.total,
+        Estado: estadoDelTotal(familia.total),
+      }
+      if (!pantalla) {
+        return {
+          ...base,
+          Normal: familia.normal[0]?.modelo || "",
+          "Stock normal": familia.total,
+          YIIFIX: "—",
+          "Stock YIIFIX": "—",
+          Mecanico: "—",
+          "Stock mecanico": "—",
+        }
+      }
+      return {
+        ...base,
+        Normal: familia.hayNormal ? familia.normal[0].modelo : "—",
+        "Stock normal": familia.hayNormal ? familia.stockNormal : "—",
+        YIIFIX: familia.hayYiifix ? familia.yiifix[0].modelo : "—",
+        "Stock YIIFIX": familia.hayYiifix ? familia.stockYiifix : "—",
+        Mecanico: familia.hayMecanico ? familia.mecanico[0].modelo : "—",
+        "Stock mecanico": familia.hayMecanico ? familia.stockMecanico : "—",
+      }
     })
-    return filas
   }
 
   const libro = XLSX.utils.book_new()
@@ -799,22 +816,29 @@ export function exportarPocoStockEstructurado({
   let todasLasFilas = []
 
   if (todas) {
-    const porTienda = agruparPocoStockPorTienda(productos, tiendas, { estadoStock })
-    porTienda.forEach((t) => {
-      todasLasFilas = todasLasFilas.concat(filasDeGrupos(t.grupos, t.nombre))
+    const nombrePorId = new Map((tiendas || []).map((t) => [t.id, t.nombre]))
+    const porTienda = new Map()
+    ;(productos || []).forEach((producto) => {
+      const id = producto.tiendaId || ""
+      if (!porTienda.has(id)) porTienda.set(id, [])
+      porTienda.get(id).push(producto)
+    })
+    porTienda.forEach((lista, id) => {
+      todasLasFilas = todasLasFilas.concat(
+        filasAgrupadas(lista, nombrePorId.get(id) || nombreTienda)
+      )
     })
   } else {
-    const grupos = agruparPorCategoriaMarcaModelo(productos, nombreTienda)
-    todasLasFilas = filasDeGrupos(grupos, nombreTienda)
+    todasLasFilas = filasAgrupadas(productos, nombreTienda)
   }
 
   const hojaTodo = todasLasFilas.length
     ? XLSX.utils.json_to_sheet(todasLasFilas, { header: columnas })
     : XLSX.utils.aoa_to_sheet([columnas])
-  hojaTodo["!cols"] = columnas.map((c) => ({ wch: c === "Modelo" ? 32 : 14 }))
+  hojaTodo["!cols"] = columnas.map((c) => ({ wch: c === "Normal" || c === "YIIFIX" || c === "Mecanico" ? 32 : 14 }))
   if (todasLasFilas.length) {
     hojaTodo["!autofilter"] = {
-      ref: `A1:I${todasLasFilas.length + 1}`,
+      ref: `A1:K${todasLasFilas.length + 1}`,
     }
   }
   XLSX.utils.book_append_sheet(libro, hojaTodo, nombreHojaExcel("Por modelo", usados))
@@ -829,9 +853,9 @@ export function exportarPocoStockEstructurado({
     .sort((a, b) => a[0].localeCompare(b[0], "es"))
     .forEach(([categoria, lista]) => {
       const hoja = XLSX.utils.json_to_sheet(lista, { header: columnas })
-      hoja["!cols"] = columnas.map((c) => ({ wch: c === "Modelo" ? 32 : 14 }))
+      hoja["!cols"] = columnas.map((c) => ({ wch: c === "Normal" || c === "YIIFIX" || c === "Mecanico" ? 32 : 14 }))
       if (lista.length) {
-        hoja["!autofilter"] = { ref: `A1:I${lista.length + 1}` }
+        hoja["!autofilter"] = { ref: `A1:K${lista.length + 1}` }
       }
       XLSX.utils.book_append_sheet(libro, hoja, nombreHojaExcel(categoria, usados))
     })

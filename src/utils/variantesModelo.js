@@ -1,0 +1,201 @@
+import { esCategoriaPantalla, stockNumero } from "./stock"
+
+function sinAcentos(valor) {
+  return String(valor || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+}
+
+function limpiarBorde(valor) {
+  return sinAcentos(valor)
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .replace(/[\s.]+$/g, "")
+    .trim()
+}
+
+const PALABRAS_MECANICO = new Set([
+  "MECANICO",
+  "MECANCICO",
+  "MECNAICO",
+  "AMM",
+  "ASS",
+  "AMP",
+  "RE",
+  "OP",
+])
+
+function palabrasModelo(modelo) {
+  return limpiarBorde(modelo).split(/[^A-Z0-9]+/).filter(Boolean)
+}
+
+function esYiifix(palabra) {
+  return /^YI{1,2}FIX$/.test(palabra)
+}
+
+export function clasificarModelo(modelo) {
+  const palabras = palabrasModelo(modelo)
+  const tieneYiifix = palabras.some(esYiifix)
+  const tieneMecanico = palabras.some((palabra) => PALABRAS_MECANICO.has(palabra))
+  const base = palabras
+    .filter((palabra) => !esYiifix(palabra) && !PALABRAS_MECANICO.has(palabra))
+    .join(" ")
+
+  const tipo = tieneYiifix ? "yiifix" : tieneMecanico ? "mecanico" : "normal"
+  const baseFamilia = (tipo === "mecanico"
+    ? palabras.filter((palabra) => palabra !== "ORIGINAL")
+    : palabras
+  )
+    .filter((palabra) => !esYiifix(palabra) && !PALABRAS_MECANICO.has(palabra))
+    .join(" ")
+
+  return {
+    tipo,
+    base: baseFamilia || base || limpiarBorde(modelo),
+  }
+}
+
+function claveFamilia(producto, base) {
+  return [
+    limpiarBorde(producto?.marca),
+    limpiarBorde(producto?.categoria),
+    base,
+  ].join("||")
+}
+
+function stockDe(lista) {
+  return (lista || []).reduce((suma, p) => suma + stockNumero(p.stock), 0)
+}
+
+export function agruparVariantes(productos) {
+  const mapa = new Map()
+
+  ;(productos || []).forEach((producto) => {
+    const clase = esCategoriaPantalla(producto)
+      ? clasificarModelo(producto?.modelo)
+      : { tipo: "normal", base: limpiarBorde(producto?.modelo) }
+    const propio = clase.tipo === "mixto"
+    const clave = propio
+      ? `${claveFamilia(producto, clase.base)}||${limpiarBorde(producto?.modelo)}`
+      : claveFamilia(producto, clase.base)
+
+    if (!mapa.has(clave)) {
+      mapa.set(clave, {
+        clave,
+        marca: producto?.marca || "",
+        categoria: producto?.categoria || "",
+        base: clase.base,
+        normal: [],
+        yiifix: [],
+        mecanico: [],
+        mixto: [],
+      })
+    }
+
+    const grupo = mapa.get(clave)
+    const casilla = propio ? "mixto" : clase.tipo
+    grupo[casilla].push(producto)
+  })
+
+  return [...mapa.values()]
+    .map((grupo) => {
+      const normal = stockDe(grupo.normal)
+      const yiifix = stockDe(grupo.yiifix)
+      const mecanico = stockDe(grupo.mecanico)
+      const mixto = stockDe(grupo.mixto)
+      return {
+        ...grupo,
+        stockNormal: grupo.normal.length ? normal : 0,
+        stockYiifix: grupo.yiifix.length ? yiifix : 0,
+        stockMecanico: grupo.mecanico.length ? mecanico : 0,
+        stockMixto: mixto,
+        total: normal + yiifix + mecanico + mixto,
+        hayYiifix: grupo.yiifix.length > 0,
+        hayMecanico: grupo.mecanico.length > 0,
+        hayNormal: grupo.normal.length > 0,
+      }
+    })
+    .sort((a, b) =>
+      `${a.marca} ${a.base}`.localeCompare(`${b.marca} ${b.base}`, "es", {
+        numeric: true,
+      })
+    )
+}
+
+export function stockEntraEnCorte(stock, corte) {
+  const n = stockNumero(stock)
+  if (corte === "no_hay") return n === 0
+  if (corte === "menor3") return n < 3
+  if (corte === "menor5") return n < 5
+  return false
+}
+
+function separarReporteUnaTienda(productos, corte) {
+  const idsPantalla = new Set()
+  const familiasPantalla = agruparVariantes(productos).filter((familia) => {
+    if (!esCategoriaPantalla(familia) || !stockEntraEnCorte(familia.total, corte)) return false
+    ;[familia.normal, familia.yiifix, familia.mecanico, familia.mixto]
+      .flat()
+      .forEach((producto) => {
+        if (producto?.id) idsPantalla.add(producto.id)
+      })
+    return true
+  })
+  const lista = (productos || []).filter((producto) =>
+    esCategoriaPantalla(producto)
+      ? idsPantalla.has(producto.id)
+      : stockEntraEnCorte(producto.stock, corte)
+  )
+  return { lista, familiasPantalla }
+}
+
+export function separarReporteStock(productos, corte) {
+  const porTienda = new Map()
+  ;(productos || []).forEach((producto) => {
+    const tienda = producto?.tiendaId || ""
+    if (!porTienda.has(tienda)) porTienda.set(tienda, [])
+    porTienda.get(tienda).push(producto)
+  })
+  const lista = []
+  const familiasPantalla = []
+  porTienda.forEach((grupo) => {
+    const parte = separarReporteUnaTienda(grupo, corte)
+    lista.push(...parte.lista)
+    familiasPantalla.push(...parte.familiasPantalla)
+  })
+  return { lista, familiasPantalla }
+}
+
+export function idsPantallaConTotal(productos) {
+  const porTienda = new Map()
+  ;(productos || []).forEach((producto) => {
+    const tienda = producto?.tiendaId || ""
+    if (!porTienda.has(tienda)) porTienda.set(tienda, [])
+    porTienda.get(tienda).push(producto)
+  })
+
+  const ids = new Set()
+  porTienda.forEach((lista) => {
+    agruparVariantes(lista).forEach((familia) => {
+      if (!esCategoriaPantalla(familia) || familia.total <= 0) return
+      ;[familia.normal, familia.yiifix, familia.mecanico, familia.mixto]
+        .flat()
+        .forEach((producto) => {
+          if (producto?.id) ids.add(producto.id)
+        })
+    })
+  })
+  return ids
+}
+
+export function contarPantallasSinStock(productos) {
+  return agruparVariantes(productos).filter(
+    (familia) => esCategoriaPantalla(familia) && familia.total === 0
+  ).length
+}
+
+export function etiquetaVariante(base, tipo) {
+  if (tipo === "yiifix") return `${base} YIIFIX`
+  if (tipo === "mecanico") return `${base} MECANICO`
+  return base
+}

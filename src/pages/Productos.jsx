@@ -37,13 +37,93 @@ import { esErrorCuota } from "../utils/cuotaFirebase"
 import { errorOperacion } from "../utils/erroresUi"
 import { STOCK_BAJO_UMBRAL, TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { registrarMovimiento } from "../utils/movimientos"
-import { esStockBajo, esStockAgotado, etiquetaEstadoStock, resumenStockBajo } from "../utils/stock"
+import { esStockBajo, esStockAgotado, esCategoriaPantalla, etiquetaEstadoStock, resumenStockBajo } from "../utils/stock"
+import { agruparVariantes, contarPantallasSinStock, etiquetaVariante } from "../utils/variantesModelo"
 import { useTienda } from "../context/TiendaContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import { useRol } from "../context/RolContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 const ESPERA_GUARDADO_MS = 450
+
+function CeldaVariante({
+  titulo,
+  lista,
+  stock,
+  puedeStock,
+  puedeEditarDatos,
+  puedeBorrar,
+  ajusteRapido,
+  abrirAjuste,
+  editarProducto,
+  eliminarProducto,
+  ajustandoId,
+  idsPendientes,
+  parpadeoIds,
+}) {
+  const primero = lista[0]
+  if (!primero) {
+    return (
+      <td className="p-3 align-top">
+        <div className="h-full min-h-[72px] rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400">
+          —
+        </div>
+      </td>
+    )
+  }
+  const agotado = esStockAgotado(stock)
+  const poco = esStockBajo(stock)
+
+  return (
+    <td className="p-3 align-top min-w-[210px]">
+      <div className={`rounded-2xl border p-3 h-full ${
+        agotado
+          ? "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900"
+          : poco
+          ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900"
+          : "bg-slate-50 border-slate-200 dark:bg-slate-800/60 dark:border-slate-700"
+      }`}>
+      <p className="text-sm font-medium leading-snug dark:text-white">{primero.modelo}</p>
+      <div className="flex items-end justify-between gap-2 mt-2">
+        <p
+          className={`text-3xl font-black tabular-nums leading-none ${
+            agotado
+              ? "text-red-600 dark:text-red-300"
+              : poco
+              ? "text-amber-700 dark:text-amber-200"
+              : "text-emerald-700 dark:text-emerald-300"
+          }`}
+        >
+          {stock}
+        </p>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{etiquetaEstadoStock(stock)}</p>
+      </div>
+      {lista.map((p) => (
+        <div key={p.id} className={`mt-3 ${parpadeoIds.has(p.id) ? "ring-2 ring-emerald-400 rounded-lg" : ""}`}>
+          <div className="flex flex-wrap gap-1">
+          {puedeStock && (
+            <>
+              <button type="button" disabled={ajustandoId === p.id || Number(p.stock) <= 0} onClick={() => ajusteRapido(p, -1)} className="px-2 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold disabled:opacity-40">−1</button>
+              <button type="button" disabled={ajustandoId === p.id} onClick={() => ajusteRapido(p, 1)} className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-40">+1</button>
+            </>
+          )}
+            {puedeStock && (
+              <button type="button" onClick={() => abrirAjuste(p)} className="bg-slate-700 text-white p-1.5 rounded-lg" aria-label="Ajustar stock"><SlidersHorizontal size={14} /></button>
+            )}
+            {puedeEditarDatos && (
+              <button type="button" onClick={() => editarProducto(p)} className="bg-yellow-500 text-white p-1.5 rounded-lg" aria-label="Editar producto"><Pencil size={14} /></button>
+            )}
+            {puedeBorrar && (
+              <button type="button" onClick={() => eliminarProducto(p.id)} className="bg-red-500 text-white p-1.5 rounded-lg" aria-label="Eliminar producto"><Trash2 size={14} /></button>
+            )}
+          </div>
+          {idsPendientes.has(p.id) && <span className="text-xs text-slate-400">guardando…</span>}
+        </div>
+      ))}
+      </div>
+    </td>
+  )
+}
 
 function Productos() {
   const { tiendaActual, tiendaPropia, esTiendaPropia } = useTienda()
@@ -589,6 +669,10 @@ function Productos() {
   )
 
   const pocoStock = useMemo(() => resumenStockBajo(productos), [productos])
+  const pantallasSinStock = useMemo(
+    () => contarPantallasSinStock(productos),
+    [productos]
+  )
 
   const resumenPorCategoria = useMemo(() => {
     const mapa = new Map()
@@ -604,26 +688,31 @@ function Productos() {
     )
   }, [productos])
 
+  const familias = useMemo(
+    () => agruparVariantes(productosFiltrados),
+    [productosFiltrados]
+  )
+
   const totalPaginas = Math.max(
     1,
-    Math.ceil(productosFiltrados.length / PRODUCTOS_POR_PAGINA)
+    Math.ceil(familias.length / PRODUCTOS_POR_PAGINA)
   )
 
   const paginaSegura = Math.min(paginaActual, totalPaginas)
 
-  const productosPagina = productosFiltrados.slice(
+  const familiasPagina = familias.slice(
     (paginaSegura - 1) * PRODUCTOS_POR_PAGINA,
     paginaSegura * PRODUCTOS_POR_PAGINA
   )
 
   const indiceDesde =
-    productosFiltrados.length === 0
+    familias.length === 0
       ? 0
       : (paginaSegura - 1) * PRODUCTOS_POR_PAGINA + 1
 
   const indiceHasta = Math.min(
     paginaSegura * PRODUCTOS_POR_PAGINA,
-    productosFiltrados.length
+    familias.length
   )
 
   return (
@@ -770,8 +859,8 @@ function Productos() {
           </h2>
           <p className="text-xs text-red-500 mt-1">
             {pocoStock.poco} con poco stock (≤{STOCK_BAJO_UMBRAL})
-            {pocoStock.pantallasSinStock > 0
-              ? ` · ${pocoStock.pantallasSinStock} pantallas`
+            {pantallasSinStock > 0
+              ? ` · ${pantallasSinStock} pantallas en total 0`
               : ""}
           </p>
         </button>
@@ -828,7 +917,7 @@ function Productos() {
 
         {productosFiltrados.length > 0 && (
           <p className="p-4 text-sm text-slate-500 dark:text-slate-400 border-b dark:border-slate-800">
-            Mostrando {indiceDesde}–{indiceHasta} de {productosFiltrados.length}
+            Mostrando {indiceDesde}–{indiceHasta} de {familias.length} modelos
             {productosFiltrados.length !== productos.length &&
               ` (filtrado de ${productos.length})`}
           </p>
@@ -839,20 +928,12 @@ function Productos() {
 
           <thead className="bg-slate-100 dark:bg-slate-800">
             <tr>
-              <th className="p-4 text-left dark:text-white">Código</th>
               <th className="p-4 text-left dark:text-white">Marca</th>
               <th className="p-4 text-left dark:text-white">Categoría</th>
-              <th className="p-4 text-left dark:text-white">Modelo</th>
-              <th className="p-4 text-left dark:text-white">Precio</th>
-              <th className="p-4 text-left dark:text-white min-w-[160px]">
-                Stock
-                {puedeStock && (
-                  <span className="block text-xs font-normal text-slate-400">
-                    −1 / +1
-                  </span>
-                )}
-              </th>
-              <th className="p-4 text-left dark:text-white">Acciones</th>
+              <th className="p-4 text-left dark:text-white">Normal</th>
+              <th className="p-4 text-left dark:text-white">YIIFIX</th>
+              <th className="p-4 text-left dark:text-white">Mecánico</th>
+              <th className="p-4 text-left dark:text-white">Total</th>
             </tr>
           </thead>
 
@@ -860,15 +941,15 @@ function Productos() {
 
             {cargando && productos.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                <td colSpan={6} className="p-8 text-center text-slate-500 dark:text-slate-400">
                   Cargando productos...
                 </td>
               </tr>
             )}
 
-            {!cargando && productosPagina.length === 0 && (
+            {!cargando && familiasPagina.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                <td colSpan={6} className="p-8 text-center text-slate-500 dark:text-slate-400">
                   {terminosFiltro.length > 0
                     ? modoTexto === "contiene"
                       ? `Ningún producto lleva ${terminosFiltro.join(", ")}`
@@ -880,7 +961,30 @@ function Productos() {
               </tr>
             )}
 
-            {productosPagina.map((p) => {
+            {familiasPagina.map((familia) => {
+              const pantalla = esCategoriaPantalla(familia)
+              if (pantalla) {
+                const etiquetaTotal = familia.total === 0 ? "En 0" : familia.total < 3 ? "Menor que 3" : familia.total < 5 ? "Menor que 5" : "OK"
+                return (
+                  <tr key={familia.clave} className="border-t dark:border-slate-800 align-top">
+                    <td className="p-4 font-bold dark:text-white whitespace-nowrap">{familia.marca}</td>
+                    <td className="p-4">
+                      <span className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm">{familia.categoria}</span>
+                    </td>
+                    <CeldaVariante titulo={etiquetaVariante(familia.base, "normal")} lista={familia.normal} stock={familia.stockNormal} puedeStock={puedeStock} puedeEditarDatos={puedeEditarDatos} puedeBorrar={puedeBorrar} ajusteRapido={ajusteRapido} abrirAjuste={abrirAjuste} editarProducto={editarProducto} eliminarProducto={eliminarProducto} ajustandoId={ajustandoId} idsPendientes={idsPendientes} parpadeoIds={parpadeoIds} />
+                    <CeldaVariante titulo={etiquetaVariante(familia.base, "yiifix")} lista={familia.yiifix} stock={familia.stockYiifix} puedeStock={puedeStock} puedeEditarDatos={puedeEditarDatos} puedeBorrar={puedeBorrar} ajusteRapido={ajusteRapido} abrirAjuste={abrirAjuste} editarProducto={editarProducto} eliminarProducto={eliminarProducto} ajustandoId={ajustandoId} idsPendientes={idsPendientes} parpadeoIds={parpadeoIds} />
+                    <CeldaVariante titulo={etiquetaVariante(familia.base, "mecanico")} lista={familia.mecanico} stock={familia.stockMecanico} puedeStock={puedeStock} puedeEditarDatos={puedeEditarDatos} puedeBorrar={puedeBorrar} ajusteRapido={ajusteRapido} abrirAjuste={abrirAjuste} editarProducto={editarProducto} eliminarProducto={eliminarProducto} ajustandoId={ajustandoId} idsPendientes={idsPendientes} parpadeoIds={parpadeoIds} />
+                    <td className="p-3 align-top">
+                      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 min-w-[110px]">
+                        <p className="text-[11px] uppercase tracking-wide text-slate-400">Total</p>
+                        <p className="text-3xl font-black dark:text-white tabular-nums leading-none mt-1">{familia.total}</p>
+                        <p className={`text-xs font-bold mt-2 ${familia.total < 5 ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}`}>{etiquetaTotal}</p>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              }
+              const p = familia.normal[0]
               const veces = conteoModelos.get(claveModeloProducto(p)) || 1
               const esDuplicado = veces > 1
               const poco = esStockBajo(p.stock)
@@ -901,19 +1005,15 @@ function Productos() {
                 }`}
               >
 
-                <td className="p-4 font-mono text-sm text-slate-600 dark:text-slate-400">
-                  {p.codigo || "—"}
-                </td>
-
-                <td className="p-4 font-bold dark:text-white">{p.marca}</td>
+                <td className="p-4 font-bold dark:text-white whitespace-nowrap">{p.marca}</td>
 
                 <td className="p-4">
-                  <span className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm">
+                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-1 rounded-full text-sm">
                     {p.categoria}
                   </span>
                 </td>
 
-                <td className="p-4 dark:text-white">
+                <td className="p-4 dark:text-white" colSpan={3}>
                   <div className="flex flex-wrap items-center gap-2">
                     <span>{p.modelo}</span>
                     {esDuplicado && (
@@ -924,10 +1024,9 @@ function Productos() {
                         Hay {veces} iguales
                       </span>
                     )}
+                    <p className="text-xs text-slate-500 mt-1">S/ {p.precio}{p.codigo ? ` · ${p.codigo}` : ""}</p>
                   </div>
                 </td>
-
-                <td className="p-4 font-bold dark:text-white">S/ {p.precio}</td>
 
                 <td className="p-3 dark:text-white">
                   <div
@@ -992,12 +1091,8 @@ function Productos() {
                         </button>
                       </div>
                     )}
-                  </div>
-                </td>
-
-                <td className="p-4">
-                  {puedeEditarDatos || puedeStock || puedeBorrar ? (
-                    <div className="flex gap-2">
+                    {puedeEditarDatos || puedeStock || puedeBorrar ? (
+                    <div className="flex gap-2 mt-2">
                       {puedeStock && (
                       <button
                         type="button"
@@ -1035,6 +1130,7 @@ function Productos() {
                   ) : (
                     <span className="text-xs text-slate-400">Solo ver</span>
                   )}
+                  </div>
                 </td>
 
               </tr>

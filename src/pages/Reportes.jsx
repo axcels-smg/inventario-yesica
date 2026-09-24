@@ -14,8 +14,8 @@ import {
 } from "recharts"
 import { AlertTriangle, Download, MessageCircle, Mail, Printer } from "lucide-react"
 
-import { filtrarProductosStockBajo, resumenStockBajo, filtrarProductosPorEstadoStock } from "../utils/stock"
-import { agruparPorCategoriaMarcaModelo, agruparPocoStockPorTienda } from "../utils/reporteStock"
+import { esCategoriaPantalla, esStockAgotado, esStockBajo, etiquetaEstadoStock } from "../utils/stock"
+import { agruparVariantes, separarReporteStock } from "../utils/variantesModelo"
 import {
   agruparVentasPorDia,
   DIAS_HISTORIAL_VENTAS,
@@ -29,16 +29,147 @@ import { exportarReporteContable, exportarPocoStockEstructurado } from "../utils
 import { formatoMoneda, nombreProductoVenta } from "../utils/reciboCliente"
 import { filtrarVentasActivas } from "../utils/ventas"
 import { imprimirModelosStock } from "../utils/impresion"
-import { STOCK_BAJO_UMBRAL } from "../constants/inventario"
-import { enlaceWhatsAppStockBajo, enlaceEmailStockBajo, obtenerTelefonoWhatsApp, guardarTelefonoWhatsApp } from "../utils/whatsapp"
+import { enlaceWhatsAppTexto, enlaceEmailTexto, obtenerTelefonoWhatsApp, guardarTelefonoWhatsApp } from "../utils/whatsapp"
 import AlertasStockAcumulativas from "../components/AlertasStockAcumulativas"
 import ReportePantallasDescontadas from "../components/ReportePantallasDescontadas"
-import ReporteStockEstructurado from "../components/ReporteStockEstructurado"
 import { useTienda } from "../context/TiendaContext"
 import { useRol } from "../context/RolContext"
 import { useProductosLive } from "../context/ProductosLiveContext"
 import { useOperacionesLive } from "../context/OperacionesLiveContext"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
+
+function CeldaReporte({ lista, stock }) {
+  const primero = lista?.[0]
+  if (!primero) {
+    return (
+      <td className="p-3 align-top">
+        <div className="min-h-[72px] rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400">—</div>
+      </td>
+    )
+  }
+  const agotado = esStockAgotado(stock)
+  const poco = esStockBajo(stock)
+  return (
+    <td className="p-3 align-top min-w-[180px]">
+      <div className={`rounded-2xl border p-3 h-full ${
+        agotado
+          ? "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900"
+          : poco
+          ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900"
+          : "bg-slate-50 border-slate-200 dark:bg-slate-800/60 dark:border-slate-700"
+      }`}>
+        <p className="text-sm font-medium leading-snug dark:text-white">{primero.modelo}</p>
+        <div className="flex items-end justify-between gap-2 mt-2">
+          <p className={`text-3xl font-black tabular-nums leading-none ${
+            agotado ? "text-red-600 dark:text-red-300" : poco ? "text-amber-700 dark:text-amber-200" : "text-emerald-700 dark:text-emerald-300"
+          }`}>{stock}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{etiquetaEstadoStock(stock)}</p>
+        </div>
+      </div>
+    </td>
+  )
+}
+
+function estadoDelTotal(total) {
+  if (total === 0) return "En 0"
+  if (total < 3) return "Menor que 3"
+  if (total < 5) return "Menor que 5"
+  return "OK"
+}
+
+function filasDelReporte(productos, tienda) {
+  return agruparVariantes(productos).map((familia) => {
+    const pantalla = esCategoriaPantalla(familia)
+    return {
+      tienda,
+      marca: familia.marca,
+      categoria: familia.categoria,
+      normal: pantalla ? (familia.hayNormal ? familia.normal[0].modelo : "—") : familia.normal[0]?.modelo || "",
+      stockNormal: pantalla ? (familia.hayNormal ? familia.stockNormal : "—") : familia.total,
+      yiifix: pantalla && familia.hayYiifix ? familia.yiifix[0].modelo : "—",
+      stockYiifix: pantalla && familia.hayYiifix ? familia.stockYiifix : "—",
+      mecanico: pantalla && familia.hayMecanico ? familia.mecanico[0].modelo : "—",
+      stockMecanico: pantalla && familia.hayMecanico ? familia.stockMecanico : "—",
+      total: familia.total,
+      estado: estadoDelTotal(familia.total),
+    }
+  })
+}
+
+function textoDelReporte(filas, titulo, nombreTienda) {
+  const tope = 40
+  const lineas = filas.slice(0, tope).map((fila) => {
+    if (fila.yiifix === "—" && fila.mecanico === "—") {
+      return `${fila.marca} ${fila.categoria} ${fila.normal}: ${fila.total}`
+    }
+    return `${fila.marca} ${fila.normal} ${fila.stockNormal} | YIIFIX ${fila.stockYiifix} | Mecánico ${fila.stockMecanico} | Total ${fila.total}`
+  })
+  const resto = filas.length > tope ? `\n…y ${filas.length - tope} más. El Excel trae la lista completa.` : ""
+  return `${titulo}\n${nombreTienda}\n${filas.length} filas\n\n${lineas.join("\n")}${resto}`
+}
+
+function TablaReporteComoProductos({ productos }) {
+  const filas = agruparVariantes(productos)
+  if (filas.length === 0) return null
+  return (
+    <div className="overflow-x-auto rounded-2xl border dark:border-slate-800">
+      <table className="w-full min-w-[860px]">
+        <thead className="bg-slate-100 dark:bg-slate-800">
+          <tr>
+            <th className="p-4 text-left dark:text-white">Marca</th>
+            <th className="p-4 text-left dark:text-white">Categoría</th>
+            <th className="p-4 text-left dark:text-white">Normal</th>
+            <th className="p-4 text-left dark:text-white">YIIFIX</th>
+            <th className="p-4 text-left dark:text-white">Mecánico</th>
+            <th className="p-4 text-left dark:text-white">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((familia) => {
+            const pantalla = esCategoriaPantalla(familia)
+            const etiquetaTotal = familia.total === 0 ? "En 0" : familia.total < 3 ? "Menor que 3" : familia.total < 5 ? "Menor que 5" : "OK"
+            if (!pantalla) {
+              const p = familia.normal[0]
+              return (
+                <tr key={familia.clave} className="border-t dark:border-slate-800">
+                  <td className="p-4 font-bold dark:text-white whitespace-nowrap">{familia.marca}</td>
+                  <td className="p-4">
+                    <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-1 rounded-full text-sm">{familia.categoria}</span>
+                  </td>
+                  <td className="p-4 dark:text-white" colSpan={3}>{p?.modelo}</td>
+                  <td className="p-3 align-top">
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 min-w-[110px]">
+                      <p className="text-3xl font-black dark:text-white tabular-nums leading-none">{familia.total}</p>
+                      <p className="text-xs font-bold mt-2 text-amber-700 dark:text-amber-300">{etiquetaEstadoStock(familia.total)}</p>
+                    </div>
+                  </td>
+                </tr>
+              )
+            }
+            return (
+              <tr key={familia.clave} className="border-t dark:border-slate-800">
+                <td className="p-4 font-bold dark:text-white whitespace-nowrap">{familia.marca}</td>
+                <td className="p-4">
+                  <span className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm">{familia.categoria}</span>
+                </td>
+                <CeldaReporte lista={familia.normal} stock={familia.stockNormal} />
+                <CeldaReporte lista={familia.yiifix} stock={familia.stockYiifix} />
+                <CeldaReporte lista={familia.mecanico} stock={familia.stockMecanico} />
+                <td className="p-3 align-top">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 min-w-[110px]">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-400">Total</p>
+                    <p className="text-3xl font-black dark:text-white tabular-nums leading-none mt-1">{familia.total}</p>
+                    <p className={`text-xs font-bold mt-2 ${familia.total < 5 ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}`}>{etiquetaTotal}</p>
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 function Reportes() {
   const { tiendaActual, tiendas, esTiendaPropia } = useTienda()
@@ -52,7 +183,7 @@ function Reportes() {
   const [telefonoWhatsApp, setTelefonoWhatsApp] = useState(
     obtenerTelefonoWhatsApp()
   )
-  const [filtroStockReporte, setFiltroStockReporte] = useState("bajo")
+  const [filtroStockReporte, setFiltroStockReporte] = useState("menor3")
   const [filtroCategoriaStock, setFiltroCategoriaStock] = useState("")
   const [busquedaStock, setBusquedaStock] = useState("")
   const [alcanceStock, setAlcanceStock] = useState("tienda")
@@ -97,16 +228,19 @@ function Reportes() {
     [ventasPeriodo]
   )
 
-  const productosStockBajo = filtrarProductosStockBajo(productos)
-  const resumenPocoStock = resumenStockBajo(productos)
   const categoriasStock = useMemo(() => {
     const fuente = alcanceStock === "todas" ? todosLosProductos : productos
     return [...new Set(fuente.map((p) => p.categoria).filter(Boolean))].sort((a, b) =>
       String(a).localeCompare(String(b), "es")
     )
   }, [alcanceStock, productos, todosLosProductos])
+  const reporteTienda = useMemo(
+    () => separarReporteStock(productos, filtroStockReporte),
+    [productos, filtroStockReporte]
+  )
+
   const listaStockReporte = useMemo(() => {
-    let lista = filtrarProductosPorEstadoStock(productos, filtroStockReporte)
+    let lista = reporteTienda.lista
     if (filtroCategoriaStock) {
       lista = lista.filter((p) => p.categoria === filtroCategoriaStock)
     }
@@ -119,15 +253,10 @@ function Reportes() {
       )
     }
     return lista
-  }, [productos, filtroStockReporte, filtroCategoriaStock, busquedaStock])
-
-  const gruposStockTienda = useMemo(
-    () => agruparPorCategoriaMarcaModelo(listaStockReporte, tiendaActual?.nombre || ""),
-    [listaStockReporte, tiendaActual?.nombre]
-  )
+  }, [reporteTienda, filtroCategoriaStock, busquedaStock])
 
   const reporteStockTodas = useMemo(() => {
-    let lista = filtrarProductosPorEstadoStock(todosLosProductos, filtroStockReporte)
+    let lista = separarReporteStock(todosLosProductos, filtroStockReporte).lista
     if (filtroCategoriaStock) {
       lista = lista.filter((p) => p.categoria === filtroCategoriaStock)
     }
@@ -139,16 +268,32 @@ function Reportes() {
           .includes(q)
       )
     }
-    return {
-      lista,
-      tiendas: agruparPocoStockPorTienda(lista, tiendas, { estadoStock: "" }),
-    }
-  }, [todosLosProductos, tiendas, filtroStockReporte, filtroCategoriaStock, busquedaStock])
+    return { lista }
+  }, [todosLosProductos, filtroStockReporte, filtroCategoriaStock, busquedaStock])
 
   const listaAlertaStock =
     alcanceStock === "todas" ? reporteStockTodas.lista : listaStockReporte
   const nombreAlertaStock =
     alcanceStock === "todas" ? "Todas las tiendas" : tiendaActual?.nombre || ""
+  const tituloCorte =
+    filtroStockReporte === "no_hay"
+      ? "En 0"
+      : filtroStockReporte === "menor5"
+      ? "Menor que 5"
+      : "Menor que 3"
+  const filasSalida = useMemo(() => {
+    if (alcanceStock === "todas") {
+      return tiendas.flatMap((tienda) => {
+        const deTienda = reporteStockTodas.lista.filter((p) => p.tiendaId === tienda.id)
+        return filasDelReporte(deTienda, tienda.nombre)
+      })
+    }
+    return filasDelReporte(listaStockReporte, tiendaActual?.nombre || "Tienda")
+  }, [alcanceStock, tiendas, reporteStockTodas.lista, listaStockReporte, tiendaActual?.nombre])
+  const enCeroTienda = useMemo(
+    () => filasDelReporte(separarReporteStock(productos, "no_hay").lista, "").length,
+    [productos]
+  )
 
   const ventasPorDia = agruparVentasPorDia(ventasActivas).slice(0, 31)
 
@@ -480,12 +625,12 @@ function Reportes() {
       <div className="space-y-8">
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
           <AlertTriangle className="text-red-500" size={38} />
-          <p className="text-slate-500 dark:text-slate-400 mt-4">No hay (stock 0) en esta tienda</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-4">En 0 en esta tienda</p>
           <h2 className="text-4xl font-black dark:text-white">
-            {resumenPocoStock.agotados}
+            {enCeroTienda}
           </h2>
           <p className="text-sm text-slate-500 mt-3">
-            Abajo filtras y bajas Excel o imprimes. El inventario completo de todas las tiendas está en{" "}
+            Cuenta filas: una pantalla suma normal + YIIFIX + mecánico. El inventario completo está en{" "}
             <Link to="/excel" className="font-bold text-blue-600 dark:text-blue-400 underline">
               Excel
             </Link>
@@ -499,7 +644,7 @@ function Reportes() {
               Alertas de stock — {tiendaActual?.nombre || "esta tienda"}
             </h2>
             <p className="text-sm text-red-700 dark:text-red-300">
-              El WhatsApp envía la lista agrupada por categoría y marca ({listaAlertaStock.length} ítems).
+              WhatsApp y correo envían este corte ({filasSalida.length} filas), igual que la tabla.
               Guarda tu número de Perú; si ya empieza con 51 no se duplica.
             </p>
             <div className="flex flex-wrap gap-3 items-end">
@@ -516,10 +661,9 @@ function Reportes() {
                 Guardar número
               </button>
               <a
-                href={enlaceWhatsAppStockBajo(
-                  listaAlertaStock.length > 0 ? listaAlertaStock : productosStockBajo,
-                  telefonoWhatsApp,
-                  nombreAlertaStock
+                href={enlaceWhatsAppTexto(
+                  textoDelReporte(filasSalida, tituloCorte, nombreAlertaStock),
+                  telefonoWhatsApp
                 )}
                 target="_blank"
                 rel="noreferrer"
@@ -529,10 +673,9 @@ function Reportes() {
                 Enviar por WhatsApp
               </a>
               <a
-                href={enlaceEmailStockBajo(
-                  listaAlertaStock.length > 0 ? listaAlertaStock : productosStockBajo,
-                  "",
-                  nombreAlertaStock
+                href={enlaceEmailTexto(
+                  textoDelReporte(filasSalida, tituloCorte, nombreAlertaStock),
+                  `${tituloCorte} - ${nombreAlertaStock}`
                 )}
                 className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 text-white font-bold"
               >
@@ -545,10 +688,10 @@ function Reportes() {
 
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800">
         <h2 className="text-2xl font-bold mb-2 text-red-500">
-          Poco stock — categoría, marca y modelo
+          {tituloCorte}
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          Abre solo la categoría que necesitas. Excel e imprimir siguen sacando la lista completa.
+          {filasSalida.length} filas. En pantallas el corte usa el total. Excel, imprimir y WhatsApp sacan esta misma lista.
         </p>
 
         <div className="flex flex-wrap gap-3 mb-6">
@@ -581,9 +724,9 @@ function Reportes() {
             onChange={(e) => setFiltroStockReporte(e.target.value)}
             className="p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           >
-            <option value="bajo">No hay + poco stock (≤{STOCK_BAJO_UMBRAL})</option>
-            <option value="no_hay">Solo lo que no hay (0)</option>
-            <option value="poco">Solo poco stock (1–{STOCK_BAJO_UMBRAL})</option>
+            <option value="no_hay">En 0</option>
+            <option value="menor3">Menor que 3</option>
+            <option value="menor5">Menor que 5</option>
           </select>
           <select
             value={filtroCategoriaStock}
@@ -627,8 +770,10 @@ function Reportes() {
                 icon: "success",
                 title:
                   filtroStockReporte === "no_hay"
-                    ? "Excel de lo que no hay"
-                    : "Excel de poco stock",
+                    ? "Excel de pantallas y modelos en 0"
+                    : filtroStockReporte === "menor5"
+                    ? "Excel de menor que 5"
+                    : "Excel de menor que 3",
                 text: `${r.categorias} categorías · ${r.productos} modelos. Una hoja por categoría.`,
               })
             }}
@@ -640,23 +785,15 @@ function Reportes() {
           <button
             type="button"
             onClick={() => {
-              const lista =
-                alcanceStock === "todas" ? reporteStockTodas.lista : listaStockReporte
               const nombre =
                 alcanceStock === "todas"
                   ? "Todas las tiendas"
                   : tiendaActual?.nombre || "Tienda"
               imprimirModelosStock({
-                grupos: agruparPorCategoriaMarcaModelo(lista, nombre),
+                filasAgrupadas: filasSalida,
                 nombreTienda: nombre,
-                titulo:
-                  filtroStockReporte === "no_hay"
-                    ? "Modelos que ya no hay (stock 0)"
-                    : `Poco stock (≤ ${STOCK_BAJO_UMBRAL} u.)`,
-                nota:
-                  filtroStockReporte === "no_hay"
-                    ? "Solo modelos en 0. El aviso de 3 unidades incluye también 1, 2 y 3."
-                    : `Incluye stock 0 hasta ${STOCK_BAJO_UMBRAL}.`,
+                titulo: tituloCorte,
+                nota: "Pantallas: una fila con normal, YIIFIX, mecánico y total.",
               })
             }}
             className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-800 text-white font-bold"
@@ -667,32 +804,30 @@ function Reportes() {
         </div>
 
         {alcanceStock === "todas" ? (
-          reporteStockTodas.tiendas.length === 0 ? (
+          reporteStockTodas.lista.length === 0 ? (
             <p className="text-slate-500">Ninguna tienda tiene productos con este filtro.</p>
           ) : (
-            <div className="space-y-14">
-              {reporteStockTodas.tiendas.map((tienda) => (
-                <div key={tienda.tiendaId}>
-                  <h3 className="text-3xl font-black mb-6 text-slate-900 dark:text-white">
-                    {tienda.nombre}
-                    <span className="block text-base font-medium text-slate-500 mt-1">
-                      {tienda.total} modelos a reponer
-                    </span>
-                  </h3>
-                  <ReporteStockEstructurado grupos={tienda.grupos} />
-                </div>
-              ))}
+            <div className="space-y-10">
+              {tiendas.map((tienda) => {
+                const deTienda = reporteStockTodas.lista.filter((p) => p.tiendaId === tienda.id)
+                if (deTienda.length === 0) return null
+                return (
+                  <div key={tienda.id}>
+                    <h3 className="text-2xl font-black mb-4 text-slate-900 dark:text-white">{tienda.nombre}</h3>
+                    <TablaReporteComoProductos productos={deTienda} />
+                  </div>
+                )
+              })}
             </div>
           )
+        ) : listaStockReporte.length === 0 ? (
+          <p className="text-slate-500">
+            {filtroStockReporte === "no_hay"
+              ? "No hay productos agotados con este filtro. Todo está en stock."
+              : "No hay productos con este corte en esta tienda."}
+          </p>
         ) : (
-          <ReporteStockEstructurado
-            grupos={gruposStockTienda}
-            vacio={
-              filtroStockReporte === "no_hay"
-                ? "No hay productos agotados con este filtro. Todo está en stock."
-                : "No hay productos con poco stock en esta tienda."
-            }
-          />
+          <TablaReporteComoProductos productos={listaStockReporte} />
         )}
       </div>
       </div>

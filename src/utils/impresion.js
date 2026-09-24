@@ -205,6 +205,87 @@ export function imprimirBoleta(venta, tienda = null) {
   ventana.document.close()
 }
 
+function imprimirFilasAgrupadas({ filas, nombreTienda, titulo, nota }) {
+  if (!filas.length) {
+    Swal.fire({
+      icon: "info",
+      title: "Nada para imprimir",
+      text: "No hay modelos con ese filtro.",
+    })
+    return
+  }
+
+  const lineas = filas
+    .map(
+      (fila) => `
+        <tr>
+          <td>${escaparHtml(fila.tienda || "")}</td>
+          <td>${escaparHtml(fila.marca)}</td>
+          <td>${escaparHtml(fila.categoria)}</td>
+          <td>${escaparHtml(fila.normal)}</td>
+          <td style="text-align:right">${escaparHtml(fila.stockNormal)}</td>
+          <td>${escaparHtml(fila.yiifix)}</td>
+          <td style="text-align:right">${escaparHtml(fila.stockYiifix)}</td>
+          <td>${escaparHtml(fila.mecanico)}</td>
+          <td style="text-align:right">${escaparHtml(fila.stockMecanico)}</td>
+          <td style="text-align:right"><strong>${escaparHtml(fila.total)}</strong></td>
+          <td>${escaparHtml(fila.estado)}</td>
+        </tr>`
+    )
+    .join("")
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>${escaparHtml(titulo)}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 16px; color: #111; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        .meta { color: #555; margin-bottom: 16px; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th, td { border: 1px solid #ccc; padding: 5px 6px; text-align: left; }
+        th { background: #f3f3f3; }
+      </style>
+    </head>
+    <body>
+      <h1>${escaparHtml(titulo)}</h1>
+      <p class="meta">${escaparHtml(nombreTienda)} · ${filas.length} filas · ${new Date().toLocaleString("es-PE")}${nota ? `<br/>${escaparHtml(nota)}` : ""}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Tienda</th><th>Marca</th><th>Categoría</th>
+            <th>Normal</th><th>Stock</th>
+            <th>YIIFIX</th><th>Stock</th>
+            <th>Mecánico</th><th>Stock</th>
+            <th>Total</th><th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>${lineas}</tbody>
+      </table>
+      <script>
+        window.onload = () => {
+          window.print();
+          window.onafterprint = () => window.close();
+        };
+      </script>
+    </body>
+    </html>`
+
+  const ventana = window.open("", "_blank", "width=1000,height=800")
+  if (!ventana) {
+    Swal.fire({
+      icon: "warning",
+      title: "Ventanas bloqueadas",
+      text: "Permite ventanas emergentes para imprimir la lista.",
+    })
+    return
+  }
+  ventana.document.write(html)
+  ventana.document.close()
+}
+
 function escaparHtml(valor) {
   return String(valor ?? "")
     .replace(/&/g, "&amp;")
@@ -215,10 +296,14 @@ function escaparHtml(valor) {
 
 export function imprimirModelosStock({
   grupos = [],
+  filasAgrupadas = null,
   nombreTienda = "Tienda",
   titulo = "Modelos que ya no hay (stock 0)",
   nota = "",
 } = {}) {
+  if (Array.isArray(filasAgrupadas)) {
+    return imprimirFilasAgrupadas({ filas: filasAgrupadas, nombreTienda, titulo, nota })
+  }
   const filas = grupos.flatMap((cat) =>
     (cat.marcas || []).flatMap((marca) =>
       (marca.modelos || []).map((m) => ({
