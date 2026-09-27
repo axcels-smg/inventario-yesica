@@ -84,6 +84,9 @@ function CeldaVariante({
           : "bg-slate-50 border-slate-200 dark:bg-slate-800/60 dark:border-slate-700"
       }`}>
       <p className="text-sm font-medium leading-snug dark:text-white">{primero.modelo}</p>
+      <p className="text-xs font-semibold text-slate-500 dark:text-slate-300 mt-1">
+        {lista.map((p) => `S/ ${p.precio}`).join(" · ")}
+      </p>
       <div className="flex items-end justify-between gap-2 mt-2">
         <p
           className={`text-3xl font-black tabular-nums leading-none ${
@@ -1024,7 +1027,7 @@ function Productos() {
                         Hay {veces} iguales
                       </span>
                     )}
-                    <p className="text-xs text-slate-500 mt-1">S/ {p.precio}{p.codigo ? ` · ${p.codigo}` : ""}</p>
+                    <p className="w-full text-xs font-semibold text-slate-500 dark:text-slate-300 mt-1">S/ {p.precio}{p.codigo ? ` · ${p.codigo}` : ""}</p>
                   </div>
                 </td>
 
