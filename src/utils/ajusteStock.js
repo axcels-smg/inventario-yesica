@@ -95,8 +95,8 @@ export async function aplicarAjusteStock(producto, delta) {
     throw new Error("Producto no válido")
   }
 
-  if (!Number.isInteger(cambio) || cambio === 0) {
-    throw new Error("Indica cuánto sumar o restar")
+  if (!Number.isInteger(cambio) || cambio < 1) {
+    throw new Error("Solo se puede aumentar stock. La cantidad baja solo con una venta.")
   }
 
   const stockLocal = Number(producto.stock)
@@ -136,18 +136,18 @@ export function iniciarReintentoAjustes() {
 
     const resto = []
     for (const item of cola) {
-      if (!item.delta) continue
+      if (!item.delta || item.delta < 1) continue
       try {
         await conReintentoCuota(
           () => aplicarDeltaEnServidor(item.id, item.delta),
           { intentos: 4, baseMs: 400 }
         )
         await registrarMovimiento({
-          tipo: TIPOS_MOVIMIENTO.AJUSTE_STOCK,
+          tipo: TIPOS_MOVIMIENTO.REPOSICION,
           productoId: item.id,
           productoNombre: item.productoNombre || "",
           cantidad: item.delta,
-          detalle: `Ajuste ${item.delta > 0 ? "+" : ""}${item.delta}`,
+          detalle: `Aumentar stock +${item.delta}`,
           tiendaId: item.tiendaId || "",
         })
       } catch {

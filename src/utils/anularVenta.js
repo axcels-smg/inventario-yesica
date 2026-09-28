@@ -5,6 +5,7 @@ import { registrarMovimiento } from "./movimientos"
 import { TIPOS_MOVIMIENTO } from "../constants/inventario"
 import { invalidarCacheTienda } from "./consultasTienda"
 import { sincronizarCicloDescuentos } from "./reportePantallas"
+import { totalDeProductos } from "./ventas"
 
 export async function devolverStockYMarcarAnulada(ventaId) {
   const registrosMovimiento = []
@@ -94,6 +95,114 @@ export async function devolverStockYMarcarAnulada(ventaId) {
       fechaAnulacionTexto: new Date().toLocaleString("es-PE"),
     })
   })
+
+  return { registrosMovimiento, metaAnulacion }
+}
+
+export async function anularUnaUnidad({ ventaId, indice }) {
+  const registrosMovimiento = []
+  let metaAnulacion = { cliente: "", numeroBoleta: "" }
+
+  await runTransaction(db, async (transaction) => {
+    registrosMovimiento.length = 0
+    const ventaRef = doc(db, "ventas", ventaId)
+    const ventaSnap = await transaction.get(ventaRef)
+    if (!ventaSnap.exists()) throw new Error("La venta ya no existe")
+
+    const ventaActual = ventaSnap.data()
+    if (ventaActual.anulada) throw new Error("Esta venta ya fue anulada")
+
+    const productos = [...(ventaActual.productos || [])]
+    const linea = productos[indice]
+    if (!linea?.id) throw new Error("Esa pantalla ya no está en la boleta")
+
+    const productoRef = doc(db, "productos", linea.id)
+    const productoSnap = await transaction.get(productoRef)
+    if (!productoSnap.exists()) throw new Error("El producto ya no existe")
+
+    const stockActual = Number(productoSnap.data().stock)
+    if (!Number.isFinite(stockActual)) throw new Error("Stock inválido")
+
+    const cantidad = Number(linea.cantidad)
+    if (!Number.isFinite(cantidad) || cantidad <= 0) throw new Error("Cantidad inválida")
+
+    if (cantidad <= 1) productos.splice(indice, 1)
+    else productos[indice] = { ...linea, cantidad: cantidad - 1 }
+
+    metaAnulacion = {
+      cliente: ventaActual.cliente || "",
+      numeroBoleta: ventaActual.numeroBoleta
+        ? formatearNumeroBoleta(ventaActual.numeroBoleta)
+        : "",
+    }
+
+    const mov = {
+      ref: productoRef,
+      productoId: linea.id,
+      productoNombre: `${linea.marca || ""} ${linea.modelo || ""}`.trim(),
+      cantidad: 1,
+      stockAntes: stockActual,
+      stockDespues: stockActual + 1,
+    }
+    registrosMovimiento.push(mov)
+
+    transaction.update(productoRef, {
+      stock: mov.stockDespues,
+      actualizado: serverTimestamp(),
+    })
+
+    const cambios = {
+      productos,
+      total: totalDeProductos(productos),
+    }
+    if (productos.length === 0) {
+      cambios.anulada = true
+      cambios.fechaAnulacion = serverTimestamp()
+      cambios.fechaAnulacionTexto = new Date().toLocaleString("es-PE")
+    }
+    transaction.update(ventaRef, cambios)
+  })
+
+  return { registrosMovimiento, metaAnulacion }
+}
+
+export async function anularUnaUnidadYRegistrar({
+  ventaId,
+  indice,
+  tiendaActual,
+  aplicarCambiosStock,
+}) {
+  const { registrosMovimiento, metaAnulacion } = await anularUnaUnidad({ ventaId, indice })
+
+  try {
+    for (const mov of registrosMovimiento) {
+      await registrarMovimiento({
+        tipo: TIPOS_MOVIMIENTO.ANULACION,
+        productoId: mov.productoId,
+        productoNombre: mov.productoNombre,
+        cantidad: mov.cantidad,
+        stockAntes: mov.stockAntes,
+        stockDespues: mov.stockDespues,
+        ventaId,
+        numeroBoleta: metaAnulacion.numeroBoleta,
+        cliente: metaAnulacion.cliente,
+        detalle: `Anulación de 1 en boleta #${metaAnulacion.numeroBoleta || ventaId.slice(0, 6)}`,
+        tiendaId: tiendaActual.id,
+      })
+    }
+  } catch (errorMov) {
+    console.error(errorMov)
+  }
+
+  invalidarCacheTienda("ventas", tiendaActual.id)
+  invalidarCacheTienda("productos", tiendaActual.id)
+  aplicarCambiosStock(
+    registrosMovimiento.map((mov) => ({
+      id: mov.productoId,
+      stock: mov.stockDespues,
+    }))
+  )
+  sincronizarCicloDescuentos(tiendaActual.id, tiendaActual.nombre).catch(() => {})
 
   return { registrosMovimiento, metaAnulacion }
 }

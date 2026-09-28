@@ -67,7 +67,7 @@ function Movimientos() {
           Movimientos
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
-          Historial de ventas, anulaciones, ajustes de stock y transferencias
+          Historial de ventas, anulaciones, aumentar stock y transferencias
         </p>
       </div>
 
@@ -141,7 +141,13 @@ function Movimientos() {
                   <td className="p-4 font-medium dark:text-white">
                     {m.productoNombre || "—"}
                   </td>
-                  <td className="p-4 dark:text-white">{m.cantidad ?? "—"}</td>
+                  <td className="p-4 font-bold dark:text-white">
+                    {m.cantidad == null
+                      ? "—"
+                      : Number(m.cantidad) > 0
+                      ? `+${m.cantidad}`
+                      : m.cantidad}
+                  </td>
                   <td className="p-4 text-sm dark:text-white">
                     {m.stockAntes != null && m.stockDespues != null
                       ? `${m.stockAntes} → ${m.stockDespues}`

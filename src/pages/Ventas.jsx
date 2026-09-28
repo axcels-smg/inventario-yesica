@@ -23,6 +23,9 @@ import { invalidarCacheTienda } from "../utils/consultasTienda"
 import { errorOperacion } from "../utils/erroresUi"
 import { sincronizarCicloDescuentos } from "../utils/reportePantallas"
 import { anularVentaYDevolverStock } from "../utils/anularVenta"
+import { esCategoriaPantalla } from "../utils/stock"
+import { claveDiaLocal } from "../utils/fechas"
+import { boletaPantallasDelDia, sumarLineas, totalDeProductos } from "../utils/ventas"
 import { conReintentoCuota } from "../utils/firestoreLive"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
@@ -410,20 +413,48 @@ function Ventas() {
         cantidad: Number(item.cantidad),
       }))
 
-      const ventaRef = doc(collection(db, "ventas"))
+      const soloPantallas = productosVenta.every((item) => esCategoriaPantalla(item))
+      const boletaDelDia = soloPantallas
+        ? boletaPantallasDelDia(ventas, clienteData, tiendaActual.id)
+        : null
+      const ventaExistenteRef = boletaDelDia ? doc(db, "ventas", boletaDelDia.id) : null
+      const ventaRef = ventaExistenteRef || doc(collection(db, "ventas"))
       const contadorRef = doc(db, "config", `boleta_${tiendaActual.id}`)
       let numeroBoleta = 0
+      let uniendoBoleta = false
+      let productosBoleta = productosVenta
+      let totalBoleta = total
       let movimientosPendientes = []
 
       await conReintentoCuota(async () => {
         await runTransaction(db, async (transaction) => {
         movimientosPendientes = []
         const productosActuales = []
+        uniendoBoleta = false
+        productosBoleta = productosVenta
+        totalBoleta = total
 
+        if (ventaExistenteRef) {
+          const previa = await transaction.get(ventaExistenteRef)
+          const datos = previa.exists() ? previa.data() : null
+          if (
+            datos &&
+            datos.anulada !== true &&
+            claveDiaLocal(datos.fecha || datos.fechaTexto) === claveDiaLocal(new Date())
+          ) {
+            uniendoBoleta = true
+            numeroBoleta = Number(datos.numeroBoleta)
+            productosBoleta = sumarLineas(datos.productos || [], productosVenta)
+            totalBoleta = totalDeProductos(productosBoleta)
+          }
+        }
+
+        if (!uniendoBoleta) {
         const contadorSnap = await transaction.get(contadorRef)
         numeroBoleta = contadorSnap.exists()
           ? Number(contadorSnap.data().numeroBoleta || 0) + 1
           : 1
+        }
 
         for (const item of productosVenta) {
           const productoRef = doc(db, "productos", item.id)
@@ -462,7 +493,7 @@ function Ventas() {
           })
         }
 
-        transaction.set(contadorRef, { numeroBoleta }, { merge: true })
+        if (!uniendoBoleta) transaction.set(contadorRef, { numeroBoleta }, { merge: true })
 
         productosActuales.forEach(({ ref, stock, item }) => {
           transaction.update(ref, {
@@ -471,6 +502,12 @@ function Ventas() {
           })
         })
 
+        if (uniendoBoleta) {
+          transaction.update(ventaExistenteRef, {
+            productos: productosBoleta,
+            total: totalBoleta,
+          })
+        } else {
         transaction.set(ventaRef, {
           cliente: clienteData.nombre || "",
           clienteId: clienteData.id || "",
@@ -483,6 +520,7 @@ function Ventas() {
           fechaTexto: new Date().toLocaleString("es-PE"),
           tiendaId: tiendaActual.id,
         })
+        }
         })
       })
 
@@ -491,8 +529,8 @@ function Ventas() {
         fechaTexto: new Date().toLocaleString("es-PE"),
         cliente: clienteData.nombre || "",
         telefono: clienteData.telefono || "",
-        productos: productosVenta,
-        total,
+        productos: uniendoBoleta ? productosBoleta : productosVenta,
+        total: uniendoBoleta ? totalBoleta : total,
       }
 
       setCarrito([])
@@ -526,9 +564,11 @@ function Ventas() {
       const envio = await Swal.fire({
         icon: "success",
         title: "Venta realizada",
-        text: `Boleta #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${Number(total).toFixed(2)}. El stock ya se descontó.`,
+        text: uniendoBoleta
+          ? `Se sumó a la boleta #${formatearNumeroBoleta(numeroBoleta)} de hoy. Total del día S/ ${Number(totalBoleta).toFixed(2)}. El stock ya se descontó.`
+          : `Boleta #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${Number(total).toFixed(2)}. El stock ya se descontó.`,
         showCancelButton: true,
-        showDenyButton: esTiendaPropia && puedeAnularVentas(),
+        showDenyButton: !uniendoBoleta && esTiendaPropia && puedeAnularVentas(),
         confirmButtonText: "Enviar recibo por WhatsApp",
         denyButtonText: "Anular venta",
         cancelButtonText: "Cerrar",

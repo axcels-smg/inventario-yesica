@@ -10,7 +10,7 @@ import { db } from "../firebase"
 import jsPDF from "jspdf"
 import Swal from "sweetalert2"
 
-import { FileDown, Receipt, Ban, Trash2, Printer, MessageCircle, Download } from "lucide-react"
+import { FileDown, Receipt, Trash2, Printer, MessageCircle, Download } from "lucide-react"
 import { etiquetaDiaEs, formatearFecha } from "../utils/fechas"
 import { formatearNumeroBoleta } from "../utils/boleta"
 import { DATOS_NEGOCIO } from "../constants/inventario"
@@ -38,7 +38,8 @@ import { useProductosLive } from "../context/ProductosLiveContext"
 import { useOperacionesLive } from "../context/OperacionesLiveContext"
 import { invalidarCacheTienda } from "../utils/consultasTienda"
 import { errorOperacion } from "../utils/erroresUi"
-import { anularVentaYDevolverStock } from "../utils/anularVenta"
+import { anularUnaUnidadYRegistrar } from "../utils/anularVenta"
+import { esVentaActiva, juntarPantallasMismoDia } from "../utils/ventas"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 
 function HistorialVentas() {
@@ -110,56 +111,45 @@ function HistorialVentas() {
     }
   }
 
-  async function anularVenta(venta) {
+  async function anularUna(venta, producto, indice) {
     if (!esTiendaPropia || !puedeAnularVentas()) return
-    if (venta.anulada) {
-      Swal.fire({
-        icon: "info",
-        title: "Venta ya anulada",
-      })
-      return
-    }
+    if (venta.anulada || producto.anulada) return
 
-    if (!venta.productos?.length) {
-      Swal.fire({
-        icon: "warning",
-        title: "No se puede anular",
-        text: "Esta venta no tiene productos registrados",
-      })
-      return
-    }
+    const ventaId = producto.ventaId || venta.id
+    const linea = producto.indice ?? indice
+    const nombre = nombreProductoVenta(producto)
 
     const confirmacion = await Swal.fire({
-      title: "¿Anular esta venta?",
+      title: "¿Anular solo esta?",
       html: `
-        <p>Se devolverá el stock. La venta seguirá en el historial como anulada.</p>
-        <p class="mt-2 font-bold">Total: S/ ${venta.total}</p>
+        <p>Se devuelve <strong>1</strong> de ${nombre} al stock.</p>
+        <p class="mt-2">El resto de la boleta del día sigue igual.</p>
       `,
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Anular",
+      confirmButtonText: "Anular esta",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#ea580c",
     })
-
     if (!confirmacion.isConfirmed) return
 
     try {
-      setProcesandoId(venta.id)
-      await anularVentaYDevolverStock({
-        venta,
+      setProcesandoId(`${ventaId}-${linea}`)
+      const { metaAnulacion } = await anularUnaUnidadYRegistrar({
+        ventaId,
+        indice: linea,
         tiendaActual,
         aplicarCambiosStock,
       })
-
       Swal.fire({
         icon: "success",
-        title: "Venta anulada",
-        text: "El stock fue devuelto al inventario",
-        timer: 2000,
+        title: "Se anuló 1",
+        text: metaAnulacion.numeroBoleta
+          ? `Boleta #${metaAnulacion.numeroBoleta}. El resto sigue.`
+          : "El resto de la boleta sigue.",
+        timer: 1800,
         showConfirmButton: false,
       })
-
     } catch (error) {
       errorOperacion(error, "Error al anular")
     } finally {
@@ -546,7 +536,11 @@ function HistorialVentas() {
 
       <div className="flex flex-col gap-8">
 
-        {diasFiltrados.map((dia) => (
+        {diasFiltrados.map((dia) => {
+          const boletas = juntarPantallasMismoDia(dia.ventas)
+          const activas = boletas.filter((venta) => esVentaActiva(venta)).length
+          const anuladas = boletas.length - activas
+          return (
           <section key={dia.clave} className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-2 px-1">
               <div>
@@ -554,9 +548,9 @@ function HistorialVentas() {
                   {etiquetaDiaEs(dia.clave)}
                 </h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {dia.cantidadActivas} venta{dia.cantidadActivas === 1 ? "" : "s"}
-                  {dia.cantidadAnuladas
-                    ? ` · ${dia.cantidadAnuladas} anulada${dia.cantidadAnuladas === 1 ? "" : "s"}`
+                  {activas} boleta{activas === 1 ? "" : "s"}
+                  {anuladas
+                    ? ` · ${anuladas} anulada${anuladas === 1 ? "" : "s"}`
                     : ""}
                 </p>
               </div>
@@ -565,7 +559,7 @@ function HistorialVentas() {
               </p>
             </div>
 
-            {dia.ventas.map((venta) => (
+            {boletas.map((venta) => (
           <div
             key={venta.id}
             className={`bg-white dark:bg-slate-900 rounded-3xl shadow-sm border p-6 ${
@@ -583,7 +577,7 @@ function HistorialVentas() {
                   <Receipt size={20} />
                   <h2 className="text-2xl font-bold dark:text-white">
                     {venta.numeroBoleta != null
-                      ? `Boleta #${formatearNumeroBoleta(venta.numeroBoleta)}`
+                      ? `Boleta #${formatearNumeroBoleta(venta.numeroBoleta)}${venta.boletaDelDia ? " del día" : ""}`
                       : `Venta #${venta.id.slice(0, 6)}`}
                   </h2>
                   {venta.anulada && (
@@ -660,21 +654,6 @@ function HistorialVentas() {
                     </button>
                   )}
 
-                  {!venta.anulada && esTiendaPropia && puedeAnularVentas() && (
-                    <button
-                      onClick={() => anularVenta(venta)}
-                      disabled={procesandoId === venta.id}
-                      className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-white transition ${
-                        procesandoId === venta.id
-                          ? "bg-slate-400"
-                          : "bg-orange-600 hover:bg-orange-700"
-                      }`}
-                    >
-                      <Ban size={18} />
-                      Anular
-                    </button>
-                  )}
-
                   {venta.anulada && esTiendaPropia && puedeEliminarVentas() && (
                     <button
                       onClick={() => eliminarVenta(venta)}
@@ -712,9 +691,21 @@ function HistorialVentas() {
                     </p>
                   </div>
 
-                  <p className="font-bold text-slate-800 dark:text-white">
-                    S/ {Number(producto.precio) * producto.cantidad}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <p className="font-bold text-slate-800 dark:text-white">
+                      S/ {Number(producto.precio) * producto.cantidad}
+                    </p>
+                    {!venta.anulada && esTiendaPropia && puedeAnularVentas() && (
+                      <button
+                        type="button"
+                        onClick={() => anularUna(venta, producto, index)}
+                        disabled={procesandoId === `${producto.ventaId || venta.id}-${producto.indice ?? index}`}
+                        className="px-3 py-2 rounded-xl bg-orange-600 text-white text-sm font-bold hover:bg-orange-700 disabled:opacity-40"
+                      >
+                        Anular esta
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
 
@@ -723,7 +714,8 @@ function HistorialVentas() {
           </div>
             ))}
           </section>
-        ))}
+          )
+        })}
 
       </div>
 

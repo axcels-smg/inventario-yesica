@@ -57,7 +57,7 @@ export const TIPOS_MOVIMIENTO = {
 export const ETIQUETAS_MOVIMIENTO = {
   venta: "Venta",
   anulacion: "Anulación",
-  reposicion: "Reposición",
+  reposicion: "Aumentar stock",
   ajuste_stock: "Ajuste stock",
   edicion_stock: "Edición stock",
   importacion: "Importación Excel",

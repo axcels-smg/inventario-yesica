@@ -104,14 +104,8 @@ function CeldaVariante({
       {lista.map((p) => (
         <div key={p.id} className={`mt-3 ${parpadeoIds.has(p.id) ? "ring-2 ring-emerald-400 rounded-lg" : ""}`}>
           <div className="flex flex-wrap gap-1">
-          {puedeStock && (
-            <>
-              <button type="button" disabled={ajustandoId === p.id || Number(p.stock) <= 0} onClick={() => ajusteRapido(p, -1)} className="px-2 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold disabled:opacity-40">−1</button>
-              <button type="button" disabled={ajustandoId === p.id} onClick={() => ajusteRapido(p, 1)} className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-40">+1</button>
-            </>
-          )}
             {puedeStock && (
-              <button type="button" onClick={() => abrirAjuste(p)} className="bg-slate-700 text-white p-1.5 rounded-lg" aria-label="Ajustar stock"><SlidersHorizontal size={14} /></button>
+              <button type="button" onClick={() => abrirAjuste(p)} className="bg-slate-700 text-white p-1.5 rounded-lg" aria-label="Aumentar stock"><SlidersHorizontal size={14} /></button>
             )}
             {puedeEditarDatos && (
               <button type="button" onClick={() => editarProducto(p)} className="bg-yellow-500 text-white p-1.5 rounded-lg" aria-label="Editar producto"><Pencil size={14} /></button>
@@ -246,7 +240,7 @@ function Productos() {
   }
 
   function cambiarCantidadAjuste(valor) {
-    if (/^-?\d*$/.test(valor)) {
+    if (/^\d*$/.test(valor)) {
       setCantidadAjuste(valor)
     }
   }
@@ -285,6 +279,7 @@ function Productos() {
   }
 
   function ajusteRapido(producto, delta) {
+    if (Number(delta) < 1) return
     if (!esTiendaPropia || !tiendaPropia || !puedeReponerStock()) return
     if (producto.tiendaId && producto.tiendaId !== tiendaPropia.id) return
 
@@ -370,13 +365,13 @@ function Productos() {
 
       if (!diferido) {
         await registrarMovimiento({
-          tipo: TIPOS_MOVIMIENTO.AJUSTE_STOCK,
+          tipo: TIPOS_MOVIMIENTO.REPOSICION,
           productoId: producto.id,
           productoNombre: `${producto.marca || ""} ${producto.modelo || ""}`.trim(),
           cantidad: cambio,
           stockAntes,
           stockDespues,
-          detalle: `Ajuste ${cambio > 0 ? "+" : ""}${cambio}`,
+          detalle: `Aumentar stock +${cambio}`,
           tiendaId: tiendaPropia.id,
         })
       }
@@ -413,8 +408,17 @@ function Productos() {
   async function confirmarAjuste(e) {
     e.preventDefault()
     if (!productoAjuste) return
+    const cantidad = Number(cantidadAjuste)
+    if (!Number.isInteger(cantidad) || cantidad < 1) {
+      Swal.fire({
+        icon: "warning",
+        title: "Solo se aumenta",
+        text: "Escribe cuántas unidades entran. El stock baja solo con una venta.",
+      })
+      return
+    }
 
-    const ok = await aplicarDelta(productoAjuste, Number(cantidadAjuste))
+    const ok = await aplicarDelta(productoAjuste, cantidad)
     if (ok) cerrarAjuste()
   }
 
@@ -438,7 +442,7 @@ function Productos() {
       !categoriaLimpia ||
       !modeloLimpio ||
       precio === "" ||
-      stock === ""
+      (!editandoId && stock === "")
     ) {
       Swal.fire({
         icon: "warning",
@@ -456,7 +460,7 @@ function Productos() {
       return
     }
 
-    if (!Number.isInteger(stockNumeroVal) || stockNumeroVal < 0) {
+    if (!editandoId && (!Number.isInteger(stockNumeroVal) || stockNumeroVal < 0)) {
       Swal.fire({
         icon: "warning",
         title: "Stock inválido",
@@ -502,25 +506,6 @@ function Productos() {
           lista.map((p) => (p.id === editandoId ? { ...p, ...datos } : p))
         )
 
-        const actual = productos.find((p) => p.id === editandoId)
-        const stockActual = Number(actual?.stock)
-        const deltaStock = stockNumeroVal - stockActual
-        if (Number.isInteger(deltaStock) && deltaStock !== 0) {
-          const ok = await aplicarDelta(
-            { ...(actual || {}), ...datos, id: editandoId, stock: stockActual },
-            deltaStock,
-            { silencioso: true }
-          )
-          if (!ok) {
-            Swal.fire({
-              icon: "warning",
-              title: "Producto actualizado, stock no",
-              text: "Se guardaron marca, modelo y precio. El stock no cambió. Intenta el ajuste otra vez.",
-            })
-            return
-          }
-        }
-
         Swal.fire({
           icon: "success",
           title: "Producto actualizado",
@@ -556,6 +541,19 @@ function Productos() {
             },
           ]
         })
+
+        if (stockNumeroVal > 0) {
+          await registrarMovimiento({
+            tipo: TIPOS_MOVIMIENTO.REPOSICION,
+            productoId: creado.id,
+            productoNombre: `${marcaLimpia} ${modeloLimpio}`.trim(),
+            cantidad: stockNumeroVal,
+            stockAntes: 0,
+            stockDespues: stockNumeroVal,
+            detalle: `Aumentar stock +${stockNumeroVal}`,
+            tiendaId: tiendaActual.id,
+          })
+        }
 
         Swal.fire({
           icon: "success",
@@ -1072,28 +1070,6 @@ function Productos() {
                         guardando…
                       </span>
                     )}
-                    {puedeStock && (
-                      <div className="flex items-center gap-1.5 mt-2">
-                        <button
-                          type="button"
-                          disabled={ajustandoId === p.id || Number(p.stock) <= 0}
-                          onClick={() => ajusteRapido(p, -1)}
-                          className="flex-1 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold hover:bg-red-200 disabled:opacity-40 dark:bg-red-950 dark:text-red-200"
-                          title="Restar 1"
-                        >
-                          −1
-                        </button>
-                        <button
-                          type="button"
-                          disabled={ajustandoId === p.id}
-                          onClick={() => ajusteRapido(p, 1)}
-                          className="flex-1 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-40"
-                          title="Sumar 1"
-                        >
-                          +1
-                        </button>
-                      </div>
-                    )}
                     {puedeEditarDatos || puedeStock || puedeBorrar ? (
                     <div className="flex gap-2 mt-2">
                       {puedeStock && (
@@ -1101,8 +1077,8 @@ function Productos() {
                         type="button"
                         onClick={() => abrirAjuste(p)}
                         className="bg-slate-700 text-white p-2 rounded-xl hover:bg-slate-800"
-                        title="Ajustar otra cantidad"
-                        aria-label="Ajustar stock"
+                        title="Aumentar stock"
+                        aria-label="Aumentar stock"
                       >
                         <SlidersHorizontal size={18} />
                       </button>
@@ -1307,14 +1283,20 @@ function Productos() {
             type="text"
             className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
-          <input
-            value={stock}
-            onChange={(e) => cambiarStock(e.target.value)}
-            placeholder="Stock"
-            inputMode="numeric"
-            type="text"
-            className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-          />
+          {editandoId ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              El stock no se edita aquí. Para sumar usa Aumentar stock. Baja solo con una venta.
+            </p>
+          ) : (
+            <input
+              value={stock}
+              onChange={(e) => cambiarStock(e.target.value)}
+              placeholder="Stock inicial"
+              inputMode="numeric"
+              type="text"
+              className="p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+          )}
 
           {(editandoId ? puedeEditarDatos : puedeCrear) && (
             <button
@@ -1335,7 +1317,7 @@ function Productos() {
       <Modal isOpen={modalAjusteAbierto} onClose={cerrarAjuste}>
 
         <h2 className="text-2xl font-bold mb-2 dark:text-white">
-          Ajustar stock
+          Aumentar stock
         </h2>
 
         {productoAjuste && (
@@ -1346,32 +1328,24 @@ function Productos() {
             <strong className="text-xl font-black tabular-nums">
               {productoAjuste.stock}
             </strong>
-            {Number.isInteger(Number(cantidadAjuste)) && Number(cantidadAjuste) !== 0 && (
+            {Number.isInteger(Number(cantidadAjuste)) && Number(cantidadAjuste) > 0 && (
               <>
                 {" "}→{" "}
-                {Number(productoAjuste.stock) + Number(cantidadAjuste) < 0 ? (
-                  <strong className="text-red-600">no alcanza</strong>
-                ) : (
-                  <strong>{Number(productoAjuste.stock) + Number(cantidadAjuste)}</strong>
-                )}
+                <strong>{Number(productoAjuste.stock) + Number(cantidadAjuste)}</strong>
               </>
             )}
           </p>
         )}
 
         <div className="flex flex-wrap gap-2 mb-4">
-          {[-4, -2, -1, 1, 2, 5, 10].map((n) => (
+          {[1, 2, 5, 10].map((n) => (
             <button
               key={n}
               type="button"
               onClick={() => setCantidadAjuste(String(n))}
-              className={`px-3 py-2 rounded-xl text-sm font-bold ${
-                n < 0
-                  ? "bg-red-100 text-red-700 hover:bg-red-200"
-                  : "bg-green-100 text-green-800 hover:bg-green-200"
-              }`}
+              className="px-3 py-2 rounded-xl text-sm font-bold bg-green-100 text-green-800 hover:bg-green-200"
             >
-              {n > 0 ? `+${n}` : n}
+              +{n}
             </button>
           ))}
         </div>
@@ -1381,7 +1355,7 @@ function Productos() {
           <input
             value={cantidadAjuste}
             onChange={(e) => cambiarCantidadAjuste(e.target.value)}
-            placeholder="Otra cantidad, ej. -4 o +12"
+            placeholder="Cuánto añadir, ej. 12"
             inputMode="text"
             type="text"
             className="p-4 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
@@ -1393,14 +1367,12 @@ function Productos() {
             className={`py-3 rounded-xl text-white font-bold ${
               ajustandoId === productoAjuste?.id
                 ? "bg-slate-400"
-                : Number(cantidadAjuste) < 0
-                ? "bg-red-600 hover:bg-red-700"
                 : "bg-green-600 hover:bg-green-700"
             }`}
           >
             {ajustandoId === productoAjuste?.id
               ? "Guardando..."
-              : "Confirmar ajuste"}
+              : "Aumentar stock"}
           </button>
 
         </form>
