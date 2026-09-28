@@ -43,7 +43,7 @@ export function imprimirBoleta(venta, tienda = null) {
     <html>
     <head>
       <meta charset="utf-8" />
-      <title>Boleta ${numero}</title>
+      <title>Nota ${numero}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -146,7 +146,7 @@ export function imprimirBoleta(venta, tienda = null) {
       </div>
 
       <div class="boleta-info">
-        <h2>BOLETA DE VENTA</h2>
+        <h2>NOTA DE VENTA</h2>
         <p>N° ${numero}</p>
         <p>${formatearFecha(venta.fecha || venta.fechaTexto)}</p>
       </div>

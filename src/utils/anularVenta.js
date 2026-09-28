@@ -114,7 +114,7 @@ export async function anularUnaUnidad({ ventaId, indice }) {
 
     const productos = [...(ventaActual.productos || [])]
     const linea = productos[indice]
-    if (!linea?.id) throw new Error("Esa pantalla ya no está en la boleta")
+    if (!linea?.id) throw new Error("Esa pantalla ya no está en la nota")
 
     const productoRef = doc(db, "productos", linea.id)
     const productoSnap = await transaction.get(productoRef)
@@ -186,7 +186,7 @@ export async function anularUnaUnidadYRegistrar({
         ventaId,
         numeroBoleta: metaAnulacion.numeroBoleta,
         cliente: metaAnulacion.cliente,
-        detalle: `Anulación de 1 en boleta #${metaAnulacion.numeroBoleta || ventaId.slice(0, 6)}`,
+        detalle: `Anulación de 1 en nota #${metaAnulacion.numeroBoleta || ventaId.slice(0, 6)}`,
         tiendaId: tiendaActual.id,
       })
     }
@@ -232,7 +232,7 @@ export async function anularVentaYDevolverStock({
         ventaId: venta.id,
         numeroBoleta: metaAnulacion.numeroBoleta,
         cliente: metaAnulacion.cliente,
-        detalle: `Anulación boleta #${metaAnulacion.numeroBoleta || venta.id.slice(0, 6)}`,
+        detalle: `Anulación nota #${metaAnulacion.numeroBoleta || venta.id.slice(0, 6)}`,
         tiendaId: tiendaActual.id,
       })
     }

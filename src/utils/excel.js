@@ -157,7 +157,7 @@ export function exportarReporteContable(ventas) {
     if (!venta.productos?.length) {
       filas.push({
         Fecha: fecha,
-        Boleta: numero,
+        Nota: numero,
         Cliente: venta.cliente || "",
         Telefono: venta.telefono || "",
         Producto: "—",
@@ -173,7 +173,7 @@ export function exportarReporteContable(ventas) {
       const sub = Number(p.precio) * Number(p.cantidad)
       filas.push({
         Fecha: fecha,
-        Boleta: numero,
+        Nota: numero,
         Cliente: venta.cliente || "",
         Telefono: venta.telefono || "",
         Producto: `${p.marca || ""} ${p.modelo || ""}`.trim(),
@@ -1049,7 +1049,7 @@ const COLUMNAS_DESCUENTOS = [
   "Subtotal",
   "Cliente",
   "Telefono",
-  "Boleta",
+  "Nota",
   "Destino",
   "EsPantalla",
 ]

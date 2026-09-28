@@ -22,7 +22,7 @@ function ReportePantallasDescontadas({ tiendaId }) {
       return Swal.fire({
         icon: "info",
         title: "Aún no hay pantallas vendidas",
-        text: `Se guardan ${DIAS_CICLO_DESCUENTOS} días. Si hoy vendes 10 pantallas, aparecen en este día con modelo, cliente y boleta. Al octavo día se borra el más viejo.`,
+        text: `Se guardan ${DIAS_CICLO_DESCUENTOS} días. Si hoy vendes 10 pantallas, aparecen en este día con modelo, cliente y nota. Al octavo día se borra el más viejo.`,
       })
     }
     const r = exportarDescuentosCiclo7Dias(dias, nombre)
@@ -46,7 +46,7 @@ function ReportePantallasDescontadas({ tiendaId }) {
     Swal.fire({
       icon: "success",
       title: `Excel ${r.fecha}`,
-      text: `${r.unidades} pantallas · ${r.filas} líneas con modelo, cliente, boleta y stock que queda.`,
+      text: `${r.unidades} pantallas · ${r.filas} líneas con modelo, cliente, nota y stock que queda.`,
     })
   }
 
@@ -69,7 +69,7 @@ function ReportePantallasDescontadas({ tiendaId }) {
             Pantallas descontadas — {DIAS_CICLO_DESCUENTOS} días
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Ejemplo: si hay 1000 en stock y hoy vendes 10, aquí salen esas 10 con modelo, cliente y boleta. Puedes bajar el Excel de ese día. Solo se guardan {DIAS_CICLO_DESCUENTOS} días; al octavo se borra el primero.
+            Ejemplo: si hay 1000 en stock y hoy vendes 10, aquí salen esas 10 con modelo, cliente y nota. Puedes bajar el Excel de ese día. Solo se guardan {DIAS_CICLO_DESCUENTOS} días; al octavo se borra el primero.
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
@@ -151,7 +151,7 @@ function ReportePantallasDescontadas({ tiendaId }) {
                           <th className="p-2 text-right">Vendidas</th>
                           <th className="p-2 text-right">Stock ahora</th>
                           <th className="p-2 text-left">Cliente</th>
-                          <th className="p-2 text-left">Boleta</th>
+                          <th className="p-2 text-left">Nota</th>
                           <th className="p-2 text-left">Tipo</th>
                         </tr>
                       </thead>

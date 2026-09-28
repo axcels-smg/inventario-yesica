@@ -103,7 +103,7 @@ function Movimientos() {
                 <th className="p-4 text-left dark:text-white">Producto</th>
                 <th className="p-4 text-left dark:text-white">Cantidad</th>
                 <th className="p-4 text-left dark:text-white">Stock</th>
-                <th className="p-4 text-left dark:text-white">Boleta / Cliente</th>
+                <th className="p-4 text-left dark:text-white">Nota / Cliente</th>
                 <th className="p-4 text-left dark:text-white">Detalle</th>
               </tr>
             </thead>
@@ -154,7 +154,7 @@ function Movimientos() {
                       : "—"}
                   </td>
                   <td className="p-4 text-sm dark:text-white">
-                    {m.numeroBoleta && <div>Boleta #{m.numeroBoleta}</div>}
+                    {m.numeroBoleta && <div>Nota #{m.numeroBoleta}</div>}
                     {m.cliente && <div>{m.cliente}</div>}
                   </td>
                   <td className="p-4 text-sm text-slate-500 dark:text-slate-400 max-w-[200px]">

@@ -137,7 +137,7 @@ export function imprimirEstadoCuenta({
           <table>
             <thead>
               <tr>
-                <th>Boleta</th>
+                <th>Nota</th>
                 <th>Detalle</th>
                 <th class="num">Importe</th>
               </tr>

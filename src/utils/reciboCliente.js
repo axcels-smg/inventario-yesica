@@ -32,8 +32,8 @@ export function textoReciboVenta(venta, tienda = null) {
   const lineas = (venta.productos || []).map((p) => lineaReciboProducto(p))
 
   return [
-    `*Recibo de venta* — ${tiendaNombre}`,
-    `Boleta N° ${numero}`,
+    `*Nota de venta* — ${tiendaNombre}`,
+    `Nota N° ${numero}`,
     `Fecha: ${formatearFecha(venta.fecha || venta.fechaTexto)}`,
     `Cliente: ${venta.cliente || "Consumidor Final"}`,
     "",
@@ -71,7 +71,7 @@ export function textoReciboPeriodo({
       .map((p) => `   - ${nombreProductoVenta(p)} × ${p.cantidad} (${formatoMoneda(Number(p.precio) * Number(p.cantidad))})`)
       .join("\n")
     return [
-      `Boleta ${numero} — ${formatearFecha(venta.fecha || venta.fechaTexto)}`,
+      `Nota ${numero} — ${formatearFecha(venta.fecha || venta.fechaTexto)}`,
       productos || "   - Sin detalle",
       `   Subtotal: ${formatoMoneda(venta.total)}`,
     ].join("\n")
@@ -100,7 +100,7 @@ export function enlaceWhatsAppTexto(texto, telefono) {
   return `https://wa.me/${numero}?text=${encoded}`
 }
 
-export function enlaceEmailTexto(texto, correo = "", asunto = "Recibo de venta") {
+export function enlaceEmailTexto(texto, correo = "", asunto = "Nota de venta") {
   return `mailto:${correo || ""}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`
 }
 
@@ -153,7 +153,7 @@ export async function descargarPdfReciboPeriodo({
       venta.numeroBoleta != null ? formatearNumeroBoleta(venta.numeroBoleta) : "—"
     pdf.setFont("helvetica", "bold")
     pdf.text(
-      `Boleta ${numero}  ·  ${formatearFecha(venta.fecha || venta.fechaTexto)}`,
+      `Nota ${numero}  ·  ${formatearFecha(venta.fecha || venta.fechaTexto)}`,
       margin,
       y
     )

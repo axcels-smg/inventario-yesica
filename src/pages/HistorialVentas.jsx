@@ -124,7 +124,7 @@ function HistorialVentas() {
       title: "¿Anular solo esta?",
       html: `
         <p>Se devuelve <strong>1</strong> de ${nombre} al stock.</p>
-        <p class="mt-2">El resto de la boleta del día sigue igual.</p>
+        <p class="mt-2">El resto de la nota del día sigue igual.</p>
       `,
       icon: "warning",
       showCancelButton: true,
@@ -146,8 +146,8 @@ function HistorialVentas() {
         icon: "success",
         title: "Se anuló 1",
         text: metaAnulacion.numeroBoleta
-          ? `Boleta #${metaAnulacion.numeroBoleta}. El resto sigue.`
-          : "El resto de la boleta sigue.",
+          ? `Nota #${metaAnulacion.numeroBoleta}. El resto sigue.`
+          : "El resto de la nota sigue.",
         timer: 1800,
         showConfirmButton: false,
       })
@@ -261,7 +261,7 @@ function HistorialVentas() {
     // Título de boleta
     pdf.setFontSize(18)
     pdf.setFont("helvetica", "bold")
-    pdf.text(venta.anulada ? "BOLETA ANULADA" : "BOLETA DE VENTA", pageWidth / 2, y, { align: "center" })
+    pdf.text(venta.anulada ? "NOTA ANULADA" : "NOTA DE VENTA", pageWidth / 2, y, { align: "center" })
     y += 10
 
     if (numeroBoleta) {
@@ -387,7 +387,7 @@ function HistorialVentas() {
     pdf.setFont("helvetica", "normal")
     pdf.text(DATOS_NEGOCIO.sitioWeb, pageWidth / 2, y, { align: "center" })
 
-    pdf.save(`boleta-${numeroBoleta || venta.id.slice(0, 6)}.pdf`)
+    pdf.save(`nota-${numeroBoleta || venta.id.slice(0, 6)}.pdf`)
   }
 
   if (!esTiendaPropia) {
@@ -563,7 +563,7 @@ function HistorialVentas() {
                   {etiquetaDiaEs(dia.clave)}
                 </h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {activas} boleta{activas === 1 ? "" : "s"}
+                  {activas} nota{activas === 1 ? "" : "s"}
                   {anuladas
                     ? ` · ${anuladas} anulada${anuladas === 1 ? "" : "s"}`
                     : ""}
@@ -592,7 +592,7 @@ function HistorialVentas() {
                   <Receipt size={20} />
                   <h2 className="text-2xl font-bold dark:text-white">
                     {venta.numeroBoleta != null
-                      ? `Boleta #${formatearNumeroBoleta(venta.numeroBoleta)}${venta.boletaDelDia ? " del día" : ""}`
+                      ? `Nota #${formatearNumeroBoleta(venta.numeroBoleta)}${venta.boletaDelDia ? " del día" : ""}`
                       : `Venta #${venta.id.slice(0, 6)}`}
                   </h2>
                   {venta.anulada && (

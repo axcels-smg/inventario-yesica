@@ -311,7 +311,7 @@ function Ventas() {
 
     const ok = await Swal.fire({
       title: "¿Anular esta venta?",
-      html: `<p>Se <strong>devuelve el stock</strong> al inventario. La boleta queda marcada como anulada.</p>
+      html: `<p>Se <strong>devuelve el stock</strong> al inventario. La nota queda marcada como anulada.</p>
         <p class="mt-2 font-bold">Total: S/ ${venta.total}</p>`,
       icon: "warning",
       showCancelButton: true,
@@ -378,7 +378,7 @@ function Ventas() {
       const sigue = await Swal.fire({
         icon: "warning",
         title: "Hay productos a S/ 0",
-        text: "El total de la boleta puede quedar en cero. ¿Vender igual?",
+        text: "El total de la nota puede quedar en cero. ¿Vender igual?",
         showCancelButton: true,
         confirmButtonText: "Vender igual",
         cancelButtonText: "Cancelar",
@@ -553,7 +553,7 @@ function Ventas() {
             ventaId: ventaRef.id,
             numeroBoleta: formatearNumeroBoleta(numeroBoleta),
             cliente: clienteData.nombre || "",
-            detalle: `Venta boleta #${formatearNumeroBoleta(numeroBoleta)}`,
+            detalle: `Venta nota #${formatearNumeroBoleta(numeroBoleta)}`,
             tiendaId: tiendaActual.id,
           })
         }
@@ -565,8 +565,8 @@ function Ventas() {
         icon: "success",
         title: "Venta realizada",
         text: uniendoBoleta
-          ? `Se sumó a la boleta #${formatearNumeroBoleta(numeroBoleta)} de hoy. Total del día S/ ${Number(totalBoleta).toFixed(2)}. El stock ya se descontó.`
-          : `Boleta #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${Number(total).toFixed(2)}. El stock ya se descontó.`,
+          ? `Se sumó a la nota #${formatearNumeroBoleta(numeroBoleta)} de hoy. Total del día S/ ${Number(totalBoleta).toFixed(2)}. El stock ya se descontó.`
+          : `Nota #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${Number(total).toFixed(2)}. El stock ya se descontó.`,
         showCancelButton: true,
         showDenyButton: !uniendoBoleta && esTiendaPropia && puedeAnularVentas(),
         confirmButtonText: "Enviar recibo por WhatsApp",
@@ -966,7 +966,7 @@ function Ventas() {
                 >
                   <div>
                     <p className="font-bold dark:text-white">
-                      Boleta #
+                      Nota #
                       {venta.numeroBoleta != null
                         ? formatearNumeroBoleta(venta.numeroBoleta)
                         : venta.id.slice(0, 6)}

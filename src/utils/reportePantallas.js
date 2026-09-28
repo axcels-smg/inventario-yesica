@@ -274,7 +274,7 @@ export function filasExcelDescuentos(dias) {
         Subtotal: Number(item.subtotal) || 0,
         Cliente: item.cliente || (item.tipo === "transferencia" ? "—" : "Sin cliente"),
         Telefono: item.telefono || "",
-        Boleta: item.boleta || "",
+        Nota: item.boleta || "",
         Destino: item.destino || "",
         EsPantalla: item.pantalla || esCategoriaPantalla(item) ? "Sí" : "No",
       })
