@@ -4,7 +4,6 @@ import Swal from "sweetalert2"
 
 import {
   Pencil,
-  Trash2,
   PackageSearch,
   Package,
   ChevronDown,
@@ -16,7 +15,6 @@ import { db } from "../firebase"
 import {
   collection,
   addDoc,
-  deleteDoc,
   updateDoc,
   doc,
   serverTimestamp,
@@ -52,11 +50,9 @@ function CeldaVariante({
   stock,
   puedeStock,
   puedeEditarDatos,
-  puedeBorrar,
   ajusteRapido,
   abrirAjuste,
   editarProducto,
-  eliminarProducto,
   ajustandoId,
   idsPendientes,
   parpadeoIds,
@@ -110,9 +106,6 @@ function CeldaVariante({
             {puedeEditarDatos && (
               <button type="button" onClick={() => editarProducto(p)} className="bg-yellow-500 text-white p-1.5 rounded-lg" aria-label="Editar producto"><Pencil size={14} /></button>
             )}
-            {puedeBorrar && (
-              <button type="button" onClick={() => eliminarProducto(p.id)} className="bg-red-500 text-white p-1.5 rounded-lg" aria-label="Eliminar producto"><Trash2 size={14} /></button>
-            )}
           </div>
           {idsPendientes.has(p.id) && <span className="text-xs text-slate-400">guardando…</span>}
         </div>
@@ -127,7 +120,6 @@ function Productos() {
   const {
     puedeCrearProductos,
     puedeEditarProductos,
-    puedeEliminarProductos,
     puedeReponerStock,
   } = useRol()
   const {
@@ -138,8 +130,7 @@ function Productos() {
   const puedeCrear = esTiendaPropia && puedeCrearProductos()
   const puedeEditarDatos = esTiendaPropia && puedeEditarProductos()
   const puedeStock = esTiendaPropia && puedeReponerStock()
-  const puedeBorrar = esTiendaPropia && puedeEliminarProductos()
-  const puedeEditar = puedeCrear || puedeEditarDatos || puedeStock || puedeBorrar
+  const puedeEditar = puedeCrear || puedeEditarDatos || puedeStock
   const [parpadeoIds, setParpadeoIds] = useState(() => new Set())
   const stockAnteriorRef = useRef({})
 
@@ -577,37 +568,6 @@ function Productos() {
     }
   }
 
-  // ELIMINAR
-  async function eliminarProducto(id) {
-    if (!esTiendaPropia || !puedeEliminarProductos()) return
-
-    Swal.fire({
-      title: "¿Eliminar producto?",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#ef4444",
-      confirmButtonText: "Eliminar",
-    }).then(async (result) => {
-
-      if (result.isConfirmed) {
-
-        try {
-          await deleteDoc(doc(db, "productos", id))
-          setProductosLive((lista) => lista.filter((p) => p.id !== id))
-
-          Swal.fire({
-            icon: "success",
-            title: "Eliminado",
-            timer: 1200,
-            showConfirmButton: false,
-          })
-        } catch (error) {
-          errorOperacion(error, "No se pudo eliminar")
-        }
-      }
-    })
-  }
-
   // EDITAR
   function editarProducto(producto) {
     // Validar que el producto pertenezca a la tienda actual
@@ -972,9 +932,9 @@ function Productos() {
                     <td className="p-4">
                       <span className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm">{familia.categoria}</span>
                     </td>
-                    <CeldaVariante titulo={etiquetaVariante(familia.base, "normal")} lista={familia.normal} stock={familia.stockNormal} puedeStock={puedeStock} puedeEditarDatos={puedeEditarDatos} puedeBorrar={puedeBorrar} ajusteRapido={ajusteRapido} abrirAjuste={abrirAjuste} editarProducto={editarProducto} eliminarProducto={eliminarProducto} ajustandoId={ajustandoId} idsPendientes={idsPendientes} parpadeoIds={parpadeoIds} />
-                    <CeldaVariante titulo={etiquetaVariante(familia.base, "yiifix")} lista={familia.yiifix} stock={familia.stockYiifix} puedeStock={puedeStock} puedeEditarDatos={puedeEditarDatos} puedeBorrar={puedeBorrar} ajusteRapido={ajusteRapido} abrirAjuste={abrirAjuste} editarProducto={editarProducto} eliminarProducto={eliminarProducto} ajustandoId={ajustandoId} idsPendientes={idsPendientes} parpadeoIds={parpadeoIds} />
-                    <CeldaVariante titulo={etiquetaVariante(familia.base, "mecanico")} lista={familia.mecanico} stock={familia.stockMecanico} puedeStock={puedeStock} puedeEditarDatos={puedeEditarDatos} puedeBorrar={puedeBorrar} ajusteRapido={ajusteRapido} abrirAjuste={abrirAjuste} editarProducto={editarProducto} eliminarProducto={eliminarProducto} ajustandoId={ajustandoId} idsPendientes={idsPendientes} parpadeoIds={parpadeoIds} />
+                    <CeldaVariante titulo={etiquetaVariante(familia.base, "normal")} lista={familia.normal} stock={familia.stockNormal} puedeStock={puedeStock} puedeEditarDatos={puedeEditarDatos} ajusteRapido={ajusteRapido} abrirAjuste={abrirAjuste} editarProducto={editarProducto} ajustandoId={ajustandoId} idsPendientes={idsPendientes} parpadeoIds={parpadeoIds} />
+                    <CeldaVariante titulo={etiquetaVariante(familia.base, "yiifix")} lista={familia.yiifix} stock={familia.stockYiifix} puedeStock={puedeStock} puedeEditarDatos={puedeEditarDatos} ajusteRapido={ajusteRapido} abrirAjuste={abrirAjuste} editarProducto={editarProducto} ajustandoId={ajustandoId} idsPendientes={idsPendientes} parpadeoIds={parpadeoIds} />
+                    <CeldaVariante titulo={etiquetaVariante(familia.base, "mecanico")} lista={familia.mecanico} stock={familia.stockMecanico} puedeStock={puedeStock} puedeEditarDatos={puedeEditarDatos} ajusteRapido={ajusteRapido} abrirAjuste={abrirAjuste} editarProducto={editarProducto} ajustandoId={ajustandoId} idsPendientes={idsPendientes} parpadeoIds={parpadeoIds} />
                     <td className="p-3 align-top">
                       <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 min-w-[110px]">
                         <p className="text-[11px] uppercase tracking-wide text-slate-400">Total</p>
@@ -1070,7 +1030,7 @@ function Productos() {
                         guardando…
                       </span>
                     )}
-                    {puedeEditarDatos || puedeStock || puedeBorrar ? (
+                    {puedeEditarDatos || puedeStock ? (
                     <div className="flex gap-2 mt-2">
                       {puedeStock && (
                       <button
@@ -1092,17 +1052,6 @@ function Productos() {
                         aria-label="Editar producto"
                       >
                         <Pencil size={18} />
-                      </button>
-                      )}
-                      {puedeBorrar && (
-                      <button
-                        type="button"
-                        onClick={() => eliminarProducto(p.id)}
-                        className="bg-red-500 text-white p-2 rounded-xl"
-                        title="Eliminar"
-                        aria-label="Eliminar producto"
-                      >
-                        <Trash2 size={18} />
                       </button>
                       )}
                     </div>
