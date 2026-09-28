@@ -15,6 +15,7 @@ import { etiquetaDiaEs, formatearFecha } from "../utils/fechas"
 import { formatearNumeroBoleta } from "../utils/boleta"
 import { DATOS_NEGOCIO } from "../constants/inventario"
 import { imprimirBoleta } from "../utils/impresion"
+import { especificacionPantalla } from "../utils/variantesModelo"
 import {
   enlaceWhatsAppTexto,
   formatoMoneda,
@@ -325,13 +326,27 @@ function HistorialVentas() {
     // Filas de productos
     pdf.setFont("helvetica", "normal")
     venta.productos.forEach((producto) => {
+      if (y > 260) {
+        pdf.addPage()
+        y = 20
+      }
       const subtotal = Number(producto.precio) * producto.cantidad
       const nombreProducto = `${producto.marca || producto.nombre} ${producto.modelo || ""}`.trim()
+      const tipoPantalla = especificacionPantalla(producto)
 
-      pdf.text(nombreProducto.substring(0, 35), margin + 5, y)
+      pdf.setFontSize(10)
+      pdf.setFont("helvetica", "normal")
+      pdf.text(nombreProducto.substring(0, 42), margin + 5, y)
       pdf.text(String(producto.cantidad), margin + 105, y)
       pdf.text(`S/ ${subtotal.toFixed(2)}`, margin + 140, y)
-      y += 8
+      y += 5
+      if (tipoPantalla) {
+        pdf.setFontSize(9)
+        pdf.setFont("helvetica", "bold")
+        pdf.text(tipoPantalla, margin + 5, y)
+        y += 5
+      }
+      y += 3
     })
 
     y += 10
@@ -685,6 +700,11 @@ function HistorialVentas() {
                     <h4 className="font-semibold dark:text-white">
                       {nombreProductoVenta(producto)}
                     </h4>
+                    {especificacionPantalla(producto) && (
+                      <p className="text-sm font-bold text-blue-700 dark:text-blue-300">
+                        {especificacionPantalla(producto)}
+                      </p>
+                    )}
 
                     <p className="text-slate-500 dark:text-slate-400 text-sm">
                       Cantidad: {producto.cantidad}

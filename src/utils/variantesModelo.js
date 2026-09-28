@@ -69,6 +69,26 @@ export function clasificarModelo(modelo) {
   }
 }
 
+const ETIQUETA_TIPO_PANTALLA = {
+  normal: "Normal",
+  yiifix: "YIIFIX",
+  mecanico: "Mecanico",
+}
+
+const ETIQUETA_CALIDAD_PANTALLA = {
+  oled: "OLED",
+  incell: "INCELL",
+  original: "Original",
+}
+
+export function especificacionPantalla(producto) {
+  if (!esCategoriaPantalla(producto)) return ""
+  const { tipo, calidad } = clasificarModelo(producto?.modelo)
+  const partes = ["Pantalla", ETIQUETA_TIPO_PANTALLA[tipo] || "Normal"]
+  if (ETIQUETA_CALIDAD_PANTALLA[calidad]) partes.push(ETIQUETA_CALIDAD_PANTALLA[calidad])
+  return partes.join(" · ")
+}
+
 function alternativasDe(modelo) {
   return limpiarBorde(modelo)
     .split("/")

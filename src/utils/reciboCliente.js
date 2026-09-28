@@ -1,8 +1,16 @@
 import { formatearNumeroBoleta } from "./boleta"
 import { formatearFecha } from "./fechas"
+import { especificacionPantalla } from "./variantesModelo"
 
 export function nombreProductoVenta(p) {
   return `${p.marca || p.nombre || ""} ${p.modelo || ""}`.trim() || "Producto"
+}
+
+export function lineaReciboProducto(p) {
+  const precio = formatoMoneda(Number(p.precio) * Number(p.cantidad))
+  const linea = `• ${nombreProductoVenta(p)} × ${p.cantidad} = ${precio}`
+  const tipo = especificacionPantalla(p)
+  return tipo ? `${linea}\n  ${tipo}` : linea
 }
 
 export function numeroWhatsAppPeru(telefono) {
@@ -21,10 +29,7 @@ export function textoReciboVenta(venta, tienda = null) {
   const tiendaNombre = tienda?.nombre || "Inventario G.R.L."
   const numero =
     venta.numeroBoleta != null ? formatearNumeroBoleta(venta.numeroBoleta) : venta.id?.slice(0, 6) || "—"
-  const lineas = (venta.productos || []).map(
-    (p) =>
-      `• ${nombreProductoVenta(p)} × ${p.cantidad} = ${formatoMoneda(Number(p.precio) * Number(p.cantidad))}`
-  )
+  const lineas = (venta.productos || []).map((p) => lineaReciboProducto(p))
 
   return [
     `*Recibo de venta* — ${tiendaNombre}`,

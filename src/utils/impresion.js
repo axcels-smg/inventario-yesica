@@ -1,5 +1,6 @@
 import { formatearFecha } from "./fechas"
 import { formatearNumeroBoleta } from "./boleta"
+import { especificacionPantalla } from "./variantesModelo"
 import { DATOS_NEGOCIO } from "../constants/inventario"
 import Swal from "sweetalert2"
 
@@ -20,11 +21,13 @@ export function imprimirBoleta(venta, tienda = null) {
   const filas = (venta.productos || [])
     .map((p) => {
       const sub = Number(p.precio) * Number(p.cantidad)
+      const tipo = especificacionPantalla(p)
       return `
         <tr>
           <td colspan="3" style="padding: 6px 0; border-bottom: 1px dashed #000;">
             <div style="font-weight: bold;">${p.marca || p.nombre}</div>
             <div style="font-size: 10px; color: #666;">${p.modelo || ""}</div>
+            ${tipo ? `<div style="font-size: 10px; font-weight: bold; margin-top: 2px;">${tipo}</div>` : ""}
             <div style="display: flex; justify-content: space-between; margin-top: 2px;">
               <span>x${p.cantidad}</span>
               <span>S/ ${sub.toFixed(2)}</span>
