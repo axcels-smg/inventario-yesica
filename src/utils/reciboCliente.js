@@ -1,5 +1,5 @@
 import { formatearNumeroBoleta } from "./boleta"
-import { formatearFecha } from "./fechas"
+import { claveDiaLocal, etiquetaDiaEs, formatearFecha, obtenerTiempoFecha } from "./fechas"
 import { especificacionPantalla } from "./variantesModelo"
 
 export function nombreProductoVenta(p) {
@@ -90,6 +90,76 @@ export function textoReciboPeriodo({
     `*TOTAL DEL PERÍODO: ${formatoMoneda(total)}*`,
     "",
     "Este es el resumen de sus compras. Gracias.",
+  ].join("\n")
+}
+
+export function textoBloqueNotas({
+  ventas = [],
+  fechaDesde,
+  fechaHasta,
+  tienda = null,
+  cliente = null,
+}) {
+  const tiendaNombre = tienda?.nombre || "Inventario G.R.L."
+  const periodo =
+    fechaDesde && fechaHasta && fechaDesde === fechaHasta
+      ? etiquetaDiaEs(fechaDesde)
+      : fechaDesde && fechaHasta
+        ? `${fechaDesde} al ${fechaHasta}`
+        : fechaDesde
+          ? `desde ${fechaDesde}`
+          : fechaHasta
+            ? `hasta ${fechaHasta}`
+            : "las fechas elegidas"
+
+  const ordenadas = [...ventas].sort(
+    (a, b) => obtenerTiempoFecha(a.fecha || a.fechaTexto) - obtenerTiempoFecha(b.fecha || b.fechaTexto)
+  )
+  const porDia = new Map()
+  ordenadas.forEach((venta) => {
+    const dia = claveDiaLocal(venta.fecha || venta.fechaTexto) || "sin-fecha"
+    if (!porDia.has(dia)) porDia.set(dia, [])
+    porDia.get(dia).push(venta)
+  })
+
+  const bloques = [...porDia.entries()].map(([dia, lista]) => {
+    const porCliente = new Map()
+    lista.forEach((venta) => {
+      const nombre = venta.cliente || "Sin cliente"
+      if (!porCliente.has(nombre)) porCliente.set(nombre, [])
+      porCliente.get(nombre).push(venta)
+    })
+    const clientesTxt = [...porCliente.entries()].map(([nombre, notas]) => {
+      const notasTxt = notas.map((venta) => {
+        const numero = venta.numeroBoleta != null ? formatearNumeroBoleta(venta.numeroBoleta) : "—"
+        const productos = (venta.productos || [])
+          .map((p) => `   ${lineaReciboProducto(p).replace(/^• /, "- ")}`)
+          .join("\n")
+        return [
+          `Nota N° ${numero}`,
+          productos || "   - Sin detalle",
+          `   Total nota: ${formatoMoneda(venta.total)}`,
+        ].join("\n")
+      }).join("\n")
+      if (cliente?.nombre) return notasTxt
+      const subtotal = notas.reduce((suma, venta) => suma + Number(venta.total || 0), 0)
+      return [`*${nombre}*`, notasTxt, `Subtotal ${nombre}: ${formatoMoneda(subtotal)}`].join("\n")
+    }).join("\n\n")
+    return [`*${dia === "sin-fecha" ? "Sin fecha" : etiquetaDiaEs(dia)}*`, clientesTxt].join("\n")
+  })
+
+  const total = ordenadas.reduce((suma, venta) => suma + Number(venta.total || 0), 0)
+  const clientes = new Set(ordenadas.map((venta) => venta.cliente || "Sin cliente"))
+
+  return [
+    `*Notas de venta* — ${tiendaNombre}`,
+    cliente?.nombre ? `Cliente: ${cliente.nombre}` : `Clientes: ${clientes.size}`,
+    `Período: ${periodo}`,
+    `Notas: ${ordenadas.length}`,
+    "",
+    bloques.join("\n\n") || "Sin notas en este período.",
+    "",
+    `*TOTAL: ${formatoMoneda(total)}*`,
   ].join("\n")
 }
 

@@ -21,6 +21,7 @@ import {
   formatoMoneda,
   nombreProductoVenta,
   textoReciboVenta,
+  textoBloqueNotas,
 } from "../utils/reciboCliente"
 import { exportarReporteContable } from "../utils/excel"
 import { descargarPdfEstadoCuenta, imprimirEstadoCuenta } from "../utils/estadoCuenta"
@@ -99,6 +100,38 @@ function HistorialVentas() {
     const rango = obtenerRangoPreset(clave)
     setFechaDesde(rango.fechaDesde)
     setFechaHasta(rango.fechaHasta)
+  }
+
+  function enviarBloque() {
+    const lista = incluirAnuladasDoc
+      ? ventasFiltradas
+      : ventasFiltradas.filter((venta) => esVentaActiva(venta))
+    if (!lista.length) {
+      Swal.fire({
+        icon: "info",
+        title: "Nada para enviar",
+        text: "No hay notas en el día o el rango que elegiste.",
+      })
+      return
+    }
+    const texto = textoBloqueNotas({
+      ventas: lista,
+      fechaDesde,
+      fechaHasta,
+      tienda: negocioActual,
+      cliente: clienteSeleccionado || null,
+    })
+    const telefono = clienteSeleccionado?.telefono || ""
+    if (clienteSeleccionado && !telefono) {
+      Swal.fire({
+        icon: "info",
+        title: "Sin teléfono",
+        text: "Ese cliente no tiene teléfono. Se abrirá WhatsApp para elegir el contacto.",
+        timer: 1800,
+        showConfirmButton: false,
+      })
+    }
+    window.open(enlaceWhatsAppTexto(texto, telefono), "_blank")
   }
 
   function datosCuenta() {
@@ -534,7 +567,18 @@ function HistorialVentas() {
             <Download size={18} />
             Excel del filtro
           </button>
+          <button
+            type="button"
+            onClick={enviarBloque}
+            className="flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-2xl hover:bg-green-700 transition"
+          >
+            <MessageCircle size={18} />
+            Enviar bloque
+          </button>
         </div>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Enviar bloque manda un solo mensaje con todas las notas del filtro: un día, una semana o las fechas que elijas. Si eliges un cliente, se abre su WhatsApp. Si están todos, eliges el contacto.
+        </p>
       </div>
 
       {ventasDelMes.length === 0 && (
