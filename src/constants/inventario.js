@@ -69,12 +69,20 @@ export const ETIQUETAS_MOVIMIENTO = {
 
 export const MOTIVOS_DANADO = {
   LLEGO: "llego",
-  TIENDA: "tienda",
-  CLIENTE: "cliente",
 }
 
 export const ETIQUETAS_MOTIVO_DANADO = {
   llego: "Llegó dañado",
-  tienda: "Se dañó en tienda",
-  cliente: "Cliente lo devolvió",
+}
+
+export const FALLAS_DANADO = {
+  LINEA: "linea",
+  TACTIL: "tactil",
+  BRILLO: "brillo",
+}
+
+export const ETIQUETAS_FALLA_DANADO = {
+  linea: "Línea",
+  tactil: "Táctil",
+  brillo: "Brillo",
 }

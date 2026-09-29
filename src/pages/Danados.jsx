@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react"
 import Swal from "sweetalert2"
 import { AlertTriangle, Plus, Search } from "lucide-react"
 import {
-  addDoc,
   collection,
   doc,
   runTransaction,
@@ -18,6 +17,7 @@ import { errorOperacion } from "../utils/erroresUi"
 import { exportarDanadosExcel } from "../utils/excel"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
 import {
+  ETIQUETAS_FALLA_DANADO,
   ETIQUETAS_MOTIVO_DANADO,
   MOTIVOS_DANADO,
   TIPOS_MOVIMIENTO,
@@ -26,10 +26,6 @@ import {
 function nombreProducto(item) {
   const partes = [item.marca, item.categoria, item.modelo].filter((p) => String(p || "").trim())
   return partes.join(" · ") || item.productoNombre || "Producto"
-}
-
-function descuentaMotivo(motivo) {
-  return motivo === MOTIVOS_DANADO.LLEGO || motivo === MOTIVOS_DANADO.TIENDA
 }
 
 function efectoStock(item) {
@@ -47,7 +43,7 @@ function Danados() {
   const [busqueda, setBusqueda] = useState("")
   const [productoId, setProductoId] = useState("")
   const [cantidad, setCantidad] = useState("1")
-  const [motivo, setMotivo] = useState(MOTIVOS_DANADO.LLEGO)
+  const [falla, setFalla] = useState("")
   const [detalle, setDetalle] = useState("")
   const [guardando, setGuardando] = useState(false)
 
@@ -75,7 +71,7 @@ function Danados() {
     setBusqueda("")
     setProductoId("")
     setCantidad("1")
-    setMotivo(MOTIVOS_DANADO.LLEGO)
+    setFalla("")
     setDetalle("")
   }
 
@@ -85,7 +81,7 @@ function Danados() {
     return texto.includes(busqueda.toLowerCase())
   })
   const cantidadNum = Number.parseInt(String(cantidad).trim(), 10)
-  const bajaStock = descuentaMotivo(motivo)
+  const etiquetaFalla = ETIQUETAS_FALLA_DANADO[falla] || ""
   const stockActual = Number(producto?.stock || 0)
 
   async function guardar(e) {
@@ -97,7 +93,10 @@ function Danados() {
     if (!Number.isInteger(cantidadNum) || cantidadNum <= 0) {
       return Swal.fire({ icon: "warning", title: "Cantidad inválida", text: "La cantidad tiene que ser un número entero mayor a 0" })
     }
-    if (bajaStock && cantidadNum > stockActual) {
+    if (!etiquetaFalla) {
+      return Swal.fire({ icon: "warning", title: "Falta la falla", text: "Elige si es línea, táctil o brillo" })
+    }
+    if (cantidadNum > stockActual) {
       return Swal.fire({
         icon: "warning",
         title: "Stock insuficiente",
@@ -105,24 +104,20 @@ function Danados() {
       })
     }
 
-    const etiqueta = ETIQUETAS_MOTIVO_DANADO[motivo]
     const confirmar = await Swal.fire({
-      title: bajaStock ? "¿Descontar como dañado?" : "¿Anotar la devolución?",
+      title: "¿Descontar como dañado?",
       html: `
         <div style="text-align:left;font-size:14px;line-height:1.6">
           <p><b>Producto:</b> ${nombreProducto(producto)}</p>
           <p><b>Cantidad:</b> ${cantidadNum}</p>
-          <p><b>Motivo:</b> ${etiqueta}</p>
+          <p><b>Llegó dañado:</b> ${etiquetaFalla}</p>
           <hr/>
-          ${bajaStock
-            ? `<p>Se descuentan ${cantidadNum} de <b>${tiendaActual.nombre}</b>. Quedarían ${stockActual - cantidadNum}.</p>`
-            : `<p>La venta ya descontó esta pieza. Aquí solo se anota y el stock sigue en ${stockActual}.</p>`
-          }
+          <p>Se descuentan ${cantidadNum} de <b>${tiendaActual.nombre}</b>. Quedarían ${stockActual - cantidadNum}.</p>
         </div>
       `,
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: bajaStock ? "Descontar" : "Anotar",
+      confirmButtonText: "Descontar",
       cancelButtonText: "Volver",
     })
     if (!confirmar.isConfirmed) return
@@ -137,9 +132,10 @@ function Danados() {
       modelo: producto.modelo || "",
       codigo: producto.codigo || "",
       cantidad: cantidadNum,
-      motivo,
+      motivo: MOTIVOS_DANADO.LLEGO,
+      falla,
       detalle: detalle.trim(),
-      descuentaStock: bajaStock,
+      descuentaStock: true,
       fecha: serverTimestamp(),
       fechaTexto: new Date().toLocaleString("es-PE"),
       fechaMillis: Date.now(),
@@ -147,47 +143,39 @@ function Danados() {
 
     try {
       setGuardando(true)
-      if (bajaStock) {
-        const productoRef = doc(db, "productos", producto.id)
-        const danadoRef = doc(collection(db, "danados"))
-        let stockAntes = stockActual
-        let stockDespues = stockActual - cantidadNum
-        await runTransaction(db, async (transaction) => {
-          const snap = await transaction.get(productoRef)
-          if (!snap.exists()) throw new Error("No se encontró el producto")
-          const data = snap.data()
-          if (data.tiendaId && data.tiendaId !== tiendaActual.id) {
-            throw new Error("Ese producto no es de esta tienda")
-          }
-          stockAntes = Number(data.stock || 0)
-          if (stockAntes < cantidadNum) {
-            throw new Error(`Solo hay ${stockAntes} de ${nombreProducto(producto)}`)
-          }
-          stockDespues = stockAntes - cantidadNum
-          transaction.update(productoRef, {
-            stock: stockDespues,
-            actualizado: serverTimestamp(),
-          })
-          transaction.set(danadoRef, { ...base, stockAntes, stockDespues })
+      const productoRef = doc(db, "productos", producto.id)
+      const danadoRef = doc(collection(db, "danados"))
+      let stockAntes = stockActual
+      let stockDespues = stockActual - cantidadNum
+      await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(productoRef)
+        if (!snap.exists()) throw new Error("No se encontró el producto")
+        const data = snap.data()
+        if (data.tiendaId && data.tiendaId !== tiendaActual.id) {
+          throw new Error("Ese producto no es de esta tienda")
+        }
+        stockAntes = Number(data.stock || 0)
+        if (stockAntes < cantidadNum) {
+          throw new Error(`Solo hay ${stockAntes} de ${nombreProducto(producto)}`)
+        }
+        stockDespues = stockAntes - cantidadNum
+        transaction.update(productoRef, {
+          stock: stockDespues,
+          actualizado: serverTimestamp(),
         })
-        await registrarMovimiento({
-          tipo: TIPOS_MOVIMIENTO.DANADO,
-          productoId: producto.id,
-          productoNombre: nombreProducto(producto),
-          cantidad: cantidadNum,
-          stockAntes,
-          stockDespues,
-          detalle: `${etiqueta}: ${cantidadNum} × ${nombreProducto(producto)}`,
-          tiendaId: tiendaActual.id,
-        })
-        aplicarCambiosStock([{ id: producto.id, delta: -cantidadNum }])
-      } else {
-        await addDoc(collection(db, "danados"), {
-          ...base,
-          stockAntes: stockActual,
-          stockDespues: stockActual,
-        })
-      }
+        transaction.set(danadoRef, { ...base, stockAntes, stockDespues })
+      })
+      await registrarMovimiento({
+        tipo: TIPOS_MOVIMIENTO.DANADO,
+        productoId: producto.id,
+        productoNombre: nombreProducto(producto),
+        cantidad: cantidadNum,
+        stockAntes,
+        stockDespues,
+        detalle: `Llegó dañado · ${etiquetaFalla}: ${cantidadNum} × ${nombreProducto(producto)}`,
+        tiendaId: tiendaActual.id,
+      })
+      aplicarCambiosStock([{ id: producto.id, delta: -cantidadNum }])
 
       invalidarCacheTienda("danados", tiendaActual.id)
       setModalAbierto(false)
@@ -195,7 +183,7 @@ function Danados() {
       await cargar()
       Swal.fire({
         icon: "success",
-        title: bajaStock ? "Stock descontado" : "Devolución anotada",
+        title: "Stock descontado",
         timer: 1600,
         showConfirmButton: false,
       })
@@ -218,6 +206,7 @@ function Danados() {
       lista.map((item) => ({
         ...item,
         motivoTexto: ETIQUETAS_MOTIVO_DANADO[item.motivo] || item.motivo || "",
+        fallaTexto: ETIQUETAS_FALLA_DANADO[item.falla] || "",
         efectoStock: efectoStock(item),
       })),
       tiendaActual?.nombre || "Tienda"
@@ -233,7 +222,7 @@ function Danados() {
             Dañados
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
-            Lo que llega dañado o se malogra se descuenta. Lo que el cliente devuelve ya salió en la venta y solo se anota.
+            Si llegó dañado, elige línea, táctil o brillo. El stock de la tienda baja.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -277,6 +266,7 @@ function Danados() {
                 <div className="text-right">
                   <p className="text-sm font-semibold px-3 py-1 rounded-full inline-block bg-slate-100 dark:bg-slate-800 dark:text-white">
                     {ETIQUETAS_MOTIVO_DANADO[item.motivo] || item.motivo}
+                    {ETIQUETAS_FALLA_DANADO[item.falla] ? ` · ${ETIQUETAS_FALLA_DANADO[item.falla]}` : ""}
                   </p>
                   <p className="mt-2 font-bold dark:text-white">{item.cantidad} u.</p>
                   <p className="text-sm text-slate-500">{efectoStock(item)}</p>
@@ -345,15 +335,15 @@ function Danados() {
               </div>
 
               <fieldset className="space-y-2">
-                <legend className="text-sm text-slate-500 dark:text-slate-400 mb-1">Motivo</legend>
-                {Object.entries(ETIQUETAS_MOTIVO_DANADO).map(([clave, etiqueta]) => (
+                <legend className="text-sm text-slate-500 dark:text-slate-400 mb-1">Llegó dañado</legend>
+                {Object.entries(ETIQUETAS_FALLA_DANADO).map(([clave, etiqueta]) => (
                   <label key={clave} className="flex items-center gap-2 dark:text-white">
                     <input
                       type="radio"
-                      name="motivo"
+                      name="falla"
                       value={clave}
-                      checked={motivo === clave}
-                      onChange={() => setMotivo(clave)}
+                      checked={falla === clave}
+                      onChange={() => setFalla(clave)}
                     />
                     {etiqueta}
                   </label>
@@ -373,9 +363,7 @@ function Danados() {
 
               {producto && Number.isInteger(cantidadNum) && cantidadNum > 0 && (
                 <div className="rounded-2xl bg-blue-50 dark:bg-blue-950/40 p-4 text-sm dark:text-white">
-                  {bajaStock
-                    ? `Se descuentan ${cantidadNum} de ${tiendaActual?.nombre}. Quedarían ${Math.max(0, stockActual - cantidadNum)}.`
-                    : `La venta ya descontó esta pieza. Aquí solo se anota y el stock sigue en ${stockActual}.`}
+                  {`Se descuentan ${cantidadNum} de ${tiendaActual?.nombre}. Quedarían ${Math.max(0, stockActual - cantidadNum)}.`}
                 </div>
               )}
 
@@ -385,7 +373,7 @@ function Danados() {
                   disabled={guardando}
                   className="flex-1 bg-blue-600 text-white py-3 rounded-2xl font-bold hover:bg-blue-700 transition disabled:opacity-60"
                 >
-                  {guardando ? "Guardando..." : bajaStock ? "Descontar" : "Anotar"}
+                  {guardando ? "Guardando..." : "Descontar"}
                 </button>
                 <button
                   type="button"

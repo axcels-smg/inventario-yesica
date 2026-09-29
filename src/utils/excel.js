@@ -1201,6 +1201,7 @@ export function exportarDanadosExcel(filas, nombreTienda = "Tienda") {
     Modelo: item.modelo || "",
     Cantidad: Number(item.cantidad) || 0,
     Motivo: item.motivoTexto || "",
+    Falla: item.fallaTexto || "",
     Detalle: item.detalle || "",
     Stock: item.efectoStock || "",
   }))
@@ -1213,6 +1214,7 @@ export function exportarDanadosExcel(filas, nombreTienda = "Tienda") {
     Modelo: "",
     Cantidad: "",
     Motivo: "",
+    Falla: "",
     Detalle: "",
     Stock: "",
   }])
@@ -1224,6 +1226,7 @@ export function exportarDanadosExcel(filas, nombreTienda = "Tienda") {
     { wch: 28 },
     { wch: 10 },
     { wch: 22 },
+    { wch: 12 },
     { wch: 28 },
     { wch: 22 },
   ]
