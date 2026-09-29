@@ -39,15 +39,15 @@ export function totalDeProductos(productos) {
   )
 }
 
-export function boletaPantallasDelDia(ventas, cliente, tiendaId) {
-  const hoy = claveDiaLocal(new Date())
+export function boletaPantallasDelDia(ventas, cliente, tiendaId, fecha = new Date()) {
+  const dia = claveDiaLocal(fecha)
   const nombre = String(cliente?.nombre || "").trim().toUpperCase()
   const id = cliente?.id || ""
   return (ventas || [])
     .filter((venta) => {
       if (!esVentaActiva(venta) || !esBoletaDePantallas(venta)) return false
       if (tiendaId && venta.tiendaId && venta.tiendaId !== tiendaId) return false
-      if (claveDiaLocal(venta.fecha || venta.fechaTexto) !== hoy) return false
+      if (claveDiaLocal(venta.fecha || venta.fechaTexto) !== dia) return false
       if (id && venta.clienteId) return venta.clienteId === id
       return String(venta.cliente || "").trim().toUpperCase() === nombre
     })

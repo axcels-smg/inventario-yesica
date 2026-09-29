@@ -86,6 +86,12 @@ export function claveDiaLocal(fecha) {
   return d ? formatoFechaInput(d) : ""
 }
 
+export function fechaAlCierreDelDia(fechaIso) {
+  const partes = String(fechaIso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!partes) return new Date()
+  return new Date(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3]), 23, 59, 0, 0)
+}
+
 export function etiquetaDiaEs(fechaIsoOFecha) {
   const d =
     typeof fechaIsoOFecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fechaIsoOFecha)

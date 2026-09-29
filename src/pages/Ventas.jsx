@@ -8,6 +8,7 @@ import {
   doc,
   runTransaction,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore"
 
 import { db } from "../firebase"
@@ -24,7 +25,7 @@ import { errorOperacion } from "../utils/erroresUi"
 import { sincronizarCicloDescuentos } from "../utils/reportePantallas"
 import { anularVentaYDevolverStock } from "../utils/anularVenta"
 import { esCategoriaPantalla } from "../utils/stock"
-import { claveDiaLocal } from "../utils/fechas"
+import { claveDiaLocal, etiquetaDiaEs, fechaAlCierreDelDia, formatoFechaInput } from "../utils/fechas"
 import { boletaPantallasDelDia, sumarLineas, totalDeProductos } from "../utils/ventas"
 import { conReintentoCuota } from "../utils/firestoreLive"
 import AvisoOtraTienda from "../components/AvisoOtraTienda"
@@ -54,6 +55,7 @@ function Ventas() {
   const [filtroMarca, setFiltroMarca] = useState("")
   const [filtroCategoria, setFiltroCategoria] = useState("")
   const [vendiendo, setVendiendo] = useState(false)
+  const [diaVenta, setDiaVenta] = useState(() => formatoFechaInput(new Date()))
   const [anulandoId, setAnulandoId] = useState(null)
   const vendiendoRef = useRef(false)
 
@@ -61,6 +63,7 @@ function Ventas() {
     setCarrito([])
     setClienteSeleccionado("")
     setBusquedaCliente("")
+    setDiaVenta(formatoFechaInput(new Date()))
   }, [tiendaActual?.id])
 
   useEffect(() => {
@@ -386,12 +389,19 @@ function Ventas() {
       if (!sigue.isConfirmed) return
     }
 
+    const hoy = formatoFechaInput(new Date())
+    const diaElegido = diaVenta && diaVenta <= hoy ? diaVenta : hoy
+    const esOtroDia = diaElegido !== hoy
+    const nombreDia = etiquetaDiaEs(diaElegido)
+
     const confirmacion = await Swal.fire({
-      title: "¿Finalizar venta?",
-      text: `Total S/ ${total}`,
+      title: esOtroDia ? "¿Registrar en ese día?" : "¿Finalizar venta?",
+      text: esOtroDia
+        ? `Total S/ ${total}. Queda el ${nombreDia} y, si son pantallas, se suma a la nota de ese día de ${clienteData.nombre}. El stock baja ahora.`
+        : `Total S/ ${total}`,
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: "Finalizar",
+      confirmButtonText: esOtroDia ? "Sumar a ese día" : "Finalizar",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#16a34a",
     })
@@ -414,8 +424,9 @@ function Ventas() {
       }))
 
       const soloPantallas = productosVenta.every((item) => esCategoriaPantalla(item))
+      const fechaNota = esOtroDia ? fechaAlCierreDelDia(diaElegido) : new Date()
       const boletaDelDia = soloPantallas
-        ? boletaPantallasDelDia(ventas, clienteData, tiendaActual.id)
+        ? boletaPantallasDelDia(ventas, clienteData, tiendaActual.id, fechaNota)
         : null
       const ventaExistenteRef = boletaDelDia ? doc(db, "ventas", boletaDelDia.id) : null
       const ventaRef = ventaExistenteRef || doc(collection(db, "ventas"))
@@ -440,7 +451,7 @@ function Ventas() {
           if (
             datos &&
             datos.anulada !== true &&
-            claveDiaLocal(datos.fecha || datos.fechaTexto) === claveDiaLocal(new Date())
+            claveDiaLocal(datos.fecha || datos.fechaTexto) === claveDiaLocal(fechaNota)
           ) {
             uniendoBoleta = true
             numeroBoleta = Number(datos.numeroBoleta)
@@ -516,8 +527,8 @@ function Ventas() {
           productos: productosVenta,
           total,
           numeroBoleta,
-          fecha: serverTimestamp(),
-          fechaTexto: new Date().toLocaleString("es-PE"),
+          fecha: esOtroDia ? Timestamp.fromDate(fechaNota) : serverTimestamp(),
+          fechaTexto: fechaNota.toLocaleString("es-PE"),
           tiendaId: tiendaActual.id,
         })
         }
@@ -526,7 +537,9 @@ function Ventas() {
 
       const ventaHecha = {
         numeroBoleta,
-        fechaTexto: new Date().toLocaleString("es-PE"),
+        fechaTexto: uniendoBoleta
+          ? (boletaDelDia?.fechaTexto || fechaNota.toLocaleString("es-PE"))
+          : fechaNota.toLocaleString("es-PE"),
         cliente: clienteData.nombre || "",
         telefono: clienteData.telefono || "",
         productos: uniendoBoleta ? productosBoleta : productosVenta,
@@ -535,6 +548,7 @@ function Ventas() {
 
       setCarrito([])
       setClienteSeleccionado("")
+      setDiaVenta(formatoFechaInput(new Date()))
       aplicarCambiosStock(
         movimientosPendientes.map((mov) => ({
           id: mov.productoId,
@@ -553,7 +567,9 @@ function Ventas() {
             ventaId: ventaRef.id,
             numeroBoleta: formatearNumeroBoleta(numeroBoleta),
             cliente: clienteData.nombre || "",
-            detalle: `Venta nota #${formatearNumeroBoleta(numeroBoleta)}`,
+            detalle: esOtroDia
+              ? `Venta nota #${formatearNumeroBoleta(numeroBoleta)} (${nombreDia})`
+              : `Venta nota #${formatearNumeroBoleta(numeroBoleta)}`,
             tiendaId: tiendaActual.id,
           })
         }
@@ -565,8 +581,10 @@ function Ventas() {
         icon: "success",
         title: "Venta realizada",
         text: uniendoBoleta
-          ? `Se sumó a la nota #${formatearNumeroBoleta(numeroBoleta)} de hoy. Total del día S/ ${Number(totalBoleta).toFixed(2)}. El stock ya se descontó.`
-          : `Nota #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${Number(total).toFixed(2)}. El stock ya se descontó.`,
+          ? `Se sumó a la nota #${formatearNumeroBoleta(numeroBoleta)} del ${nombreDia}. Total del día S/ ${Number(totalBoleta).toFixed(2)}. El stock ya se descontó.`
+          : esOtroDia
+            ? `Nota #${formatearNumeroBoleta(numeroBoleta)} quedó el ${nombreDia}. Total S/ ${Number(total).toFixed(2)}. El stock ya se descontó.`
+            : `Nota #${formatearNumeroBoleta(numeroBoleta)} — Total S/ ${Number(total).toFixed(2)}. El stock ya se descontó.`,
         showCancelButton: true,
         showDenyButton: !uniendoBoleta && esTiendaPropia && puedeAnularVentas(),
         confirmButtonText: "Enviar recibo por WhatsApp",
@@ -927,6 +945,21 @@ function Ventas() {
             <h2 className="text-3xl font-black dark:text-white">
               Total: S/ {total}
             </h2>
+
+            <label className="mt-4 block">
+              <span className="font-bold dark:text-white">Día de la nota</span>
+              <input
+                type="date"
+                value={diaVenta}
+                max={formatoFechaInput(new Date())}
+                onChange={(e) => setDiaVenta(e.target.value || formatoFechaInput(new Date()))}
+                disabled={vendiendo}
+                className="mt-2 w-full p-3 rounded-xl border dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              />
+              <span className="block text-sm text-slate-500 dark:text-slate-400 mt-1">
+                Elige el día. Si son pantallas, se suman a la nota de ese cliente en ese día. El stock baja ahora.
+              </span>
+            </label>
 
             <button
               onClick={finalizarVenta}
