@@ -52,6 +52,7 @@ export const TIPOS_MOVIMIENTO = {
   IMPORTACION: "importacion",
   TRANSFERENCIA_SALIDA: "transferencia_salida",
   TRANSFERENCIA_ENTRADA: "transferencia_entrada",
+  DANADO: "danado",
 }
 
 export const ETIQUETAS_MOVIMIENTO = {
@@ -63,4 +64,17 @@ export const ETIQUETAS_MOVIMIENTO = {
   importacion: "Importación Excel",
   transferencia_salida: "Transferencia Salida",
   transferencia_entrada: "Transferencia Entrada",
+  danado: "Dañado",
+}
+
+export const MOTIVOS_DANADO = {
+  LLEGO: "llego",
+  TIENDA: "tienda",
+  CLIENTE: "cliente",
+}
+
+export const ETIQUETAS_MOTIVO_DANADO = {
+  llego: "Llegó dañado",
+  tienda: "Se dañó en tienda",
+  cliente: "Cliente lo devolvió",
 }

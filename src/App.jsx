@@ -11,6 +11,7 @@ import Movimientos from "./pages/Movimientos"
 import InventarioExcel from "./pages/InventarioExcel"
 import Tiendas from "./pages/Tiendas"
 import Transferencias from "./pages/Transferencias"
+import Danados from "./pages/Danados"
 import Login from "./pages/Login"
 
 import MainLayout from "./layout/MainLayout"
@@ -78,6 +79,7 @@ function App() {
               <Route path="excel" element={<InventarioExcel />} />
               <Route path="tiendas" element={<Tiendas />} />
               <Route path="transferencias" element={<Transferencias />} />
+              <Route path="danados" element={<Danados />} />
             </Route>
           </Routes>
         </BrowserRouter>

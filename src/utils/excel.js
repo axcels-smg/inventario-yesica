@@ -1192,4 +1192,44 @@ export function exportarPantallasDeUnDia(dia, nombreTienda = "Tienda") {
   return { filas: filas.length, unidades, fecha }
 }
 
+export function exportarDanadosExcel(filas, nombreTienda = "Tienda") {
+  const data = (filas || []).map((item) => ({
+    Fecha: item.fechaTexto || "",
+    Tienda: item.tiendaNombre || nombreTienda,
+    Marca: item.marca || "",
+    Categoria: item.categoria || "",
+    Modelo: item.modelo || "",
+    Cantidad: Number(item.cantidad) || 0,
+    Motivo: item.motivoTexto || "",
+    Detalle: item.detalle || "",
+    Stock: item.efectoStock || "",
+  }))
+
+  const hoja = XLSX.utils.json_to_sheet(data.length ? data : [{
+    Fecha: "",
+    Tienda: nombreTienda,
+    Marca: "",
+    Categoria: "",
+    Modelo: "",
+    Cantidad: "",
+    Motivo: "",
+    Detalle: "",
+    Stock: "",
+  }])
+  hoja["!cols"] = [
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 28 },
+    { wch: 10 },
+    { wch: 22 },
+    { wch: 28 },
+    { wch: 22 },
+  ]
+  const libro = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(libro, hoja, "Danados")
+  XLSX.writeFile(libro, `danados-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`)
+}
+
 export { COLUMNAS_PRODUCTOS }

@@ -10,6 +10,7 @@ import {
   Store,
   ChevronDown,
   ArrowRight,
+  AlertTriangle,
   Globe,
   LogOut,
   KeyRound,
@@ -156,6 +157,11 @@ function Sidebar({ onNavigate }) {
       name: "Transferencias",
       path: "/transferencias",
       icon: <ArrowRight size={22} />,
+    },
+    {
+      name: "Dañados",
+      path: "/danados",
+      icon: <AlertTriangle size={22} />,
     },
   ].filter((link) => {
     if (link.path === "/global") return esSuperAdmin()
