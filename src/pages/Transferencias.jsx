@@ -56,13 +56,14 @@ function resumenTransferencia(transferencia) {
 function Transferencias() {
   const { tiendaPropia: tiendaActual, tiendas } = useTienda()
   const { puedeHacerTransferencias } = useRol()
-  const { productosPropios: productosOrigen, aplicarCambiosStock } = useProductosLive()
+  const { productosPropios: productosOrigen, todosLosProductos, aplicarCambiosStock, cargarTodasLasTiendas } = useProductosLive()
   const [transferencias, setTransferencias] = useState([])
   const [modalAbierto, setModalAbierto] = useState(false)
   const [cargando, setCargando] = useState(true)
   const [pestana, setPestana] = useState("enviadas")
 
-  const [destinoTienda, setDestinoTienda] = useState("")
+  const [origenId, setOrigenId] = useState("")
+  const [destinoId, setDestinoId] = useState("")
   const [productoSeleccionado, setProductoSeleccionado] = useState("")
   const [cantidad, setCantidad] = useState("")
   const [busquedaProducto, setBusquedaProducto] = useState("")
@@ -99,21 +100,47 @@ function Transferencias() {
     }
   }, [tiendaActual, cargarTransferencias])
 
+  function limpiarFormulario() {
+    setOrigenId(tiendaActual?.id || "")
+    setDestinoId("")
+    setProductoSeleccionado("")
+    setCantidad("")
+    setBusquedaProducto("")
+  }
+
+  function abrirModal() {
+    limpiarFormulario()
+    setModalAbierto(true)
+    cargarTodasLasTiendas({ force: true }).catch(() => {})
+  }
+
   async function crearTransferencia(e) {
     e.preventDefault()
     if (!puedeHacerTransferencias()) return
 
-    if (!destinoTienda || !productoSeleccionado || !cantidad) {
-      return Swal.fire({ icon: "warning", title: "Campos incompletos", text: "Completa todos los campos" })
+    if (!origenId || !destinoId || !productoSeleccionado || !cantidad) {
+      return Swal.fire({ icon: "warning", title: "Campos incompletos", text: "Elige las dos tiendas, el producto y la cantidad" })
+    }
+    if (origenId === destinoId) {
+      return Swal.fire({ icon: "warning", title: "Tiendas iguales", text: "La tienda de salida y la de entrada tienen que ser distintas" })
     }
 
-    const producto = productosOrigen.find((p) => p.id === productoSeleccionado)
+    const origen = tiendas.find((t) => t.id === origenId)
+    const destino = tiendas.find((t) => t.id === destinoId)
+    if (!origen || !destino) {
+      return Swal.fire({ icon: "warning", title: "Tienda no válida", text: "Elige las tiendas de la lista" })
+    }
+
+    const mueveAhora = origen.id !== tiendaActual.id
+    const catalogo = origen.id === tiendaActual.id
+      ? productosOrigen
+      : todosLosProductos.filter((p) => p.tiendaId === origen.id)
+    const producto = catalogo.find((p) => p.id === productoSeleccionado)
     if (!producto) {
-      return Swal.fire({ icon: "warning", title: "Producto no válido", text: "Selecciona un producto de la lista" })
+      return Swal.fire({ icon: "warning", title: "Producto no válido", text: "Selecciona un producto de la tienda que suelta el stock" })
     }
 
     const cantidadNum = Number.parseInt(String(cantidad).trim(), 10)
-    const destino = tiendas.find((t) => t.id === destinoTienda)
 
     if (!Number.isInteger(cantidadNum) || cantidadNum <= 0) {
       return Swal.fire({ icon: "warning", title: "Cantidad inválida", text: "La cantidad debe ser un número entero mayor a 0" })
@@ -123,68 +150,181 @@ function Transferencias() {
       return Swal.fire({
         icon: "warning",
         title: "Stock insuficiente",
-        text: `Solo hay ${producto.stock} unidades de ${nombreExactoProducto(producto)} en ${tiendaActual.nombre}`,
+        text: `Solo hay ${producto.stock} unidades de ${nombreExactoProducto(producto)} en ${origen.nombre}`,
       })
     }
 
     const confirmar = await Swal.fire({
-      title: "Confirmar transferencia",
+      title: mueveAhora ? "¿Mover el stock ahora?" : "¿Enviar a esa tienda?",
       html: `
         <div style="text-align:left;font-size:14px;line-height:1.6">
           <p><b>Producto:</b> ${nombreExactoProducto(producto)}</p>
           <p><b>Cantidad:</b> ${cantidadNum}</p>
-          <p><b>De:</b> ${tiendaActual.nombre}</p>
-          <p><b>Para:</b> ${destino?.nombre || "tienda destino"}</p>
+          <p><b>De:</b> ${origen.nombre} (baja ${cantidadNum})</p>
+          <p><b>Para:</b> ${destino.nombre} (sube ${cantidadNum})</p>
           <hr/>
-          <p>Al <b>enviar</b> se descuentan ${cantidadNum} de <b>${tiendaActual.nombre}</b>.</p>
-          <p>Al <b>recibir</b> se agregan ${cantidadNum} en <b>${destino?.nombre || "destino"}</b>.</p>
+          ${mueveAhora
+            ? `<p>Ahora se descuentan ${cantidadNum} de <b>${origen.nombre}</b> y se agregan ${cantidadNum} en <b>${destino.nombre}</b>.</p>`
+            : `<p>Al <b>enviar</b> se descuentan ${cantidadNum} de <b>${origen.nombre}</b>.</p><p>Al <b>recibir</b> se agregan ${cantidadNum} en <b>${destino.nombre}</b>.</p>`
+          }
         </div>
       `,
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: "Crear",
+      confirmButtonText: mueveAhora ? "Mover stock" : "Crear",
       cancelButtonText: "Volver",
     })
     if (!confirmar.isConfirmed) return
 
-    try {
-      await addDoc(collection(db, "transferencias"), {
-        origenTiendaId: tiendaActual.id,
-        origenTiendaNombre: tiendaActual.nombre,
-        destinoTiendaId: destinoTienda,
-        destinoTiendaNombre: destino?.nombre || "",
-        productos: [{
-          productoId: producto.id,
-          productoNombre: nombreExactoProducto(producto),
-          marca: producto.marca || "",
-          categoria: producto.categoria || "",
-          modelo: producto.modelo || "",
-          codigo: producto.codigo || "",
-          precio: producto.precio || 0,
-          cantidad: cantidadNum,
-        }],
-        estado: ESTADOS_TRANSFERENCIA.PENDIENTE,
-        fecha: serverTimestamp(),
-        fechaTexto: new Date().toLocaleString("es-PE"),
-        tiendaId: tiendaActual.id,
-      })
+    const item = {
+      productoId: producto.id,
+      productoNombre: nombreExactoProducto(producto),
+      marca: producto.marca || "",
+      categoria: producto.categoria || "",
+      modelo: producto.modelo || "",
+      codigo: producto.codigo || "",
+      precio: producto.precio || 0,
+      cantidad: cantidadNum,
+    }
 
-      Swal.fire({
-        icon: "success",
-        title: "Transferencia creada",
-        text: `${cantidadNum} × ${nombreExactoProducto(producto)} de ${tiendaActual.nombre} hacia ${destino?.nombre}. Aún no se descontó stock: pulsa Enviar.`,
-        timer: 2800,
-        showConfirmButton: false,
-      })
+    try {
+      if (mueveAhora) {
+        await traerAhora({ origen, destino, producto, item, cantidadNum })
+      } else {
+        await addDoc(collection(db, "transferencias"), {
+          origenTiendaId: origen.id,
+          origenTiendaNombre: origen.nombre,
+          destinoTiendaId: destino.id,
+          destinoTiendaNombre: destino.nombre,
+        sentido: mueveAhora ? "traer" : "enviar",
+          productos: [item],
+          estado: ESTADOS_TRANSFERENCIA.PENDIENTE,
+          fecha: serverTimestamp(),
+          fechaTexto: new Date().toLocaleString("es-PE"),
+          tiendaId: tiendaActual.id,
+        })
+        Swal.fire({
+          icon: "success",
+          title: "Transferencia creada",
+          text: `${cantidadNum} × ${nombreExactoProducto(producto)} de ${origen.nombre} hacia ${destino.nombre}. Aún no se descontó stock: pulsa Enviar.`,
+          timer: 2800,
+          showConfirmButton: false,
+        })
+      }
+
       setModalAbierto(false)
-      setDestinoTienda("")
-      setProductoSeleccionado("")
-      setCantidad("")
-      setBusquedaProducto("")
+      limpiarFormulario()
       cargarTransferencias()
     } catch (error) {
       errorOperacion(error, "Error al crear transferencia")
     }
+  }
+
+  async function traerAhora({ origen, destino, producto, item, cantidadNum }) {
+    const snapDestino = await getDocs(query(
+      collection(db, "productos"),
+      where("tiendaId", "==", destino.id)
+    ))
+    const productosDestino = snapDestino.docs.map((d) => ({ id: d.id, ...d.data() }))
+    const clave = claveModeloProducto(producto)
+    const encontrado = productosDestino.find((p) => claveModeloProducto(p) === clave)
+    const destRef = encontrado?.id
+      ? doc(db, "productos", encontrado.id)
+      : doc(db, "productos", idProductoPorTienda(destino.id, producto))
+    const origenRef = doc(db, "productos", producto.id)
+    const transRef = doc(collection(db, "transferencias"))
+    let stockOrigenDespues = 0
+    let stockDestinoDespues = 0
+
+    await runTransaction(db, async (transaction) => {
+      const origenSnap = await transaction.get(origenRef)
+      const destSnap = await transaction.get(destRef)
+      if (!origenSnap.exists()) throw new Error(`No se encontró el producto en ${origen.nombre}`)
+      const datosOrigen = origenSnap.data()
+      if (datosOrigen.tiendaId && datosOrigen.tiendaId !== origen.id) {
+        throw new Error("Ese producto no pertenece a la tienda elegida")
+      }
+      const stockActual = Number(datosOrigen.stock || 0)
+      if (!Number.isFinite(stockActual) || stockActual < cantidadNum) {
+        throw new Error(`Stock insuficiente en ${origen.nombre}. Hay ${stockActual}, se necesitan ${cantidadNum}`)
+      }
+      stockOrigenDespues = stockActual - cantidadNum
+      transaction.update(origenRef, {
+        stock: stockOrigenDespues,
+        actualizado: serverTimestamp(),
+      })
+
+      if (destSnap.exists()) {
+        const stockDestino = Number(destSnap.data().stock || 0)
+        if (!Number.isFinite(stockDestino)) throw new Error("Stock inválido en tu tienda")
+        stockDestinoDespues = stockDestino + cantidadNum
+        transaction.update(destRef, {
+          stock: stockDestinoDespues,
+          actualizado: serverTimestamp(),
+        })
+      } else {
+        stockDestinoDespues = cantidadNum
+        transaction.set(destRef, {
+          marca: item.marca,
+          categoria: item.categoria,
+          modelo: item.modelo,
+          codigo: item.codigo,
+          precio: item.precio,
+          stock: cantidadNum,
+          tiendaId: destino.id,
+          actualizado: serverTimestamp(),
+        })
+      }
+
+      transaction.set(transRef, {
+        origenTiendaId: origen.id,
+        origenTiendaNombre: origen.nombre,
+        destinoTiendaId: destino.id,
+        destinoTiendaNombre: destino.nombre,
+        sentido: "traer",
+        productos: [item],
+        estado: ESTADOS_TRANSFERENCIA.COMPLETADA,
+        fecha: serverTimestamp(),
+        fechaTexto: new Date().toLocaleString("es-PE"),
+        fechaCompletado: serverTimestamp(),
+        tiendaId: tiendaActual.id,
+      })
+    })
+
+    await registrarMovimiento({
+      tipo: TIPOS_MOVIMIENTO.TRANSFERENCIA_SALIDA,
+      productoId: producto.id,
+      productoNombre: nombreExactoProducto(item),
+      cantidad: cantidadNum,
+      stockAntes: stockOrigenDespues + cantidadNum,
+      stockDespues: stockOrigenDespues,
+      detalle: `Salió hacia ${destino.nombre}: ${cantidadNum} × ${nombreExactoProducto(item)}`,
+      tiendaId: origen.id,
+    })
+    await registrarMovimiento({
+      tipo: TIPOS_MOVIMIENTO.TRANSFERENCIA_ENTRADA,
+      productoId: destRef.id,
+      productoNombre: nombreExactoProducto(item),
+      cantidad: cantidadNum,
+      stockAntes: stockDestinoDespues - cantidadNum,
+      stockDespues: stockDestinoDespues,
+      detalle: `Entró desde ${origen.nombre}: ${cantidadNum} × ${nombreExactoProducto(item)}`,
+      tiendaId: destino.id,
+    })
+    aplicarCambiosStock([
+      { id: producto.id, stock: stockOrigenDespues },
+      { id: destRef.id, stock: stockDestinoDespues },
+    ])
+    cargarTodasLasTiendas({ force: true }).catch(() => {})
+    sincronizarCicloDescuentos(origen.id, origen.nombre).catch(() => {})
+    sincronizarCicloDescuentos(destino.id, destino.nombre).catch(() => {})
+    Swal.fire({
+      icon: "success",
+      title: "Stock movido",
+      text: `Se descontó ${cantidadNum} de ${origen.nombre} y se agregó en ${destino.nombre}.`,
+      timer: 2800,
+      showConfirmButton: false,
+    })
   }
 
   async function enviarTransferencia(transferencia) {
@@ -491,10 +631,14 @@ function Transferencias() {
     }
   }
 
-  const productoElegido = productosOrigen.find((p) => p.id === productoSeleccionado)
-  const destinoElegido = tiendas.find((t) => t.id === destinoTienda)
+  const origenForm = tiendas.find((t) => t.id === origenId)
+  const destinoForm = tiendas.find((t) => t.id === destinoId)
+  const catalogo = origenId && origenId !== tiendaActual?.id
+    ? todosLosProductos.filter((p) => p.tiendaId === origenId)
+    : productosOrigen
+  const productoElegido = catalogo.find((p) => p.id === productoSeleccionado)
 
-  const productosFiltrados = productosOrigen.filter((p) => {
+  const productosFiltrados = catalogo.filter((p) => {
     const nombre = `${p.marca || ""} ${p.categoria || ""} ${p.modelo || ""} ${p.codigo || ""}`.toLowerCase()
     return nombre.includes(busquedaProducto.toLowerCase())
   })
@@ -537,12 +681,12 @@ function Transferencias() {
             Transferencias de Stock
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg">
-            Envías un producto de tu tienda a otra: al enviar se descuenta, al recibir se agrega.
+            Elige de qué tienda sale y a cuál entra. La que suelta baja. La que recibe sube.
           </p>
         </div>
         {puedeHacerTransferencias() && (
         <button
-          onClick={() => setModalAbierto(true)}
+          onClick={abrirModal}
           className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 transition"
         >
           <Plus size={20} />
@@ -589,6 +733,7 @@ function Transferencias() {
                     {ETIQUETAS_ESTADOS_TRANSFERENCIA[transferencia.estado]}
                   </span>
                   <span className="text-slate-500 dark:text-slate-400 text-sm">
+                    {transferencia.sentido === "traer" ? "Traída · " : "Enviada · "}
                     {transferencia.fechaTexto}
                   </span>
                 </div>
@@ -683,29 +828,45 @@ function Transferencias() {
 
             <form onSubmit={crearTransferencia} className="space-y-4">
               <div>
-                <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">De (tu tienda)</label>
-                <div className="w-full p-3 rounded-2xl border dark:border-slate-700 bg-slate-100 dark:bg-slate-800 dark:text-white font-semibold">
-                  {tiendaActual?.nombre}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Para (tienda destino)</label>
+                <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">De (baja el stock)</label>
                 <select
-                  value={destinoTienda}
-                  onChange={(e) => setDestinoTienda(e.target.value)}
+                  value={origenId}
+                  onChange={(e) => {
+                    const id = e.target.value
+                    setOrigenId(id)
+                    if (id && id === destinoId) setDestinoId("")
+                    setProductoSeleccionado("")
+                    setBusquedaProducto("")
+                  }}
                   className="w-full p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   required
                 >
                   <option value="">Seleccionar tienda</option>
-                  {tiendas.filter((t) => t.id !== tiendaActual?.id).map((tienda) => (
+                  {tiendas.map((tienda) => (
                     <option key={tienda.id} value={tienda.id}>{tienda.nombre}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Producto exacto</label>
+                <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">Para (sube el stock)</label>
+                <select
+                  value={destinoId}
+                  onChange={(e) => setDestinoId(e.target.value)}
+                  className="w-full p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  required
+                >
+                  <option value="">Seleccionar tienda</option>
+                  {tiendas.map((tienda) => (
+                    <option key={tienda.id} value={tienda.id}>{tienda.nombre}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">
+                  Producto de {origenForm?.nombre || "la tienda que suelta"}
+                </label>
                 <div className="relative">
                   <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -714,11 +875,15 @@ function Transferencias() {
                     onChange={(e) => { setBusquedaProducto(e.target.value); setProductoSeleccionado("") }}
                     className="w-full p-3 pl-10 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="Buscar por marca, categoría o modelo..."
+                    disabled={!origenId}
                   />
                 </div>
+                {!origenId && (
+                  <p className="text-sm text-slate-500 mt-2">Primero elige la tienda de donde sale.</p>
+                )}
                 {busquedaProducto && productosFiltrados.length > 0 && (
                   <div className="mt-2 max-h-40 overflow-y-auto border dark:border-slate-700 rounded-2xl">
-                    {productosFiltrados.map((producto) => (
+                    {productosFiltrados.slice(0, 30).map((producto) => (
                       <button
                         key={producto.id}
                         type="button"
@@ -729,10 +894,13 @@ function Transferencias() {
                         className={`w-full p-3 text-left hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-white transition ${productoSeleccionado === producto.id ? "bg-blue-50 dark:bg-blue-950" : ""}`}
                       >
                         <span className="font-medium">{nombreExactoProducto(producto)}</span>
-                        <span className="block text-xs text-slate-500">Stock disponible: {producto.stock}</span>
+                        <span className="block text-xs text-slate-500">Stock en {origenForm?.nombre}: {producto.stock}</span>
                       </button>
                     ))}
                   </div>
+                )}
+                {busquedaProducto && origenId && productosFiltrados.length === 0 && (
+                  <p className="text-sm text-slate-500 mt-2">No hay ese producto en {origenForm?.nombre}.</p>
                 )}
               </div>
 
@@ -743,31 +911,34 @@ function Transferencias() {
                   value={cantidad}
                   onChange={(e) => setCantidad(e.target.value)}
                   className="w-full p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  placeholder="Cuántas unidades enviar"
+                  placeholder="Cuántas unidades"
                   min="1"
                   required
                 />
               </div>
 
-              {productoElegido && destinoElegido && cantidad && (
+              {productoElegido && destinoForm && origenForm && cantidad && (
                 <div className="rounded-2xl bg-blue-50 dark:bg-blue-950/40 p-4 text-sm dark:text-white">
                   <p className="font-bold mb-2">Resumen</p>
                   <p>Producto: <b>{nombreExactoProducto(productoElegido)}</b></p>
                   <p>Cantidad: <b>{cantidad}</b></p>
-                  <p>De: <b>{tiendaActual?.nombre}</b> → Para: <b>{destinoElegido.nombre}</b></p>
+                  <p>De: <b>{origenForm.nombre}</b> baja {cantidad}</p>
+                  <p>Para: <b>{destinoForm.nombre}</b> sube {cantidad}</p>
                   <p className="mt-2 text-slate-600 dark:text-slate-300">
-                    Al enviar se descuentan {cantidad} en {tiendaActual?.nombre}. Al recibir se agregan {cantidad} en {destinoElegido.nombre}.
+                    {origenForm.id === tiendaActual?.id
+                      ? `Al enviar se descuentan ${cantidad} en ${origenForm.nombre}. Al recibir se agregan ${cantidad} en ${destinoForm.nombre}.`
+                      : `Ahora se descuentan ${cantidad} en ${origenForm.nombre} y se agregan ${cantidad} en ${destinoForm.nombre}.`}
                   </p>
                 </div>
               )}
 
               <div className="flex gap-3">
                 <button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-2xl font-bold hover:bg-blue-700 transition">
-                  Crear Transferencia
+                  {origenForm && origenForm.id !== tiendaActual?.id ? "Mover stock" : "Crear transferencia"}
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setModalAbierto(false); setDestinoTienda(""); setProductoSeleccionado(""); setCantidad(""); setBusquedaProducto("") }}
+                  onClick={() => { setModalAbierto(false); limpiarFormulario() }}
                   className="px-6 py-3 bg-slate-200 dark:bg-slate-700 dark:text-white rounded-2xl font-bold hover:bg-slate-300 transition"
                 >
                   Cancelar
