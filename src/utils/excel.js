@@ -2,7 +2,7 @@ import * as XLSX from "xlsx"
 import { formatearFecha } from "./fechas"
 import { formatearNumeroBoleta } from "./boleta"
 import { filtrarVentasActivas } from "./ventas"
-import { esCategoriaPantalla, etiquetaEstadoStock, filtrarModelosStockMenorA, stockNumero } from "./stock"
+import { esCategoriaPantalla, esStockMenorA, etiquetaEstadoStock, filtrarModelosStockMenorA, stockNumero } from "./stock"
 import { agruparVariantes } from "./variantesModelo"
 import { formatearFechaKey } from "./alertasStock"
 import { filasExcelDescuentos } from "./reportePantallas"
@@ -690,18 +690,35 @@ function armarLibroInventarioDetallado(filas, { incluirTienda, tituloResumen }) 
   return libro
 }
 
-export function exportarInventarioDetalladoTienda(productos, nombreTienda = "Tienda") {
+export function exportarInventarioDetalladoTienda(
+  productos,
+  nombreTienda = "Tienda",
+  { stockMenorA } = {}
+) {
+  const limite = Number(stockMenorA)
+  const filtrar = Number.isFinite(limite)
+  const lista = filtrar
+    ? (productos || []).filter((p) => esStockMenorA(p.stock, limite))
+    : productos || []
+
   const filas = ordenarFilasInventario(
-    productos.map((p) => filaInventarioDetallada(p, nombreTienda))
+    lista.map((p) => filaInventarioDetallada(p, nombreTienda))
   )
+  if (filas.length === 0) {
+    return { productos: 0, modelos: 0, categorias: 0 }
+  }
+
+  const titulo = filtrar
+    ? `${nombreTienda} · stock menor a ${limite}`
+    : nombreTienda
   const libro = armarLibroInventarioDetallado(filas, {
     incluirTienda: false,
-    tituloResumen: nombreTienda,
+    tituloResumen: titulo,
   })
-  XLSX.writeFile(
-    libro,
-    `inventario-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`
-  )
+  const archivo = filtrar
+    ? `inventario-${slugArchivo(nombreTienda)}-menor-a-${limite}-${fechaArchivoLocal()}.xlsx`
+    : `inventario-${slugArchivo(nombreTienda)}-${fechaArchivoLocal()}.xlsx`
+  XLSX.writeFile(libro, archivo)
   return {
     productos: filas.length,
     modelos: new Set(filas.map((f) => claveModelo(f, false))).size,

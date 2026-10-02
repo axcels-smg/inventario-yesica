@@ -73,6 +73,7 @@ function InventarioExcel() {
   const [importando, setImportando] = useState(false)
   const [exportandoTodas, setExportandoTodas] = useState(false)
   const [filtroTodas, setFiltroTodas] = useState("")
+  const [filtroTienda, setFiltroTienda] = useState("")
   const [vistaPrevia, setVistaPrevia] = useState([])
   const [resumenImport, setResumenImport] = useState(null)
 
@@ -101,21 +102,49 @@ function InventarioExcel() {
   }
 
   function exportarDetalladoEstaTienda() {
+    const texto = filtroTienda.trim()
+    const stockMenorA = texto === "" ? undefined : Number(texto)
+    if (texto !== "" && (!Number.isFinite(stockMenorA) || stockMenorA < 0)) {
+      Swal.fire({
+        icon: "warning",
+        title: "Escribe una cantidad válida",
+        text: "Usa un número, por ejemplo 5. Déjalo vacío para bajar todo el inventario de esta tienda.",
+      })
+      return
+    }
+
     try {
       if (productosLive.length === 0) {
         Swal.fire({ icon: "info", title: "No hay productos para exportar" })
         return
       }
 
-      const r = exportarInventarioDetalladoTienda(
-        productosLive,
-        tiendaActual?.nombre || "Tienda"
-      )
+      const nombre = tiendaActual?.nombre || "Tienda"
+      const r = exportarInventarioDetalladoTienda(productosLive, nombre, {
+        stockMenorA,
+      })
+
+      if (r.modelos === 0) {
+        Swal.fire({
+          icon: "info",
+          title: stockMenorA != null
+            ? `Nada con stock menor a ${stockMenorA}`
+            : "No hay productos para exportar",
+          text: stockMenorA != null
+            ? `En ${nombre} no hay productos con stock menor a ${stockMenorA}.`
+            : "Esta tienda no tiene productos.",
+        })
+        return
+      }
 
       Swal.fire({
         icon: "success",
-        title: "Inventario descargado",
-        text: `${tiendaActual?.nombre || "Tienda"}: ${r.modelos} modelos en ${r.categorias} categorías. Para ver y contar. No lo uses para importar.`,
+        title: stockMenorA != null
+          ? `Excel de ${nombre} · menor a ${stockMenorA}`
+          : "Inventario descargado",
+        text: stockMenorA != null
+          ? `${nombre}: ${r.modelos} modelos con stock menor a ${stockMenorA}, con el total de esas líneas. Solo esta tienda.`
+          : `${nombre}: ${r.modelos} modelos en ${r.categorias} categorías, con el total de toda la tienda. Para ver y contar. No lo uses para importar.`,
       })
     } catch (error) {
       errorOperacion(error, "Error al exportar")
@@ -341,16 +370,35 @@ function InventarioExcel() {
       <section className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 p-6 space-y-4">
         <h2 className="text-xl font-bold dark:text-white">1. Bajar esta tienda</h2>
         <p className="text-slate-500 dark:text-slate-400 text-sm">
-          El detallado es para revisar (PANTALLA, LENTE…). El de una hoja es el que luego se puede volver a importar.
+          Solo {tiendaActual?.nombre || "esta tienda"}: todos los productos y el total de la tienda.
+          Si escribes una cantidad, el Excel trae únicamente lo que tiene stock menor a ese número.
+          El de una hoja es el que luego se puede volver a importar (siempre completo).
         </p>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+          <div className="sm:w-72">
+            <label className="text-sm text-slate-500 dark:text-slate-400 block mb-1">
+              Solo stock menor a
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+              placeholder="Vacío = todo el inventario"
+              value={filtroTienda}
+              onChange={(e) => setFiltroTienda(e.target.value)}
+              className="w-full p-3 rounded-2xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+          </div>
           <button
             type="button"
             onClick={exportarDetalladoEstaTienda}
             className="flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-2xl font-bold hover:bg-green-700"
           >
             <FileDown size={18} />
-            Descargar inventario
+            {filtroTienda.trim() === ""
+              ? "Descargar todo"
+              : `Descargar menor a ${filtroTienda.trim()}`}
           </button>
           <button
             type="button"
